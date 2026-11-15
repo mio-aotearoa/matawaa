@@ -4,7 +4,7 @@ This review covers the 43-patch baseline and the follow-up fixes exported after 
 
 ## Upstream references
 
-The baseline pins AsteroidOS's current `meta-asteroid` revision, `c84c0bbd731f9dfa3b04295bac239dd7fa64c722`. Its existing source pins for qml-asteroid, mapplauncherd, bluebinder, and the virtual keyboard match the recipes at that revision. Updating those pins would not address the packaging differences found here.
+The baseline pins AsteroidOS's then-current `meta-asteroid` revision, `c84c0bbd731f9dfa3b04295bac239dd7fa64c722`. Its existing source pins for qml-asteroid, mapplauncherd, bluebinder, and the virtual keyboard match the recipes at that revision. Updating those pins would not address the packaging differences found here.
 
 - [qml-asteroid recipe](https://github.com/AsteroidOS/meta-asteroid/blob/c84c0bbd731f9dfa3b04295bac239dd7fa64c722/recipes-asteroid/qml-asteroid/qml-asteroid_git.bb)
 - [Qt launch-cache recipe](https://github.com/AsteroidOS/meta-asteroid/blob/c84c0bbd731f9dfa3b04295bac239dd7fa64c722/recipes-nemomobile/mapplauncherd/mapplauncherd-qt_git.bb)
@@ -69,3 +69,11 @@ The patch series has since been consolidated and reorganized: the launch-cache a
 - Cross-built the four restored qmake packages for Fossil Hoki and checked that their libraries, pkg-config files, and QML plugins install under `/lib` and `/lib/qt-6/qml` as expected. Rebuilt the Fossil Hoki system successfully with those packages.
 - Moved `0013-msm-fb-refresher-update-to-AsteroidOS-source.patch` from mobile-nixos upstream candidates to our customizations: the refresher supports the legacy-kernel path, which mobile-nixos upstream currently does not accept.
 - Replayed the categorized patch series after these changes. It applies cleanly and reproduces the committed Mobile NixOS worktree tree exactly.
+
+## 2026-11-15 follow-up
+
+- Advanced the flake `nixpkgs-unstable` pin to `2074cc672349` (2026-11-12). `mobile-nixos` `development` is unchanged at `3254af68b7ef`.
+- Advanced the live nightly `meta-asteroid` pin to tip `20a8d379f670` (settings Weblate bump only vs the 2026-11-09 baseline `c84c0bb`). Aligned `asteroid-settings` to recipe SRCREV `54ec1e317d10`.
+- Re-reviewed category 10/25 pins against tip: launcher `29f4257`, middleware, and nfcd-binder-plugin already matched; no further recipe SRCREV deltas.
+- Category 50 MCU timepiece / kernel-timezone work still tracks open meta-asteroid [PR 332](https://github.com/AsteroidOS/meta-asteroid/pull/332) (`3ca9e1e`); not merged into nightly. Category 40 Hoki ambient DOZE refresh remains an intentional experimental divergence.
+- Built `nixosConfigurations.fossil-hoki.config.system.build.toplevel` successfully after the pin bumps.

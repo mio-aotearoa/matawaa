@@ -482,7 +482,7 @@ index 7ce4a083..d84329a2 100644
 +  # (udev rules, unit files, patches) instead of vendoring them.
    metaAsteroidSrc = pkgs.fetchgit {
      url = "https://github.com/AsteroidOS/meta-asteroid";
-     rev = "c84c0bbd731f9dfa3b04295bac239dd7fa64c722";
+     rev = "20a8d379f67038208a32b8b59a3093fac8410c73";
 @@ -12,4 +20,110 @@ rec {
    meta-asteroid-src = metaAsteroidSrc;
  

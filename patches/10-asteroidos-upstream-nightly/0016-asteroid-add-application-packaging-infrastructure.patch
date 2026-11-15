@@ -26,8 +26,8 @@ index 00000000..7ce4a083
 +  qml-asteroid = callPackage ./qml-asteroid { inherit noUsrShareHook; };
 +  metaAsteroidSrc = pkgs.fetchgit {
 +    url = "https://github.com/AsteroidOS/meta-asteroid";
-+    rev = "c84c0bbd731f9dfa3b04295bac239dd7fa64c722";
-+    hash = "sha256-AZF9IUTtSNTpgcu7kOL4OLIg/WJIGBI04Q9WIrnMQUA=";
++    rev = "20a8d379f67038208a32b8b59a3093fac8410c73";
++    hash = "sha256-1/K6f6/FQNPrkZ/zLUDYg2Yu0idaN9WcVYsz0oJBOoc=";
 +  };
 +  meta-asteroid-src = metaAsteroidSrc;
 +

@@ -834,8 +834,8 @@ index 0000000000000000000000000000000000000000..de820ace4ff390e5e9a0fcabdec489a6
 +  settings = mkAsteroidApp {
 +    name = "settings";
 +    desc = "Smartwatch preferences and configuration application";
-+    rev = "8f2ece787facf056c28bb94936d3a28ac31815f7";
-+    hash = "sha256-Erh0KKHI9UPeGAQqTB9phcTWxGbtBQDhTn32OBi66H8=";
++    rev = "54ec1e317d10e0b72868143697166718ae3d2b95";
++    hash = "sha256-wWHJ3MDVq+wkoDZHQlgSUj4SgWPcB9H9IlPg3gPn/20=";
 +    extraBuildInputs = [
 +      mce-dev
 +      ngf-qt6

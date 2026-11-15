@@ -22,7 +22,7 @@ ambient and proximity blanking transitions the upstream dwell time instead of
 the one-second sequence that coincided with the reported black-screen event.
 
 Upstream ambient implementation:
-[meta-asteroid ambient patch](https://github.com/AsteroidOS/meta-asteroid/blob/c84c0bbd731f9dfa3b04295bac239dd7fa64c722/recipes-qt/qt6/qt6-qpa-hwcomposer-plugin/0001-Add-ambient-mode-display-support.patch).
+[meta-asteroid ambient patch](https://github.com/AsteroidOS/meta-asteroid/blob/20a8d379f67038208a32b8b59a3093fac8410c73/recipes-qt/qt6/qt6-qpa-hwcomposer-plugin/0001-Add-ambient-mode-display-support.patch).
 
 ## MCU timepiece mode
 
