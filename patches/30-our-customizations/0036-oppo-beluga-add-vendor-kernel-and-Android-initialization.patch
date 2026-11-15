@@ -4,31 +4,19 @@ Date: Mon, 9 Nov 2026 10:55:56 +1100
 Subject: [PATCH] oppo-beluga: add vendor kernel and Android initialization
 
 ---
- devices/oppo-beluga/android-init.nix          | 172 ++++
- devices/oppo-beluga/default.nix               | 222 +++++
- ...arm-cputype-add-missing-CPU-part-IDs.patch |  12 +
- ...rry-the-exit-path-to-the-4.9.255-API.patch |  62 ++
- ...restart_block-provide-set_restart_fn.patch |  30 +
- ...ss-proc-credentials-to-the-LSM-hooks.patch |  83 ++
- ...add-pending-label-state-and-spinlock.patch |  22 +
- ...e-the-writepages-barrier-for-4.9.215.patch |  17 +
- ...007-net-add-the-peer-credential-lock.patch |  11 +
- ...he-program-memory-accounting-helpers.patch |  26 +
- .../0009-vendor-tree-bends-for-4.9.337.patch  |  30 +
- devices/oppo-beluga/kernel/default.nix        | 877 ++++++++++++++++++
- 12 files changed, 1564 insertions(+)
- create mode 100644 devices/oppo-beluga/android-init.nix
- create mode 100644 devices/oppo-beluga/default.nix
- create mode 100644 devices/oppo-beluga/kernel/0001-arm-cputype-add-missing-CPU-part-IDs.patch
- create mode 100644 devices/oppo-beluga/kernel/0002-futex-carry-the-exit-path-to-the-4.9.255-API.patch
- create mode 100644 devices/oppo-beluga/kernel/0003-restart_block-provide-set_restart_fn.patch
- create mode 100644 devices/oppo-beluga/kernel/0004-binder-pass-proc-credentials-to-the-LSM-hooks.patch
- create mode 100644 devices/oppo-beluga/kernel/0005-selinux-add-pending-label-state-and-spinlock.patch
- create mode 100644 devices/oppo-beluga/kernel/0006-ext4-rename-the-writepages-barrier-for-4.9.215.patch
- create mode 100644 devices/oppo-beluga/kernel/0007-net-add-the-peer-credential-lock.patch
- create mode 100644 devices/oppo-beluga/kernel/0008-bpf-declare-the-program-memory-accounting-helpers.patch
- create mode 100644 devices/oppo-beluga/kernel/0009-vendor-tree-bends-for-4.9.337.patch
- create mode 100644 devices/oppo-beluga/kernel/default.nix
+ devices/oppo-beluga/android-init.nix               |  172 ++++++++++++++++++++++++++++++++++++++++
+ devices/oppo-beluga/default.nix                    |  222 ++++++++++++++++++++++++++++++++++++++++
+ ...0001-arm-cputype-add-missing-CPU-part-IDs.patch |   12 ++++++++++++
+ ...ex-carry-the-exit-path-to-the-4.9.255-API.patch |   62 ++++++++++++++++++++++++++++++++++++++++
+ ...0003-restart_block-provide-set_restart_fn.patch |   30 ++++++++++++++++++++++++++++++
+ ...er-pass-proc-credentials-to-the-LSM-hooks.patch |   83 ++++++++++++++++++++++++++++++++++++++++
+ ...inux-add-pending-label-state-and-spinlock.patch |   22 ++++++++++++++++++++++
+ ...rename-the-writepages-barrier-for-4.9.215.patch |   17 +++++++++++++++++
+ ...nel/0007-net-add-the-peer-credential-lock.patch |   11 +++++++++++
+ ...are-the-program-memory-accounting-helpers.patch |   26 ++++++++++++++++++++++++++
+ ...kernel/0009-vendor-tree-bends-for-4.9.337.patch |   30 ++++++++++++++++++++++++++++++
+ devices/oppo-beluga/kernel/default.nix             |  893 ++++++++++++++++++++++++++++++++++++++++
+ 12 files changed, 1580 insertions(+), 0 deletions(-)
 
 diff --git a/devices/oppo-beluga/android-init.nix b/devices/oppo-beluga/android-init.nix
 new file mode 100644
@@ -785,10 +773,10 @@ index 00000000..87b6ca93
 + 		unsigned int flags, bool grab_handle)
 diff --git a/devices/oppo-beluga/kernel/default.nix b/devices/oppo-beluga/kernel/default.nix
 new file mode 100644
-index 00000000..ddc617f0
+index 00000000..a483ef2c
 --- /dev/null
 +++ b/devices/oppo-beluga/kernel/default.nix
-@@ -0,0 +1,877 @@
+@@ -0,0 +1,893 @@
 +{
 +  lib,
 +  mobile-nixos,
@@ -867,19 +855,29 @@ index 00000000..ddc617f0
 +    };
 +
 +  # One stable increment. The Makefile hunk is dropped because the version is
-+  # set once in postPatch, and this kernel is 32-bit ARM only, so changes for
-+  # other architectures are dropped as well.
++  # set once in postPatch. Non-ARM arches, Documentation/, tools/, and unused
++  # host-side subsystems (ide/infiniband/ethernet/serio/dvb/nilfs2/udf) are
++  # dropped automatically as well.
 +  stableIncr =
 +    lo: hi: hash: excludes:
 +    let
 +      name = "linux-4.9.${lo}-${hi}.patch";
 +      adaptation = ./stable/${name}.patch;
 +      hasAdaptation = builtins.pathExists adaptation;
-+      otherArches = "arch/(alpha|arc|arm64|avr32|blackfin|c6x|cris|frv|h8300|hexagon|ia64|m32r|m68k|metag|microblaze|mips|mn10300|nios2|openrisc|parisc|powerpc|s390|score|sh|sparc|tile|um|unicore32|x86|xtensa)/.*";
++      otherArches = "arch/(alpha|arc|arm64|avr32|blackfin|c6x|cris|csky|frv|h8300|hexagon|ia64|loongarch|m32r|m68k|metag|microblaze|mips|mn10300|nds32|nios2|openrisc|parisc|powerpc|riscv|s390|score|sh|sparc|tile|um|unicore32|x86|xtensa)/.*";
 +      droppedFiles = lib.concatStringsSep "|" (
 +        [
 +          "Makefile"
 +          otherArches
++          "Documentation/.*"
++          "tools/.*"
++          "drivers/ide/.*"
++          "drivers/infiniband/.*"
++          "drivers/net/ethernet/.*"
++          "drivers/input/serio/.*"
++          "drivers/media/dvb-core/.*"
++          "fs/nilfs2/.*"
++          "fs/udf/.*"
 +        ]
 +        ++ map lib.escapeRegex excludes
 +      );
@@ -967,6 +965,8 @@ index 00000000..ddc617f0
 +  # -- that increment's files are dropped instead and stay vendor code. This
 +  # carries the tree all the way to 4.9.337, the last 4.9 stable release.
 +  ++ [
++    # Vendor src is 4.9.112; apply 112-113 before the rest of the ladder.
++    stablePatch113
 +    (stableIncr "113" "114" "sha256-qnljwfgrKu0gOyiAJ/aqfHAotBQo+nKG9ccRSjAZgeg=" [
 +      "include/linux/compiler-gcc.h"
 +    ])
@@ -979,7 +979,6 @@ index 00000000..ddc617f0
 +      "net/ipv4/tcp_input.c"
 +    ])
 +    (stableIncr "116" "117" "sha256-rDQFNeOzZXhD1gqoyL1yRe7edf1JwuIrSNCxHIT1QfU=" [
-+      "drivers/media/media-device.c"
 +      "drivers/scsi/ufs/ufshcd.c"
 +      "fs/crypto/crypto.c"
 +      "fs/ext4/inode.c"
@@ -987,6 +986,7 @@ index 00000000..ddc617f0
 +      "fs/f2fs/gc.c"
 +      "fs/f2fs/segment.c"
 +      "fs/f2fs/super.c"
++      "drivers/media/media-device.c"
 +    ])
 +    (stableIncr "117" "118" "sha256-ibwXAJAW9ksdE3hJLNuXcdAEHjQSYJ7qABpTFq8//cM=" [
 +      "fs/squashfs/block.c"
@@ -1003,6 +1003,8 @@ index 00000000..ddc617f0
 +    (stableIncr "120" "121" "sha256-H7F9jD3e5dqJG9xO/6kCFxdpC8UznO8nASHnQX4/BUU=" [
 +      "net/bluetooth/hidp/core.c"
 +    ])
++    # No arm-relevant hunks after auto-drop; keep the ladder gapless.
++    (stableIncr "121" "122" "sha256-XgQbw4QaPg4yQhlYPs5oFMTCE4D/C6TL6NMyJoIRSzQ=" [ ])
 +    (stableIncr "122" "123" "sha256-scE9pNA5+GsXm/c6gRyO/GMv91C3dIBv3wWq/6P7gec=" [ ])
 +    (stableIncr "123" "124" "sha256-AYQsEJ2y8QNqJ/Qu+nIyB/DD4H7dUY/7DMiW3IVzUvM=" [ ])
 +    (stableIncr "124" "125" "sha256-P8sswp2iNVWYCVxTLwrg/WG7FSMSpMVtTpv/sdgqKOA=" [
@@ -1022,7 +1024,6 @@ index 00000000..ddc617f0
 +    (stableIncr "127" "128" "sha256-50WbzJdwHfGMlTCjyBM4oiHjznEasQSh3nBbgFAaRKc=" [
 +      "block/blk-cgroup.c"
 +      "block/cfq-iosched.c"
-+      "drivers/infiniband/sw/rxe/rxe_resp.c"
 +      "drivers/staging/rts5208/rtsx_scsi.c"
 +      "fs/f2fs/file.c"
 +      "fs/f2fs/gc.c"
@@ -1155,6 +1156,12 @@ index 00000000..ddc617f0
 +      "mm/memory.c"
 +    ])
 +    (stableIncr "159" "160" "sha256-bsX5lotgkgJGVIGW+HWUpwuf8ZeY6P7h/uDfGuBfntc=" [ ])
++    # Vendor tree already carries these three fixes.
++    (stableIncr "160" "161" "sha256-2eaOpwI4EvSQuWXqtEOwBE4tFd0QpAY26EbowDNiMXY=" [
++      "include/linux/clocksource.h"
++      "kernel/trace/trace.c"
++      "net/core/netpoll.c"
++    ])
 +    (stableIncr "161" "162" "sha256-0WrVaVGrEt0N63/CJSADkKAoB99RkW/5TtF9Gj9djB8=" [
 +      "drivers/gpu/drm/msm/msm_rd.c"
 +      "sound/core/compress_offload.c"
@@ -1306,9 +1313,6 @@ index 00000000..ddc617f0
 +      "drivers/thermal/thermal_core.c"
 +      "drivers/usb/dwc3/core.c"
 +      "drivers/usb/host/xhci.c"
-+      "drivers/net/ethernet/stmicro/stmmac/descs_com.h"
-+      "drivers/net/ethernet/stmicro/stmmac/enh_desc.c"
-+      "drivers/net/ethernet/stmicro/stmmac/norm_desc.c"
 +    ])
 +    (stableIncr "207" "208" "sha256-eCuEKKsVato6X1jKqj2rvsgna0kIS8xCz2Y4z3SaiJ8=" [
 +      "kernel/time/hrtimer.c"
@@ -1450,6 +1454,8 @@ index 00000000..ddc617f0
 +    (stableIncr "253" "254" "sha256-VDZo7J94xygEG3VtBfzjgGcYNdibLE0sPOkTTQ4px8c=" [
 +      "drivers/scsi/ufs/ufshcd.c"
 +    ])
++    # 0002 already ports the 4.9.255 futex/exit_mm_release changes into the
++    # vendor exit.c; dropping the upstream file avoids a double-apply reject.
 +    (stableIncr "254" "255" "sha256-j9tLqAlXDFOMsK15bJfNFBQk6e/QKHijsGmEmU+3H5Y=" [
 +      "kernel/exit.c"
 +    ])
@@ -1538,7 +1544,6 @@ index 00000000..ddc617f0
 +    (stableIncr "295" "296" "sha256-arjZ77QkP/5fW74RmyeauuINZkOz9Va9Q5Lod8voYHE=" [ ])
 +    (stableIncr "296" "297" "sha256-vOHhPYg8ZBu1OAySnUVP8rOFhSA9U39BRXNkUX2fv2k=" [ ])
 +    (stableIncr "297" "298" "sha256-NrzwiPiJdq6OtlNE+7vR2+71JSghb7yB8hbcOsM5yAY=" [
-+      "drivers/media/dvb-core/dmxdev.c"
 +      "fs/ext4/ioctl.c"
 +    ])
 +    (stableIncr "298" "299" "sha256-Mr6AljEnB2q+85YPWyTW/0A0BxAzrB4nH3y2teM2CV4=" [
@@ -1578,7 +1583,6 @@ index 00000000..ddc617f0
 +    (stableIncr "314" "315" "sha256-Kb8FkNK/Gea+8+fXbCMdSytRnLGz3h+JqatQFcikEvw=" [ ])
 +    (stableIncr "315" "316" "sha256-rb19Z+VVsDhN2rSDk9jQUpqZGz0S3fBfaBUqncOjyiM=" [
 +      "drivers/mmc/core/core.c"
-+      "drivers/net/ethernet/stmicro/stmmac/stmmac_pci.c"
 +    ])
 +    (stableIncr "316" "317" "sha256-1BHiTDZtSVsnWpzvOK944oz0vrHr5v9KNVEdjNPhDoA=" [
 +      "drivers/md/dm-verity-target.c"
