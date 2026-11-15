@@ -4,18 +4,119 @@ Date: Mon, 9 Nov 2026 10:55:57 +1100
 Subject: [PATCH] examples: add AsteroidOS desktop and smartwatch system
 
 ---
- examples/asteroid/asteroid-desktop.nix                     |  943 ++++++++++++++++++++++++++++++++++++++++++
- devices/fossil-hoki/mce-keep-aod.patch                     |   25 ++++++++++
- examples/asteroid/configuration.nix                        |   43 +++++++++++++
- examples/asteroid/default.nix                              |   15 ++++++++
-4 files changed, 1026 insertions(+)
+ devices/fossil-hoki/mce-keep-aod.patch             |   25 +++++++++++++++++++++++++
+ examples/asteroid/configuration.nix                |   43 ++++++++++++++++++++++++++++++++++++++++
+ examples/asteroid/default.nix                      |   15 +++++++++++++++
+ examples/asteroid/asteroid-desktop.nix             |  956 ++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 1039 insertions(+), 0 deletions(-)
 
+diff --git a/devices/fossil-hoki/mce-keep-aod.patch b/devices/fossil-hoki/mce-keep-aod.patch
+new file mode 100644
+index 00000000..3c172f7a
+--- /dev/null
++++ b/devices/fossil-hoki/mce-keep-aod.patch
+@@ -0,0 +1,25 @@
++From: Matawaa <noreply@localhost>
++Subject: [PATCH] mce: let Hoki remain in AOD until woken
++
++Hoki has no proximity sensor to trigger an LPM_OFF -> LPM_ON transition.
++Treat a negative LPM_ON timeout as disabled, and use that setting only for
++Fossil Hoki so the display does not drop to a black panel after five seconds
++in AOD. Other AsteroidOS devices retain the upstream five-second timeout.
++
++--- a/modules/display.h
+++++ b/modules/display.h
++@@ -380 +380 @@
++-# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   5
+++# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   -1
++--- a/modules/display.c
+++++ b/modules/display.c
++@@ -4310,2 +4310,9 @@ static void mdy_blanking_schedule_lpm_off(void)
++     if( mdy_disp_never_blank )
++         goto EXIT;
+++
+++    /* A negative timeout disables proximity blanking while in AOD. */
+++    if( timeout < 0 ) {
+++        mce_log(LL_DEBUG, "LPM-BLANK timer disabled");
+++        goto EXIT;
+++    }
+++
+diff --git a/examples/asteroid/configuration.nix b/examples/asteroid/configuration.nix
+new file mode 100644
+index 00000000..d55911c0
+--- /dev/null
++++ b/examples/asteroid/configuration.nix
+@@ -0,0 +1,43 @@
++{
++  config,
++  lib,
++  pkgs,
++  ...
++}:
++
++let
++  defaultUserName = "ceres";
++in
++{
++  imports = [
++    ./asteroid-desktop.nix
++    ../common-configuration.nix
++  ];
++
++  config = {
++    users.users."${defaultUserName}" = {
++      isNormalUser = true;
++      uid = 1000;
++      linger = true;
++      password = "1234";
++      extraGroups = [
++        "audio"
++        "bluetooth"
++        "dialout"
++        "input"
++        "networkmanager"
++        "systemd-journal"
++        "tty"
++        "video"
++        "wheel"
++      ];
++    };
++
++    services.asteroid-desktop.enable = true;
++
++    # dbus-broker refuses the compositor and sync daemon names ("Request to
++    # own name refused by policy") even though session.conf allows own="*".
++    # AsteroidOS uses the reference dbus-daemon; match it.
++    services.dbus.implementation = "dbus";
++  };
++}
+diff --git a/examples/asteroid/default.nix b/examples/asteroid/default.nix
+new file mode 100644
+index 00000000..5eca754f
+--- /dev/null
++++ b/examples/asteroid/default.nix
+@@ -0,0 +1,15 @@
++# Ensure CLI passes down arguments
++{ ... }@args:
++
++import ../../lib/eval-with-configuration.nix (
++  args
++  // {
++    configuration = [ (import ./configuration.nix) ];
++    additionalHelpInstructions = { device }: ''
++      You can build the `-A outputs.default` attribute to build the AsteroidOS
++      smartwatch image for your watch:
++
++       $ nix-build examples/asteroid --argstr device ${device} -A outputs.default
++    '';
++  }
++)
 diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..1c2993bcdcf96f91a0e38a99f981bdffc0e2636f
+index 00000000..f2b495a5
 --- /dev/null
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -0,0 +1,943 @@
+@@ -0,0 +1,956 @@
 +{
 +  config,
 +  lib,
@@ -211,6 +312,13 @@ index 0000000000000000000000000000000000000000..1c2993bcdcf96f91a0e38a99f981bdff
 +          asteroid.community-apps.neofetch
 +          tree
 +        ]);
++
++      # systemd 257 defaults DefaultIPAccounting=yes, which tries to set up BPF
++      # firewall maps. Linux 4.14 (vendor watch kernels) rejects that and floods
++      # the journal with bpf-firewall errors on every unit start.
++      systemd.settings.Manager = mkIf isLegacy {
++        DefaultIPAccounting = lib.mkForce false;
++      };
 +
 +      systemd.tmpfiles.rules = [
 +        "d /var/lib/kiwix 0775 ceres users -"
@@ -515,6 +623,7 @@ index 0000000000000000000000000000000000000000..1c2993bcdcf96f91a0e38a99f981bdff
 +      systemd.services.bluebinder = mkIf isLegacy {
 +        description = "Android binder based bluetooth proxy (vhci)";
 +        wantedBy = [ "multi-user.target" ];
++        wants = [ "android-init.service" ];
 +        after = [
 +          "android-init.service"
 +          "dbus.service"
@@ -542,6 +651,8 @@ index 0000000000000000000000000000000000000000..1c2993bcdcf96f91a0e38a99f981bdff
 +            "-${pkgs.asteroid.bluebinder}/libexec/bluebinder_post.sh"
 +          ];
 +          Restart = "always";
++          # First start can race android-init / binder; give the HAL a moment.
++          RestartSec = "2s";
 +          TimeoutStartSec = 60;
 +        };
 +      };
@@ -664,11 +775,14 @@ index 0000000000000000000000000000000000000000..1c2993bcdcf96f91a0e38a99f981bdff
 +      # Upstream timed.service (installed in /usr/lib/systemd/user and wanted by
 +      # default.target): Nemomobile time daemon serving com.nokia.time on the
 +      # system bus. Alarms are scheduled through it by Nemo.Alarms.
++      # Skip root's systemd --user (e.g. SSH as root): shared state is owned by
++      # ceres and root starts only produce exit-code noise.
 +      systemd.user.services.timed = {
 +        description = "Time Daemon";
 +        wantedBy = [ "default.target" ];
 +        requires = [ "dbus.socket" ];
 +        after = [ "dbus.socket" ];
++        unitConfig.ConditionUser = "!root";
 +        serviceConfig = {
 +          Type = "notify";
 +          ExecStart = "${pkgs.asteroid.timed-qt6}/bin/timed --systemd";
@@ -959,104 +1073,3 @@ index 0000000000000000000000000000000000000000..1c2993bcdcf96f91a0e38a99f981bdff
 +    }
 +  );
 +}
-diff --git a/devices/fossil-hoki/mce-keep-aod.patch b/devices/fossil-hoki/mce-keep-aod.patch
-new file mode 100644
-index 00000000..3c172f7a
---- /dev/null
-+++ b/devices/fossil-hoki/mce-keep-aod.patch
-@@ -0,0 +1,25 @@
-+From: Matawaa <noreply@localhost>
-+Subject: [PATCH] mce: let Hoki remain in AOD until woken
-+
-+Hoki has no proximity sensor to trigger an LPM_OFF -> LPM_ON transition.
-+Treat a negative LPM_ON timeout as disabled, and use that setting only for
-+Fossil Hoki so the display does not drop to a black panel after five seconds
-+in AOD. Other AsteroidOS devices retain the upstream five-second timeout.
-+
-+--- a/modules/display.h
-++++ b/modules/display.h
-+@@ -380 +380 @@
-+-# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   5
-++# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   -1
-+--- a/modules/display.c
-++++ b/modules/display.c
-+@@ -4310,2 +4310,9 @@ static void mdy_blanking_schedule_lpm_off(void)
-+     if( mdy_disp_never_blank )
-+         goto EXIT;
-++
-++    /* A negative timeout disables proximity blanking while in AOD. */
-++    if( timeout < 0 ) {
-++        mce_log(LL_DEBUG, "LPM-BLANK timer disabled");
-++        goto EXIT;
-++    }
-++
-diff --git a/examples/asteroid/configuration.nix b/examples/asteroid/configuration.nix
-new file mode 100644
-index 00000000..d55911c0
---- /dev/null
-+++ b/examples/asteroid/configuration.nix
-@@ -0,0 +1,43 @@
-+{
-+  config,
-+  lib,
-+  pkgs,
-+  ...
-+}:
-+
-+let
-+  defaultUserName = "ceres";
-+in
-+{
-+  imports = [
-+    ./asteroid-desktop.nix
-+    ../common-configuration.nix
-+  ];
-+
-+  config = {
-+    users.users."${defaultUserName}" = {
-+      isNormalUser = true;
-+      uid = 1000;
-+      linger = true;
-+      password = "1234";
-+      extraGroups = [
-+        "audio"
-+        "bluetooth"
-+        "dialout"
-+        "input"
-+        "networkmanager"
-+        "systemd-journal"
-+        "tty"
-+        "video"
-+        "wheel"
-+      ];
-+    };
-+
-+    services.asteroid-desktop.enable = true;
-+
-+    # dbus-broker refuses the compositor and sync daemon names ("Request to
-+    # own name refused by policy") even though session.conf allows own="*".
-+    # AsteroidOS uses the reference dbus-daemon; match it.
-+    services.dbus.implementation = "dbus";
-+  };
-+}
-diff --git a/examples/asteroid/default.nix b/examples/asteroid/default.nix
-new file mode 100644
-index 00000000..5eca754f
---- /dev/null
-+++ b/examples/asteroid/default.nix
-@@ -0,0 +1,15 @@
-+# Ensure CLI passes down arguments
-+{ ... }@args:
-+
-+import ../../lib/eval-with-configuration.nix (
-+  args
-+  // {
-+    configuration = [ (import ./configuration.nix) ];
-+    additionalHelpInstructions = { device }: ''
-+      You can build the `-A outputs.default` attribute to build the AsteroidOS
-+      smartwatch image for your watch:
-+
-+       $ nix-build examples/asteroid --argstr device ${device} -A outputs.default
-+    '';
-+  }
-+)
