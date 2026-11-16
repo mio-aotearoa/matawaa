@@ -3,3 +3,5 @@ result
 result-*
 .direnv/
 .reasonix/
+__pycache__/
+*.py[cod]
