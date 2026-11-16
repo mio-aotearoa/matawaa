@@ -75,5 +75,5 @@ The patch series has since been consolidated and reorganized: the launch-cache a
 - Advanced the flake `nixpkgs-unstable` pin to `2074cc672349` (2026-11-12). `mobile-nixos` `development` is unchanged at `3254af68b7ef`.
 - Advanced the live nightly `meta-asteroid` pin to tip `20a8d379f670` (settings Weblate bump only vs the 2026-11-09 baseline `c84c0bb`). Aligned `asteroid-settings` to recipe SRCREV `54ec1e317d10`.
 - Re-reviewed category 10/25 pins against tip: launcher `29f4257`, middleware, and nfcd-binder-plugin already matched; no further recipe SRCREV deltas.
-- Category 50 MCU timepiece / kernel-timezone work still tracks open meta-asteroid [PR 332](https://github.com/AsteroidOS/meta-asteroid/pull/332) (`3ca9e1e`); not merged into nightly. Category 40 Hoki ambient DOZE refresh remains an intentional experimental divergence.
+- Category 50 MCU timepiece / kernel-timezone work still tracks open meta-asteroid [PR 332](https://github.com/AsteroidOS/meta-asteroid/pull/332) (`3ca9e1e`); not merged into nightly. Timepiece user services are behind `services.asteroid-desktop.timepiece.enable` (default off). Category 40 keeps an opt-in `QPA_HWC2_DOZE_UPDATE` plugin path; Hoki device default matches upstream `QPA_HWC2_FORCE_DOZE_UPDATE`.
 - Built `nixosConfigurations.fossil-hoki.config.system.build.toplevel` successfully after the pin bumps.

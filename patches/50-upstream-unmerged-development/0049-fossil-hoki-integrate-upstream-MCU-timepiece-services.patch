@@ -3,13 +3,18 @@ From: Mio <mio@mio19.uk>
 Date: Tue, 10 Nov 2026 11:36:16 +1100
 Subject: [PATCH] fossil-hoki: integrate upstream MCU timepiece services
 
+Gate Sidekick timepiece user services behind
+services.asteroid-desktop.timepiece.enable (default off). Kernel timezone
+stays enabled for Android HALs. Entering timepiece remains an explicit
+asteroid-seconddisplay --enter-timepiece action that powers Linux off.
+
 ---
  devices/fossil-hoki/default.nix               |  1 +
- devices/fossil-hoki/timepiece.nix             | 65 +++++++++++++++++++
+ devices/fossil-hoki/timepiece.nix             | 77 +++++++++++++++++++
  .../asteroid-seconddisplay/default.nix        | 52 +++++++++++++++
  overlay/asteroidos/default.nix                |  2 +
  .../asteroidos/kernel-timezone/default.nix    | 38 +++++++++++
- 5 files changed, 158 insertions(+)
+ 5 files changed, 170 insertions(+)
  create mode 100644 devices/fossil-hoki/timepiece.nix
  create mode 100644 overlay/asteroidos/asteroid-seconddisplay/default.nix
  create mode 100644 overlay/asteroidos/kernel-timezone/default.nix
@@ -31,7 +36,7 @@ new file mode 100644
 index 00000000..e2460f6e
 --- /dev/null
 +++ b/devices/fossil-hoki/timepiece.nix
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,77 @@
 +# Upstream Hoki timepiece mode hands the panel to the BG MCU and powers Linux
 +# off. It is an explicit action, never an idle/suspend hook.
 +# https://github.com/MagneFire/asteroid-coprocessor/pull/3
@@ -42,60 +47,72 @@ index 00000000..e2460f6e
 +  ...
 +}:
 +
++let
++  inherit (lib) mkEnableOption mkIf mkMerge;
++  desktop = config.services.asteroid-desktop;
++  cfg = desktop.timepiece;
++in
 +{
-+  config = lib.mkIf config.services.asteroid-desktop.enable {
-+    environment.systemPackages = [ pkgs.asteroid.asteroid-seconddisplay ];
-+    services.dbus.packages = [ pkgs.asteroid.asteroid-seconddisplay ];
-+    systemd.packages = [ pkgs.asteroid.asteroid-seconddisplay ];
-+    systemd.user.services.asteroid-seconddisplayd = {
-+      wantedBy = [ "default.target" ];
-+      after = [ "android-boot-completed.service" ];
-+      unitConfig.ConditionUser = "!root";
-+    };
-+    systemd.user.services.asteroid-seconddisplay-sync-time.unitConfig.ConditionUser = "!root";
-+    systemd.user.timers.asteroid-seconddisplay-sync-time.wantedBy = [ "timers.target" ];
++  options.services.asteroid-desktop.timepiece.enable = mkEnableOption ''
++    MCU timepiece mode: Sidekick keeps a clock while Linux powers off.
++    Returning requires a hardware boot; do not use as automatic idle AOD
++  '';
 +
-+    # Bionic and the Sidekick HAL read the kernel offset rather than /etc/localtime.
-+    # Use the upstream C helper; refresh periodically to cover DST changes too.
-+    # Avoid OnClockChange: upstream review notes it also fires on every resume.
-+    # https://github.com/AsteroidOS/meta-asteroid/pull/332
-+    systemd.services.kernel-timezone = {
-+      description = "Set the kernel time zone for Android HALs";
-+      wantedBy = [ "multi-user.target" ];
-+      after = [ "local-fs.target" ];
-+      before = [
-+        "android-init.service"
-+        "shutdown.target"
-+      ];
-+      conflicts = [ "shutdown.target" ];
-+      # android-init is pulled into basic.target. A normal service's implicit
-+      # After=basic.target would form an ordering cycle here.
-+      unitConfig = {
-+        DefaultDependencies = false;
-+        ConditionPathExists = "/etc/localtime";
++  config = mkIf desktop.enable (mkMerge [
++    # Kernel timezone is needed by Android HALs regardless of timepiece mode.
++    {
++      systemd.services.kernel-timezone = {
++        description = "Set the kernel time zone for Android HALs";
++        wantedBy = [ "multi-user.target" ];
++        after = [ "local-fs.target" ];
++        before = [
++          "android-init.service"
++          "shutdown.target"
++        ];
++        conflicts = [ "shutdown.target" ];
++        # android-init is pulled into basic.target. A normal service's implicit
++        # After=basic.target would form an ordering cycle here.
++        unitConfig = {
++          DefaultDependencies = false;
++          ConditionPathExists = "/etc/localtime";
++        };
++        serviceConfig = {
++          Type = "oneshot";
++          ExecStart = "${pkgs.asteroid.kernel-timezone}/bin/kernel-timezone";
++        };
 +      };
-+      serviceConfig = {
-+        Type = "oneshot";
-+        ExecStart = "${pkgs.asteroid.kernel-timezone}/bin/kernel-timezone";
++      systemd.timers.kernel-timezone = {
++        wantedBy = [ "timers.target" ];
++        timerConfig = {
++          OnTimezoneChange = true;
++          OnCalendar = "hourly";
++        };
 +      };
-+    };
-+    systemd.timers.kernel-timezone = {
-+      wantedBy = [ "timers.target" ];
-+      timerConfig = {
-+        OnTimezoneChange = true;
-+        OnCalendar = "hourly";
-+      };
-+    };
++    }
 +
-+    # The desktop session is started through linger and may not count as active.
-+    security.polkit.extraConfig = ''
-+      polkit.addRule(function(action, subject) {
-+        if (action.id == "org.freedesktop.login1.power-off" && subject.user == "ceres") {
-+          return polkit.Result.YES;
-+        }
-+      });
-+    '';
-+  };
++    # Opt-in: package + user services for explicit --enter-timepiece.
++    (mkIf cfg.enable {
++      environment.systemPackages = [ pkgs.asteroid.asteroid-seconddisplay ];
++      services.dbus.packages = [ pkgs.asteroid.asteroid-seconddisplay ];
++      systemd.packages = [ pkgs.asteroid.asteroid-seconddisplay ];
++      systemd.user.services.asteroid-seconddisplayd = {
++        wantedBy = [ "default.target" ];
++        after = [ "android-boot-completed.service" ];
++        unitConfig.ConditionUser = "!root";
++      };
++      systemd.user.services.asteroid-seconddisplay-sync-time.unitConfig.ConditionUser = "!root";
++      systemd.user.timers.asteroid-seconddisplay-sync-time.wantedBy = [ "timers.target" ];
++
++      # The desktop session is started through linger and may not count as active.
++      security.polkit.extraConfig = ''
++        polkit.addRule(function(action, subject) {
++          if (action.id == "org.freedesktop.login1.power-off" && subject.user == "ceres") {
++            return polkit.Result.YES;
++          }
++        });
++      '';
++    })
++  ]);
 +}
 diff --git a/overlay/asteroidos/asteroid-seconddisplay/default.nix b/overlay/asteroidos/asteroid-seconddisplay/default.nix
 new file mode 100644

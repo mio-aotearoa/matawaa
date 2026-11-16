@@ -1,36 +1,46 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Tue, 10 Nov 2026 11:33:29 +1100
-Subject: [PATCH] hwcomposer: refresh Hoki ambient frames in low-power doze
+Subject: [PATCH] hwcomposer: optional DOZE ambient presents for Hoki
+
+Keep AsteroidOS meta-hoki QPA_HWC2_FORCE_DOZE_UPDATE as the device default
+(lipstick wakes ambient once per minute). Ship an opt-in QPA_HWC2_DOZE_UPDATE
+plugin path for low-power presents without switching the default.
+
 
 ---
- devices/fossil-hoki/default.nix                            |    9 +++++-
+ devices/fossil-hoki/default.nix                            |   21 +++++++++
  ...dos/qt6-qpa-hwcomposer-plugin/ambient-doze-update.patch |   97 ++++++++++++++++++++
  overlay/asteroidos/qt6-qpa-hwcomposer-plugin/default.nix   |   14 ++++---
-3 files changed, 113 insertions(+), 7 deletions(-)
+3 files changed, 125 insertions(+), 7 deletions(-)
 
 diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
-index a6a6e41d..9019a3a4 100644
+index a6a6e41d..b00b00b0 100644
 --- a/devices/fossil-hoki/default.nix
 +++ b/devices/fossil-hoki/default.nix
-@@ -377,7 +377,8 @@ in
-     cp ${pkgs.writeText "20-device.conf" ''
-       LIPSTICK_OPTIONS="-plugin evdevkeyboard:/dev/input/event4:keymap=${pkgs.asteroid.assets.keymaps}/share/qt6/keymaps/keys.qmap -plugin evdevkeyboard:/dev/input/event0:keymap=${pkgs.asteroid.assets.keymaps}/share/qt6/keymaps/keys.qmap -plugin evdevmouse:/dev/input/event1"
-       QPA_HWC_FORCE_GLES=1
--      QPA_HWC2_FORCE_DOZE_UPDATE=1
-+      # Refresh ambient frames without switching to full ON mode.
-+      QPA_HWC2_DOZE_UPDATE=1
-       QT_OPENGL_NO_BGRA=1
-       ${lib.optionalString debugBuild ''
-         QT_DEBUG_PLUGINS=1
-@@ -389,6 +390,12 @@ in
+@@ -389,6 +389,27 @@ in
      ''} ./var/lib/environment/compositor/qt6-hidpi.conf
    '';
  
-+  # Apply the display policy on profile upgrades too: /var/lib/environment is
-+  # populated by the image builder and persists across OTA deployments.
-+  systemd.user.services.asteroid-launcher = lib.mkIf config.services.asteroid-desktop.enable {
-+    environment.QPA_HWC2_DOZE_UPDATE = "1";
++  # Older images may still have QPA_HWC2_DOZE_UPDATE in the persistent
++  # compositor EnvironmentFile; that flag wins over FORCE_DOZE_UPDATE in the plugin.
++  systemd.services.hoki-clear-sticky-doze-update = lib.mkIf config.services.asteroid-desktop.enable {
++    description = "Remove experimental QPA_HWC2_DOZE_UPDATE from compositor env";
++    wantedBy = [ "multi-user.target" ];
++    before = [ "systemd-user-sessions.service" ];
++    serviceConfig = {
++      Type = "oneshot";
++      RemainAfterExit = true;
++      ExecStart = pkgs.writeShellScript "hoki-clear-sticky-doze-update" ''
++        conf=/var/lib/environment/compositor/20-device.conf
++        if [ -f "$conf" ] && grep -q '^QPA_HWC2_DOZE_UPDATE=' "$conf"; then
++          sed -i '/^QPA_HWC2_DOZE_UPDATE=/d' "$conf"
++        fi
++        if [ -f "$conf" ] && ! grep -q '^QPA_HWC2_FORCE_DOZE_UPDATE=' "$conf"; then
++          printf '%s\n' 'QPA_HWC2_FORCE_DOZE_UPDATE=1' >> "$conf"
++        fi
++      '';
++    };
 +  };
 +
    # Symlink modem and bluetooth partition firmware into /lib/firmware
