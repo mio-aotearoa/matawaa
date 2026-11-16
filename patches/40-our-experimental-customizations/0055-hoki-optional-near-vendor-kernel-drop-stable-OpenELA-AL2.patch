@@ -1,0 +1,275 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matawaa <noreply@localhost>
+Date: Tue, 17 Nov 2026 10:55:24 +1100
+Subject: [PATCH 1/1] hoki: optional near-vendor kernel (drop
+ stable/OpenELA/AL2)
+
+Gate kernel.org, OpenELA, and Amazon AL2 backport trains behind flags and
+disable them on hoki for PS_HOLD A/B testing against vendor+AsteroidOS only.
+---
+ devices/fossil-hoki/default.nix        |   4 +
+ devices/fossil-hoki/kernel/default.nix | 211 ++++++++++++++-----------
+ 2 files changed, 125 insertions(+), 90 deletions(-)
+
+diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
+index 6f0ef23e..d00b9e31 100644
+--- a/devices/fossil-hoki/default.nix
++++ b/devices/fossil-hoki/default.nix
+@@ -102,6 +102,10 @@ in
+   mobile.boot.stage-1 = {
+     kernel.package = pkgs.callPackage ./kernel {
+       enableDroidspacesBackports = config.mobile.hardware.watch.kernel == "legacy-backports";
++      # A/B: near-vendor kernel (AsteroidOS device patches only) while comparing
++      # unexplained PS_HOLD hard resets against the full stable/OpenELA/AL2 stack.
++      enableStableBackports = false;
++      enableAmzn2Backports = false;
+     };
+   };
+ 
+diff --git a/devices/fossil-hoki/kernel/default.nix b/devices/fossil-hoki/kernel/default.nix
+index 3dd58d03..013a0b9e 100644
+--- a/devices/fossil-hoki/kernel/default.nix
++++ b/devices/fossil-hoki/kernel/default.nix
+@@ -12,6 +12,14 @@
+   runCommand,
+   xz,
+   enableDroidspacesBackports ? false,
++  # kernel.org 4.14.206→336 increments + OpenELA 336→357 (+ vendor hunk
++  # adaptations). Disable with enableAmzn2Backports for an A/B build that
++  # stays near the Fossil vendor tree (plus AsteroidOS device patches only).
++  enableStableBackports ? true,
++  # Amazon Linux 2's 767-patch security/maintenance train on top of OpenELA
++  # 4.14.355. Requires enableStableBackports; disable both to compare against
++  # unexplained PS_HOLD hard resets on a near-vendor kernel.
++  enableAmzn2Backports ? true,
+   ...
+ }:
+ 
+@@ -844,17 +852,38 @@ let
+ in
+ 
+ kernel-builder-gcc8 {
+-  version = "4.14.355-287.768.amzn2";
+-  modDirVersion = "4.14.355-287.768.amzn2";
++  version =
++    if enableAmzn2Backports then
++      "4.14.355-287.768.amzn2"
++    else if enableStableBackports then
++      "4.14.357"
++    else
++      "4.14.206";
++  modDirVersion =
++    if enableAmzn2Backports then
++      "4.14.355-287.768.amzn2"
++    else if enableStableBackports then
++      "4.14.357"
++    else
++      "4.14.206";
+   inherit configfile;
+ 
+   # The vendor tree claims 4.14.206 and every incremental patch's Makefile hunk
+-  # is dropped above, so the version is set here instead of 24 times over. The
+-  # release suffix follows Amazon Linux 2's rpm: AL2 builds its kernels as
+-  # 4.14.355-%{release}.%{_target_cpu}, so this is the armv7l equivalent.
++  # is dropped above, so the version is set here instead of once per increment.
++  # AL2 uses Amazon's rpm release suffix; stable-only stops at OpenELA 4.14.357;
++  # with both trains off we keep the vendor SUBLEVEL.
+   postPatch = ''
+-    sed -i -E 's/^SUBLEVEL = [0-9]+$/SUBLEVEL = 355/' Makefile
+-    sed -i -E 's/^EXTRAVERSION.*$/EXTRAVERSION = -287.768.amzn2/' Makefile
++    sed -i -E 's/^SUBLEVEL = [0-9]+$/SUBLEVEL = ${
++      if enableAmzn2Backports then
++        "355"
++      else if enableStableBackports then
++        "357"
++      else
++        "206"
++    }/' Makefile
++    sed -i -E 's/^EXTRAVERSION.*$/EXTRAVERSION = ${
++      if enableAmzn2Backports then "-287.768.amzn2" else ""
++    }/' Makefile
+   '';
+ 
+   src = fetchFromGitHub {
+@@ -892,88 +921,90 @@ kernel-builder-gcc8 {
+   #            to the vendor's down_read/qrtr_all_epts context),
+   #            security/{selinux/selinuxfs.c,smack/smackfs.c}, drivers/net/usb/usbnet.c
+   patches =
+-    stablePatches
+-    ++ [
+-      (openelaIncr "336" "337" "sha256-SNYUicSv6auGY+9q6w7sHOgEne3J28+NnerAqFyCp/A=" [ ])
+-      (openelaIncr "337" "338" "sha256-cCy9LQ83C9YpksIuRJUG/sjy1XjsG2ju7Cv4AT0zrTg=" [
+-        "drivers/android/binder_alloc.c"
+-        "fs/f2fs/namei.c"
+-        "net/ncsi/ncsi-netlink.c"
+-      ])
+-      (openelaIncr "338" "339" "sha256-E9jVwY5ACPJ/gSiwFxnGEYT8MXPKZiT4rHxwOOHa7mU=" [
+-        "kernel/power/swap.c"
+-      ])
+-      (openelaIncr "339" "340" "sha256-JqDhvASSVLEWs+WGlt6AKynD5Eo18vJdyo23s9tbX8M=" [ ])
+-      (openelaIncr "340" "341" "sha256-HrNTswzlUXD+HN2jvTj0Yi4jPbq2iQT6mM/nh0HLfJ0=" [ ])
+-      (openelaIncr "341" "342" "sha256-+/AqNKfr3mJyUdhzJXYJSIRqajIXmx8+jX/Xd0Kj7TE=" [ ])
+-      (openelaIncr "342" "343" "sha256-O1YkrpnotcisDs+1x2SV3+7MPezO/hW9yIX6XTI6zvk=" [
+-        "fs/select.c"
+-        "sound/usb/stream.c"
+-      ])
+-      (openelaIncr "343" "344" "sha256-iH1AvW2uJroiPwRwcVks87C4YPEIDU/qQS3AKUO9DZA=" [
+-        "drivers/android/binder.c"
+-      ])
+-      (openelaIncr "344" "345" "sha256-xyzcIEsSjpAPQOfzx9SKTye21qBiDecidPMI0QIvKhs=" [
+-        "mm/memory-failure.c"
+-        "mm/page_alloc.c"
+-      ])
+-      (openelaIncr "345" "346" "sha256-JidE24zw43SVSv4aO+8Ds05sf4kScH2heeuPR/gFMOw=" [ ])
+-      (openelaIncr "346" "347" "sha256-zRoyE70vjH/vjY06oRkOjg0Yajo3ssENMkc92iYHZuc=" [
+-        "drivers/usb/gadget/composite.c"
+-      ])
+-      (openelaIncr "347" "348" "sha256-v/+x61magYDBxPw2avHzxpsctyn39Sr0UP9J52iAKe4=" [ ])
+-      (openelaIncr "348" "349" "sha256-RbFQ6aLj973Sm0yGGQcMA15zK4r/L1HXtUBNOEefljY=" [
+-        "fs/f2fs/segment.c"
+-        "fs/f2fs/super.c"
+-      ])
+-      (openelaIncr "349" "350" "sha256-RboVU3uv8yPyB+WfLXehAD01x4UvyO57e1FBBC9axOk=" [ ])
+-      (openelaIncr "350" "351" "sha256-j88e3O+kaEIFQk7b6ILKIYiAHnsWppEBg+SJTp33C1s=" [
+-        "drivers/usb/gadget/configfs.c"
+-      ])
+-      (openelaIncr "351" "352" "sha256-5h3hk9zG3S4LthGaIgxNMJCF8AAPd4LyQ6iG72VkSt0=" [
+-        "arch/arm/include/asm/uaccess.h"
+-      ])
+-      (openelaIncr "352" "353" "sha256-jJ6MA/kPrGW0i4/aPAwa8okI3gQRopQKKLZqPIRfq0E=" [
+-        "fs/ext4/namei.c"
+-        "fs/f2fs/f2fs.h"
+-        "fs/f2fs/inode.c"
+-        "fs/f2fs/namei.c"
+-      ])
+-      (openelaIncr "353" "354" "sha256-mXsDBNsGo3Cyn8SYXfNlLRMziymX4gUeIaJd8M7OkP8=" [
+-        "drivers/mmc/core/mmc_test.c"
+-      ])
+-      (openelaIncr "354" "355" "sha256-FMnEIywzBK7gbDYbDWKwQ/MCk6/hATHeMIr9O/Lg5yc=" [
+-        "drivers/net/usb/usbnet.c"
+-      ])
+-      (openelaIncr "355" "356" "sha256-879f5zYCWB9HaafLAmZiRUnfM24LEN6EeffWZFl6s84=" [
+-        "drivers/net/usb/usbnet.c"
+-        "drivers/usb/dwc3/core.c"
+-        "fs/ext4/inline.c"
+-        "fs/ext4/namei.c"
+-        "fs/f2fs/file.c"
+-        "fs/f2fs/xattr.c"
+-        "security/selinux/selinuxfs.c"
+-        "security/smack/smackfs.c"
+-      ])
+-      (openelaIncr "356" "357" "sha256-/SBd21q/qDwC5Dl4xbkbU1UugGUX8honSx7I5P6oN30=" [ ])
+-    ]
+-    ++ [
+-      ./stable/vendor-235-236.patch
+-      ./stable/vendor-236-237.patch
+-      ./stable/vendor-237-238.patch
+-      ./stable/vendor-238-239.patch
+-      ./stable/vendor-239-240.patch
+-      ./stable/vendor-240-241.patch
+-      ./stable/vendor-241-242.patch
+-      ./stable/vendor-244-245.patch
+-      ./stable/vendor-245-246.patch
+-      ./stable/vendor-246-247.patch
+-      ./stable/vendor-249-250.patch
+-      ./stable/vendor-256-257.patch
+-      ./stable/vendor-270-271.patch
+-      ./stable/vendor-284-285.patch
+-      ./stable/vendor-298-299.patch
+-    ]
++    lib.optionals enableStableBackports (
++      stablePatches
++      ++ [
++        (openelaIncr "336" "337" "sha256-SNYUicSv6auGY+9q6w7sHOgEne3J28+NnerAqFyCp/A=" [ ])
++        (openelaIncr "337" "338" "sha256-cCy9LQ83C9YpksIuRJUG/sjy1XjsG2ju7Cv4AT0zrTg=" [
++          "drivers/android/binder_alloc.c"
++          "fs/f2fs/namei.c"
++          "net/ncsi/ncsi-netlink.c"
++        ])
++        (openelaIncr "338" "339" "sha256-E9jVwY5ACPJ/gSiwFxnGEYT8MXPKZiT4rHxwOOHa7mU=" [
++          "kernel/power/swap.c"
++        ])
++        (openelaIncr "339" "340" "sha256-JqDhvASSVLEWs+WGlt6AKynD5Eo18vJdyo23s9tbX8M=" [ ])
++        (openelaIncr "340" "341" "sha256-HrNTswzlUXD+HN2jvTj0Yi4jPbq2iQT6mM/nh0HLfJ0=" [ ])
++        (openelaIncr "341" "342" "sha256-+/AqNKfr3mJyUdhzJXYJSIRqajIXmx8+jX/Xd0Kj7TE=" [ ])
++        (openelaIncr "342" "343" "sha256-O1YkrpnotcisDs+1x2SV3+7MPezO/hW9yIX6XTI6zvk=" [
++          "fs/select.c"
++          "sound/usb/stream.c"
++        ])
++        (openelaIncr "343" "344" "sha256-iH1AvW2uJroiPwRwcVks87C4YPEIDU/qQS3AKUO9DZA=" [
++          "drivers/android/binder.c"
++        ])
++        (openelaIncr "344" "345" "sha256-xyzcIEsSjpAPQOfzx9SKTye21qBiDecidPMI0QIvKhs=" [
++          "mm/memory-failure.c"
++          "mm/page_alloc.c"
++        ])
++        (openelaIncr "345" "346" "sha256-JidE24zw43SVSv4aO+8Ds05sf4kScH2heeuPR/gFMOw=" [ ])
++        (openelaIncr "346" "347" "sha256-zRoyE70vjH/vjY06oRkOjg0Yajo3ssENMkc92iYHZuc=" [
++          "drivers/usb/gadget/composite.c"
++        ])
++        (openelaIncr "347" "348" "sha256-v/+x61magYDBxPw2avHzxpsctyn39Sr0UP9J52iAKe4=" [ ])
++        (openelaIncr "348" "349" "sha256-RbFQ6aLj973Sm0yGGQcMA15zK4r/L1HXtUBNOEefljY=" [
++          "fs/f2fs/segment.c"
++          "fs/f2fs/super.c"
++        ])
++        (openelaIncr "349" "350" "sha256-RboVU3uv8yPyB+WfLXehAD01x4UvyO57e1FBBC9axOk=" [ ])
++        (openelaIncr "350" "351" "sha256-j88e3O+kaEIFQk7b6ILKIYiAHnsWppEBg+SJTp33C1s=" [
++          "drivers/usb/gadget/configfs.c"
++        ])
++        (openelaIncr "351" "352" "sha256-5h3hk9zG3S4LthGaIgxNMJCF8AAPd4LyQ6iG72VkSt0=" [
++          "arch/arm/include/asm/uaccess.h"
++        ])
++        (openelaIncr "352" "353" "sha256-jJ6MA/kPrGW0i4/aPAwa8okI3gQRopQKKLZqPIRfq0E=" [
++          "fs/ext4/namei.c"
++          "fs/f2fs/f2fs.h"
++          "fs/f2fs/inode.c"
++          "fs/f2fs/namei.c"
++        ])
++        (openelaIncr "353" "354" "sha256-mXsDBNsGo3Cyn8SYXfNlLRMziymX4gUeIaJd8M7OkP8=" [
++          "drivers/mmc/core/mmc_test.c"
++        ])
++        (openelaIncr "354" "355" "sha256-FMnEIywzBK7gbDYbDWKwQ/MCk6/hATHeMIr9O/Lg5yc=" [
++          "drivers/net/usb/usbnet.c"
++        ])
++        (openelaIncr "355" "356" "sha256-879f5zYCWB9HaafLAmZiRUnfM24LEN6EeffWZFl6s84=" [
++          "drivers/net/usb/usbnet.c"
++          "drivers/usb/dwc3/core.c"
++          "fs/ext4/inline.c"
++          "fs/ext4/namei.c"
++          "fs/f2fs/file.c"
++          "fs/f2fs/xattr.c"
++          "security/selinux/selinuxfs.c"
++          "security/smack/smackfs.c"
++        ])
++        (openelaIncr "356" "357" "sha256-/SBd21q/qDwC5Dl4xbkbU1UugGUX8honSx7I5P6oN30=" [ ])
++      ]
++      ++ [
++        ./stable/vendor-235-236.patch
++        ./stable/vendor-236-237.patch
++        ./stable/vendor-237-238.patch
++        ./stable/vendor-238-239.patch
++        ./stable/vendor-239-240.patch
++        ./stable/vendor-240-241.patch
++        ./stable/vendor-241-242.patch
++        ./stable/vendor-244-245.patch
++        ./stable/vendor-245-246.patch
++        ./stable/vendor-246-247.patch
++        ./stable/vendor-249-250.patch
++        ./stable/vendor-256-257.patch
++        ./stable/vendor-270-271.patch
++        ./stable/vendor-284-285.patch
++        ./stable/vendor-298-299.patch
++      ]
++    )
+     ++ [
+       (upstreamPatch "0001-dts-Add-hoki-device-trees.patch" "0z3c6lbqpqmhqsy158wbpl0zcfkr94nwh42d6px309684qq4c8v2")
+       (upstreamPatch "0002-mmc-Fix-embedded_sdio_data-duplicate-definition.patch" "0h7d3pxz8di2rh257kmc83iwcpf8xmrqhbqq4an2vclfdhyr297j")
+@@ -998,7 +1029,7 @@ kernel-builder-gcc8 {
+         "0010-rtnetlink-accept-nexthop-message-types-and-multicast.patch"
+       ]
+     )
+-    ++ [
++    ++ lib.optionals enableAmzn2Backports [
+       # Amazon Linux 2 4.14.355-287.768.amzn2, last so it sees the vendor tree
+       # as every earlier patch left it.
+       amzn2Patch
