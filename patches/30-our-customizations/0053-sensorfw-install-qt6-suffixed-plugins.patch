@@ -1,4 +1,4 @@
-From: matawaa
+From: Matawaa <noreply@localhost>
 Subject: [PATCH] sensorfw: install plugins as lib*-qt6.so
 
 Loader::pluginFileName (core/loader.cpp) looks for lib${name}-qt6.so.

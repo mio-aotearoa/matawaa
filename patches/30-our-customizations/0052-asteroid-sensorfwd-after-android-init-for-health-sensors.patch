@@ -1,4 +1,4 @@
-From: matawaa
+From: Matawaa <noreply@localhost>
 Subject: [PATCH] asteroid: start sensorfwd after android-init for HR HAL
 
 Heart rate (and future SpO2/sleep) use the Android Sensors HAL via

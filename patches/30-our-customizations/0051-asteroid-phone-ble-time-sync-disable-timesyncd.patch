@@ -1,4 +1,4 @@
-From: matawaa
+From: Matawaa <noreply@localhost>
 Subject: [PATCH] asteroid: disable timesyncd; advertise hoki BLE name
 
 Phone BLE time sync (Gadgetbridge / AsteroidOS Sync → btsyncd →

@@ -1,4 +1,4 @@
-From: matawaa
+From: Matawaa <noreply@localhost>
 Subject: [PATCH] hoki: stop ambient 1Hz flashes (minute WallClock + sticky DOZE clear)
 
 Ambient lipstick wakes once per minute, but MainScreen kept WallClock at
