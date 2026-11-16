@@ -79,6 +79,6 @@ The patch series has since been consolidated and reorganized: the launch-cache a
 ## 2026-11-17 follow-up
 
 - `meta-asteroid` master is still `20a8d379f670`; recipe SRCREVs already matched the overlay.
-- Bumped project tips ahead of recipes where GitHub moved: `asteroid-settings` `b1717016d481`, `asteroid-flashlight` `74a3638f4f45`, plus community `beatfork`, `docking-bay`, and `rag` (patch `0055`).
+- Bumped project tips ahead of recipes where GitHub moved: `asteroid-settings` `b1717016d481`, `asteroid-flashlight` `74a3638f4f45`, plus community `beatfork`, `docking-bay`, and `rag`. Folded into base patches `0022` / `0023` (no standalone fixup).
 - Category 50 MCU timepiece / kernel-timezone work still tracks open meta-asteroid [PR 332](https://github.com/AsteroidOS/meta-asteroid/pull/332) (`3ca9e1e`); not merged into nightly. Timepiece user services are behind `services.asteroid-desktop.timepiece.enable` (default off). Category 40 keeps an opt-in `QPA_HWC2_DOZE_UPDATE` plugin path; Hoki device default matches upstream `QPA_HWC2_FORCE_DOZE_UPDATE`.
 - Built `nixosConfigurations.fossil-hoki.config.system.build.toplevel` successfully after the pin bumps.

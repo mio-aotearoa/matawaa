@@ -834,8 +834,8 @@ index 0000000000000000000000000000000000000000..de820ace4ff390e5e9a0fcabdec489a6
 +  settings = mkAsteroidApp {
 +    name = "settings";
 +    desc = "Smartwatch preferences and configuration application";
-+    rev = "54ec1e317d10e0b72868143697166718ae3d2b95";
-+    hash = "sha256-wWHJ3MDVq+wkoDZHQlgSUj4SgWPcB9H9IlPg3gPn/20=";
++    rev = "b1717016d481d1f1b9dbd98b59ad7d2068f11b4c";
++    hash = "sha256-ZnGMQAsIR6sNohEppwIRz1LESKXP9MNRpDmgKOEWSTo=";
 +    postPatch = ''
 +      # Restore engineering English for the connect-failure StatusPage.
 +      substituteInPlace src/qml/WiFiConnectionDialog.qml \
@@ -889,8 +889,8 @@ index 0000000000000000000000000000000000000000..de820ace4ff390e5e9a0fcabdec489a6
 +  flashlight = mkAsteroidApp {
 +    name = "flashlight";
 +    desc = "Full-screen high-brightness torch utility";
-+    rev = "6b8c805c49c3a5adfa345b17b5d03e40ee50275b";
-+    hash = "sha256-NeoydJ/BZZaItZkzT/9hO3WOwbKBhH+jDEuNHZ2Aen0=";
++    rev = "74a3638f4f4572dcee9270e32892a61ed196bc7a";
++    hash = "sha256-Nj1vd/dxJ7EyeCHOUhGNgHhssuNkuZkuTnG38Yvsiw4=";
 +  };
 +
 +  calendar = mkAsteroidApp {
