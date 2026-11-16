@@ -1,0 +1,81 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matawaa <noreply@localhost>
+Date: Tue, 17 Nov 2026 10:52:34 +1100
+Subject: [PATCH 1/1] hoki: allow disabling Amazon AL2 kernel security
+ backports
+
+Gate the amzn2 767-patch train behind enableAmzn2Backports and turn it
+off on hoki for A/B comparison against unexplained PS_HOLD hard resets.
+---
+ devices/fossil-hoki/default.nix        |  3 +++
+ devices/fossil-hoki/kernel/default.nix | 25 +++++++++++++++++--------
+ 2 files changed, 20 insertions(+), 8 deletions(-)
+
+diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
+index 6f0ef23e..33f3ab3b 100644
+--- a/devices/fossil-hoki/default.nix
++++ b/devices/fossil-hoki/default.nix
+@@ -102,6 +102,9 @@ in
+   mobile.boot.stage-1 = {
+     kernel.package = pkgs.callPackage ./kernel {
+       enableDroidspacesBackports = config.mobile.hardware.watch.kernel == "legacy-backports";
++      # A/B: drop AL2's ~767 security/maintenance backports while comparing
++      # unexplained PS_HOLD hard resets against the OpenELA+vendor tree alone.
++      enableAmzn2Backports = false;
+     };
+   };
+ 
+diff --git a/devices/fossil-hoki/kernel/default.nix b/devices/fossil-hoki/kernel/default.nix
+index 3dd58d03..43ca438f 100644
+--- a/devices/fossil-hoki/kernel/default.nix
++++ b/devices/fossil-hoki/kernel/default.nix
+@@ -12,6 +12,10 @@
+   runCommand,
+   xz,
+   enableDroidspacesBackports ? false,
++  # Amazon Linux 2's 767-patch security/maintenance train on top of OpenELA
++  # 4.14.355. Disable for A/B testing when chasing PS_HOLD / unexplained
++  # resets that might track the backport surface rather than vendor code.
++  enableAmzn2Backports ? true,
+   ...
+ }:
+ 
+@@ -844,17 +848,22 @@ let
+ in
+ 
+ kernel-builder-gcc8 {
+-  version = "4.14.355-287.768.amzn2";
+-  modDirVersion = "4.14.355-287.768.amzn2";
++  version = if enableAmzn2Backports then "4.14.355-287.768.amzn2" else "4.14.357";
++  modDirVersion = if enableAmzn2Backports then "4.14.355-287.768.amzn2" else "4.14.357";
+   inherit configfile;
+ 
+   # The vendor tree claims 4.14.206 and every incremental patch's Makefile hunk
+-  # is dropped above, so the version is set here instead of 24 times over. The
+-  # release suffix follows Amazon Linux 2's rpm: AL2 builds its kernels as
+-  # 4.14.355-%{release}.%{_target_cpu}, so this is the armv7l equivalent.
++  # is dropped above, so the version is set here instead of 24 times over. With
++  # AL2 backports the release suffix follows Amazon Linux 2's rpm
++  # (4.14.355-%{release}.%{_target_cpu}); without them the tree stops at the
++  # OpenELA 4.14.357 tip from the increments above.
+   postPatch = ''
+-    sed -i -E 's/^SUBLEVEL = [0-9]+$/SUBLEVEL = 355/' Makefile
+-    sed -i -E 's/^EXTRAVERSION.*$/EXTRAVERSION = -287.768.amzn2/' Makefile
++    sed -i -E 's/^SUBLEVEL = [0-9]+$/SUBLEVEL = ${
++      if enableAmzn2Backports then "355" else "357"
++    }/' Makefile
++    sed -i -E 's/^EXTRAVERSION.*$/EXTRAVERSION = ${
++      if enableAmzn2Backports then "-287.768.amzn2" else ""
++    }/' Makefile
+   '';
+ 
+   src = fetchFromGitHub {
+@@ -998,7 +1007,7 @@ kernel-builder-gcc8 {
+         "0010-rtnetlink-accept-nexthop-message-types-and-multicast.patch"
+       ]
+     )
+-    ++ [
++    ++ lib.optionals enableAmzn2Backports [
+       # Amazon Linux 2 4.14.355-287.768.amzn2, last so it sees the vendor tree
+       # as every earlier patch left it.
+       amzn2Patch
