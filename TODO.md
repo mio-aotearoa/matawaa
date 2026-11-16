@@ -60,6 +60,22 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 
 ---
 
+### 1.5 Fossil Hoki Reboot Hang (Kernel Recursive Fault)
+* **Observed on:** Fossil Gen 6 (`fossil-hoki`), Linux `4.14.355-287.768.amzn2`, 2026-11-15
+* **Symptom:** After `reboot` / deploy `--reboot`, the display goes black and the watch never finishes power-cycling until a forced reboot. SSH over USB stays down; the local port-forward may still accept TCP but reset during KEX.
+* **Log evidence (previous boot journal):**
+  * `systemd-logind`: `The system will reboot now!` then normal unit stop (MCE, launcher, bluetooth, …).
+  * Kernel oops during teardown: process `(dom-seed)` (likely random-seed / sysfs path) faults in `kernfs_fop_write` / `kernfs_fop_release`.
+  * Kernel: `Fixing recursive fault but reboot is needed!`
+  * Afterwards logind times out stopping `user-runtime-dir@0.service`; journal continues with PMI/FG messages for several minutes with no clean reboot completion.
+* **Technical context:** Vendor 4.14 shutdown race (sysfs/cgroup half-torn-down). Not introduced by the DefaultIPAccounting / timed ConditionUser fixes. SSH-as-root spawning `user@0` may make teardown messier but the hard failure is the kernel fault.
+* **Remaining Verification & Resolution Steps:**
+  * Reproduce with a clean reboot (no root linger / no `user@0`) and capture `journalctl -b -1` around the oops again.
+  * Soft mitigation: teach `deployWatch` to prefer `127.0.0.1`, and after a deadline escalate to `reboot -f` or sysrq-b so deploy does not leave a wedged black screen.
+  * Only chase a kernel/sysfs fix if it reproduces often; full vendor-kernel debugging is high cost on this tree.
+
+---
+
 ## 2. Upstream Architecture & Long-Term Roadmap
 
 ### 2.1 Mainline Linux Kernel Bringup for Snapdragon Wear 4100 (`fossil-hoki-mainline`)

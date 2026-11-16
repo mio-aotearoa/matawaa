@@ -8,11 +8,11 @@ Subject: [PATCH] asteroid: package core apps camera viewfinder and music
  overlay/asteroidos/apps/camera/camera-companion.patch      |  566 ++++++++++++++++++++++++++++++++++++++++++
  overlay/asteroidos/apps/camera/remotecamerabridge.cpp      |  130 +++++++++++++++++++++++
  overlay/asteroidos/apps/camera/remotecamerabridge.h        |   61 ++++++++++++++++
- overlay/asteroidos/apps/default.nix                        |  128 +++++++++++++++++++++++
+ overlay/asteroidos/apps/default.nix                        |  144 +++++++++++++++++++++++
  overlay/asteroidos/apps/music-ytmusic-streaming.patch      |  306 +++++++++++++++++++++++++++++++++++
  overlay/asteroidos/assets/default.nix                      |  195 ++++++++++++++++++++++++++++
  overlay/asteroidos/default.nix                             |   12 +++++++
-7 files changed, 1398 insertions(+)
+7 files changed, 1414 insertions(+)
 
 diff --git a/overlay/asteroidos/apps/camera/camera-companion.patch b/overlay/asteroidos/apps/camera/camera-companion.patch
 new file mode 100644
@@ -836,6 +836,22 @@ index 0000000000000000000000000000000000000000..de820ace4ff390e5e9a0fcabdec489a6
 +    desc = "Smartwatch preferences and configuration application";
 +    rev = "54ec1e317d10e0b72868143697166718ae3d2b95";
 +    hash = "sha256-wWHJ3MDVq+wkoDZHQlgSUj4SgWPcB9H9IlPg3gPn/20=";
++    postPatch = ''
++      # Restore engineering English for the connect-failure StatusPage.
++      substituteInPlace src/qml/WiFiConnectionDialog.qml \
++        --replace-fail \
++          'layerStack.push(errorPopup, {networkService: modelData, text: qsTrId("id-wifi-connectionError")})' \
++          '//% "Connection failed"
++            layerStack.push(errorPopup, {networkService: modelData, text: qsTrId("id-wifi-connectionError")})'
++
++      # Upstream ships empty/unfinished entries for this ID in every locale.
++      for f in i18n/asteroid-settings.*.ts; do
++        sed -i '/id="id-wifi-connectionError"/,/<\/message>/{
++          s|<source></source>|<source>Connection failed</source>|
++          s|<translation type="unfinished"></translation>|<translation>Connection failed</translation>|
++        }' "$f"
++      done
++    '';
 +    extraBuildInputs = [
 +      mce-dev
 +      ngf-qt6
