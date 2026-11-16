@@ -15,6 +15,11 @@ boundary (`scheduleAmbientUpdate`: `mktime(...) + 60`), then disables updates
 again after a short settle. That is the intended “minute updates” path — not
 one present per second.
 
+Launcher `MainScreen.qml` binds `WallClock` to `Minute` while
+`displayAmbient` is true (patch `0050` / `ambient-wallclock-minute.patch`).
+Leaving it at `Second` with `FORCE_DOZE_UPDATE` produced ~1 Hz full-ON present
+flashes whenever ambient updates stayed enabled.
+
 `QPA_HWC2_DOZE_UPDATE=1` remains an opt-in plugin path (ambient presents in
 HWC2 `DOZE` then restore `DOZE_SUSPEND`) for experiments; it is not the device
 default. Enabling it with a seconds-updating watchface caused ~1 Hz flashes and
@@ -31,11 +36,11 @@ System suspend while in ambient is still expected for good multi-day battery;
 last long on-device boot recorded **zero** suspend entries. Getting autosleep
 working is a separate follow-up from the HWC flag choice.
 
-A oneshot (`hoki-clear-sticky-doze-update`) strips a leftover
-`QPA_HWC2_DOZE_UPDATE=` line from the persistent
-`/var/lib/environment/compositor/20-device.conf` so upgraded watches do not keep
-the experimental 1 Hz present path after the default flips back to
-`FORCE_DOZE_UPDATE`.
+A oneshot (`hoki-clear-sticky-doze-update`, hardened in `0050`) strips leftover
+`QPA_HWC2_DOZE_UPDATE=` lines from every
+`/var/lib/environment/compositor/*.conf` drop-in and ensures
+`FORCE_DOZE_UPDATE=1` is present in `20-device.conf`, so upgraded watches do not
+keep the experimental 1 Hz present path.
 
 ## MCU timepiece mode (opt-in, default off)
 

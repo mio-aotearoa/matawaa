@@ -60,6 +60,13 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 
 ---
 
+### 1.5a Fossil Hoki Ambient ~1 Hz Flash
+* **Cause:** `QPA_HWC2_FORCE_DOZE_UPDATE` briefly brings the panel to full ON for each ambient present; `WallClock.Second` (or sticky `QPA_HWC2_DOZE_UPDATE`) drove presents every second.
+* **Fix in tree:** default `FORCE_DOZE_UPDATE` + sticky `DOZE_UPDATE` clearer (`0048`); ambient `WallClock.Minute` (`0050`). Lipstick still wakes ambient once per minute.
+* **Verify on device:** compositor env has `FORCE_DOZE_UPDATE=1` and no `DOZE_UPDATE`; ambient face updates on the minute without flashing each second.
+
+---
+
 ### 1.5 Fossil Hoki Reboot Hang (Kernel Recursive Fault)
 * **Observed on:** Fossil Gen 6 (`fossil-hoki`), Linux `4.14.355-287.768.amzn2`, 2026-11-15
 * **Symptom:** After `reboot` / deploy `--reboot`, the display goes black and the watch never finishes power-cycling until a forced reboot. SSH over USB stays down; the local port-forward may still accept TCP but reset during KEX.
