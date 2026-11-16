@@ -76,6 +76,20 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 
 ---
 
+### 1.6 Fossil Hoki Heart Rate / SpO2 / Sleep (SSC + LifeQ)
+* **Hardware:** PixArt PAH8131/8137 PPG on Qualcomm SSC/SLPI; LifeQ algorithms in `sensors.ssc.so` expose `android.sensor.heart_rate`, `android.sensor.lifeq_lel_spo2`, `android.sensor.lifeq_lel_sleep_wake` (also `com.google.wear.sensor.ppg`).
+* **Upstream AsteroidOS status:** HR = good on [hoki](https://asteroidos.org/watches/hoki/); SpO2 = bad. Community stack: meta-asteroid hybrishrmadaptor → SensorFW → `QHrmSensor` → `asteroid-hrm` / `asteroid-health` / `asteroid-sensorlogd`.
+* **Matawaa status:** HR path packaged (`sensorfwd`, hybrishrm, hrm/health/sensorlogd apps). SpO2/sleep have **no** SensorFW/Qt types yet; BLE app-bridge only stubs `org.asteroidos.spo2`.
+* **Bring-up in tree:** patches `0052` (sensorfwd after android-init), `0053` (SensorFW `lib*-qt6.so` Loader suffix); probe script + docs. Fixed `0022` apps/default.nix hunk count (was truncating camera `postPatch` and breaking flake eval). `deployWatch.py` embeds SSH port in `nix copy` URI.
+* **Community SpO2 WIP:** [python-ssc](https://github.com/1337Misom/python-ssc) reads Gen 6 SpO2 via SSC/QMI (not HAL); `fsl_sleep` still unimplemented there.
+* **Remaining Verification & Resolution Steps:**
+  * Deploy rebuilt image (`deployWatch.py --action switch --no-reboot`) then `./scripts/probeHealthSensors.sh`.
+  * Confirm plugins load (`lib*-qt6.so`); on-wrist `asteroid-hrm` BPM; `test_sensors` for SpO2/sleep type IDs.
+  * Add hybrisspo2 / hybrissleep SensorFW+Qt adaptors once IDs known; optional python-ssc demo package for SpO2.
+  * Expect proprietary LifeQ limits without Wellness glue; sleep needs more SSC RE.
+
+---
+
 ## 2. Upstream Architecture & Long-Term Roadmap
 
 ### 2.1 Mainline Linux Kernel Bringup for Snapdragon Wear 4100 (`fossil-hoki-mainline`)

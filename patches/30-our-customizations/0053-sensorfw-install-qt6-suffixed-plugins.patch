@@ -1,0 +1,19 @@
+From: matawaa
+Subject: [PATCH] sensorfw: install plugins as lib*-qt6.so
+
+Loader::pluginFileName (core/loader.cpp) looks for lib${name}-qt6.so.
+Our CMake MODULE targets were installed as lib${name}.so, so sensorfwd
+reported every plugin (including hybrishrmadaptor / hrmsensor) as
+unavailable and heart-rate never bound.
+
+--- a/overlay/asteroidos/sensorfw/CMakeLists.txt
++++ b/overlay/asteroidos/sensorfw/CMakeLists.txt
+@@ -122,6 +122,8 @@
+   file(GLOB srcs ${dir}/*.cpp)
+   file(GLOB hdrs ${dir}/*.h)
+   add_library(${target} MODULE ${srcs} ${hdrs})
++  # Loader::pluginFileName builds lib${name}-qt6.so (see core/loader.cpp).
++  set_target_properties(${target} PROPERTIES PREFIX "lib" SUFFIX "-qt6.so")
+   target_include_directories(${target} PRIVATE ${dir})
+   target_link_libraries(${target} PRIVATE
+     sensorfw-qt6

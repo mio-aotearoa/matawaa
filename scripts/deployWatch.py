@@ -201,13 +201,16 @@ def deploy_copy(
 
     check_ssh_connectivity(host, port, user)
 
-    log(f"Copying system closure to {user}@{host} via nix-copy-closure...")
+    # Embed port in the SSH URL so copy cannot silently hit local :22 when
+    # deploying through a localhost forward (e.g. -L 2222:172.16.42.1:22).
+    log(f"Copying system closure to {user}@{host}:{port} via nix copy...")
     env = os.environ.copy()
     env["NIX_SSHOPTS"] = (
-        f"-p {port} -o StrictHostKeyChecking=accept-new "
+        "-o StrictHostKeyChecking=accept-new "
         "-o ServerAliveInterval=15 -o ServerAliveCountMax=6 -o TCPKeepAlive=yes"
     )
-    cmd = ["nix-copy-closure", "--gzip", "-v", "--to", f"{user}@{host}", toplevel]
+    ssh_uri = f"ssh://{user}@{host}:{port}"
+    cmd = ["nix", "copy", "--to", ssh_uri, "-v", toplevel]
     run_cmd(cmd, env=env)
 
     log(f"Activating configuration (action: {action}) on target watch...")

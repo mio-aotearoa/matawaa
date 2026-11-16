@@ -794,7 +794,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..de820ace4ff390e5e9a0fcabdec489a62e80a8d0
 --- /dev/null
 +++ b/overlay/asteroidos/apps/default.nix
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,144 @@
 +{
 +  qt6,
 +  mkAsteroidApp,

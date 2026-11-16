@@ -1,0 +1,46 @@
+From: matawaa
+Subject: [PATCH] asteroid: start sensorfwd after android-init for HR HAL
+
+Heart rate (and future SpO2/sleep) use the Android Sensors HAL via
+libhybris. Order sensorfwd after android-init and fix the stale
+sensord.service reference so SSC/SLPI sensors can appear before SensorFW
+binds hybrishrmadaptor.
+
+--- a/devices/fossil-hoki/android-init.nix
++++ b/devices/fossil-hoki/android-init.nix
+@@ -97,7 +97,8 @@
+       "network.target"
+       "bluetooth.service"
+       "ofono.service"
+-      "sensord.service"
++      # SensorFW unit name is sensorfwd (not legacy sensord).
++      "sensorfwd.service"
+     ];
+     unitConfig.DefaultDependencies = false;
+     unitConfig.Conflicts = [ "shutdown.target" ];
+--- a/examples/asteroid/asteroid-desktop.nix
++++ b/examples/asteroid/asteroid-desktop.nix
+@@ -427,14 +427,22 @@
+ 
+       # SensorFW daemon — backend for the Qt Sensors sensorfw plugin.
+       # Upstream unit: https://github.com/AsteroidOS/meta-asteroid/blob/master/recipes-nemomobile/sensorfw/files/sensorfwd.service
++      # On hoki, HR (and future SpO2/sleep) come from the Android Sensors HAL
++      # via libhybris (PAH813x PPG + LifeQ on SSC/SLPI), so wait for android-init.
+       systemd.services.sensorfwd = {
+         description = "Sensor daemon for sensor framework";
+         wantedBy = [ "multi-user.target" ];
+-        after = [ "dbus.socket" ];
++        after = [
++          "dbus.socket"
++          "android-init.service"
++        ];
+         requires = [ "dbus.service" ];
++        wants = [ "android-init.service" ];
+         conflicts = [ "shutdown.target" ];
+         serviceConfig = {
+           Type = "notify";
++          # Give SLPI / sensors.ssc a moment after android-init starts.
++          ExecStartPre = "${pkgs.coreutils}/bin/sleep 2";
+           ExecStart = "${pkgs.asteroid.sensorfw}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=${
+             if debugBuild then "debug" else "warning"
+           } --no-magnetometer-bg-calibration";
