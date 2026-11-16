@@ -1,0 +1,75 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Matawaa <noreply@localhost>
+Date: Tue, 17 Nov 2026 09:44:16 +1100
+Subject: [PATCH 1/1] asteroid: bump app and community pins to latest tips
+
+Advance settings and flashlight past meta-asteroid recipe SRCREVs for
+fresh Weblate tips, and refresh beatfork, docking-bay, and rag.
+---
+ overlay/asteroidos/apps/default.nix           |  8 ++++----
+ overlay/asteroidos/community-apps/default.nix | 12 ++++++------
+ 2 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/overlay/asteroidos/apps/default.nix b/overlay/asteroidos/apps/default.nix
+index 0eafcda8..fe293b11 100644
+--- a/overlay/asteroidos/apps/default.nix
++++ b/overlay/asteroidos/apps/default.nix
+@@ -37,8 +37,8 @@
+   settings = mkAsteroidApp {
+     name = "settings";
+     desc = "Smartwatch preferences and configuration application";
+-    rev = "54ec1e317d10e0b72868143697166718ae3d2b95";
+-    hash = "sha256-wWHJ3MDVq+wkoDZHQlgSUj4SgWPcB9H9IlPg3gPn/20=";
++    rev = "b1717016d481d1f1b9dbd98b59ad7d2068f11b4c";
++    hash = "sha256-ZnGMQAsIR6sNohEppwIRz1LESKXP9MNRpDmgKOEWSTo=";
+     postPatch = ''
+       # Restore engineering English for the connect-failure StatusPage.
+       substituteInPlace src/qml/WiFiConnectionDialog.qml \
+@@ -92,8 +92,8 @@
+   flashlight = mkAsteroidApp {
+     name = "flashlight";
+     desc = "Full-screen high-brightness torch utility";
+-    rev = "6b8c805c49c3a5adfa345b17b5d03e40ee50275b";
+-    hash = "sha256-NeoydJ/BZZaItZkzT/9hO3WOwbKBhH+jDEuNHZ2Aen0=";
++    rev = "74a3638f4f4572dcee9270e32892a61ed196bc7a";
++    hash = "sha256-Nj1vd/dxJ7EyeCHOUhGNgHhssuNkuZkuTnG38Yvsiw4=";
+   };
+ 
+   calendar = mkAsteroidApp {
+diff --git a/overlay/asteroidos/community-apps/default.nix b/overlay/asteroidos/community-apps/default.nix
+index 27c88d9c..ea55fc99 100644
+--- a/overlay/asteroidos/community-apps/default.nix
++++ b/overlay/asteroidos/community-apps/default.nix
+@@ -149,8 +149,8 @@ rec {
+     owner = "moWerk";
+     repo = "asteroid-beatfork";
+     desc = "Metronome and chromatic tuning fork app for smartwatches";
+-    rev = "e3fbc5dd6da40868e0f338c9a0d3f6e877afca25";
+-    hash = "sha256-oh42F7U5lxtj+IWIg4c8o91sAKJL6vl1AbHGjh0ulug=";
++    rev = "45ce35fb1b7c2f542d47c4c61455fbd8745805c5";
++    hash = "sha256-e1Nbx75P8djGfTPDWY2R9ATwBN56eHi2JTd97HtW0SE=";
+     patches = [
+       ./beatfork-tack-improvements.patch
+     ];
+@@ -190,8 +190,8 @@ rec {
+     src = fetchFromGitHub {
+       owner = "moWerk";
+       repo = "asteroid-docking-bay";
+-      rev = "37503828b30c4061a815b10887c46b548137b34f";
+-      hash = "sha256-4Vo76XR7VGwr8eQdEmNT6CzNgDouapEjx39Ee8Q2HT0=";
++      rev = "7f21296f16a73d4a7f1f81b0ef069998ba7b86a8";
++      hash = "sha256-Hu6WnvQNnP7PGTn5o2iPzsw1aowPAyd3cR0jg1W350Q=";
+     };
+ 
+     postPatch = ''
+@@ -276,8 +276,8 @@ rec {
+     src = fetchFromGitHub {
+       owner = "moWerk";
+       repo = "asteroid-rag";
+-      rev = "0eaf32483ac17a69ee2ce79524c2d8704fcce619";
+-      hash = "sha256-nRV40PckViPS++spxbsi5vfD3BIBNd5TgutziNmBP2k=";
++      rev = "978b4c592d621767f8135158616230b6c75264d8";
++      hash = "sha256-DW/q6YyxsWVhwwZKoZi4/UlU8u682cxaEzsonxIzLyc=";
+     };
+ 
+     dontBuild = true;
