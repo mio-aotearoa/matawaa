@@ -124,3 +124,25 @@ Earlier camera, companion-app, kernel comparison, minute-update AOD, and
 default-off MCU timepiece requirements are preserved. This review does not
 claim new APK, health-sensor, suspend, or camera validation; those components
 were not changed. Commits remain local; nothing is pushed or published.
+
+### Browser launch and search preferences
+
+- The browser and WebKit processes started when tapped, but their window was
+  invisible. A software-rendered launch displayed the UI on the watch. The
+  browser wrapper now clears inherited Android EGL library overrides and sets
+  GTK's Cairo renderer plus WebKit's software rendering switches.
+- Startup and Home open DuckDuckGo. The search panel offers DuckDuckGo
+  (default) or Google, saved in the user's browser settings. Corrected the Go
+  button's callback so it receives the browser state rather than a button
+  pointer.
+- Checks of the actual C routing/settings functions cover default and saved
+  engines, escaped queries, URLs, Home, the Go callback, and fallback for unknown
+  or corrupt settings. These checks stub GTK/WebKit calls; they do not establish
+  complete touchscreen or website compatibility.
+- All 45 patches replay cleanly and reproduce source tree
+  `62ab51301f1471cb2f22ef4f0f4529d32f20d187`. The resulting system,
+  `/nix/store/xdgf63cvbllisy0cb3ic4y9hnfn065qf-nixos-system-hoki-26.11pre-git`,
+  was installed without rebooting. Browser processes were running with no new
+  errors in their log; Wi-Fi remained online and Bluetooth stayed connected.
+- Applied nixfmt to the browser expression and folded the changes into browser
+  patch `0024`, preserving unrelated patch sections.
