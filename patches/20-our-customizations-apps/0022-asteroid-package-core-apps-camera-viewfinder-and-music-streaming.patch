@@ -5,14 +5,22 @@ Subject: [PATCH] asteroid: package core apps camera viewfinder and music
  streaming
 
 ---
- overlay/asteroidos/apps/camera/camera-companion.patch      |  566 ++++++++++++++++++++++++++++++++++++++++++
- overlay/asteroidos/apps/camera/remotecamerabridge.cpp      |  130 +++++++++++++++++++++++
- overlay/asteroidos/apps/camera/remotecamerabridge.h        |   61 ++++++++++++++++
- overlay/asteroidos/apps/default.nix                        |  144 +++++++++++++++++++++++
- overlay/asteroidos/apps/music-ytmusic-streaming.patch      |  306 +++++++++++++++++++++++++++++++++++
- overlay/asteroidos/assets/default.nix                      |  195 ++++++++++++++++++++++++++++
- overlay/asteroidos/default.nix                             |   12 +++++++
-7 files changed, 1414 insertions(+)
+ .../apps/camera/camera-companion.patch        | 566 ++++++++++++++++++
+ .../apps/camera/remotecamerabridge.cpp        | 130 ++++
+ .../apps/camera/remotecamerabridge.h          |  61 ++
+ overlay/asteroidos/apps/default.nix           | 145 +++++
+ .../apps/music-ytmusic-streaming.patch        | 306 ++++++++++
+ overlay/asteroidos/apps/settings-input.patch  | 220 +++++++
+ overlay/asteroidos/assets/default.nix         | 195 ++++++
+ overlay/asteroidos/default.nix                |  12 +
+ 8 files changed, 1635 insertions(+)
+ create mode 100644 overlay/asteroidos/apps/camera/camera-companion.patch
+ create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.cpp
+ create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.h
+ create mode 100644 overlay/asteroidos/apps/default.nix
+ create mode 100644 overlay/asteroidos/apps/music-ytmusic-streaming.patch
+ create mode 100644 overlay/asteroidos/apps/settings-input.patch
+ create mode 100644 overlay/asteroidos/assets/default.nix
 
 diff --git a/overlay/asteroidos/apps/camera/camera-companion.patch b/overlay/asteroidos/apps/camera/camera-companion.patch
 new file mode 100644
@@ -791,10 +799,10 @@ index 00000000..2a57118f
 +#endif // REMOTECAMERABRIDGE_H
 diff --git a/overlay/asteroidos/apps/default.nix b/overlay/asteroidos/apps/default.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..de820ace4ff390e5e9a0fcabdec489a62e80a8d0
+index 00000000..3b9c7fd8
 --- /dev/null
 +++ b/overlay/asteroidos/apps/default.nix
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,145 @@
 +{
 +  qt6,
 +  mkAsteroidApp,
@@ -834,6 +842,7 @@ index 0000000000000000000000000000000000000000..de820ace4ff390e5e9a0fcabdec489a6
 +  settings = mkAsteroidApp {
 +    name = "settings";
 +    desc = "Smartwatch preferences and configuration application";
++    patches = [ ./settings-input.patch ];
 +    rev = "b1717016d481d1f1b9dbd98b59ad7d2068f11b4c";
 +    hash = "sha256-ZnGMQAsIR6sNohEppwIRz1LESKXP9MNRpDmgKOEWSTo=";
 +    postPatch = ''
@@ -1475,3 +1484,229 @@ index ceed388d..6cbaf356 100644
    virtualkeyboard = callPackage ./virtualkeyboard { inherit noUsrShareHook; };
  
  }
+diff --git a/overlay/asteroidos/apps/settings-input.patch b/overlay/asteroidos/apps/settings-input.patch
+new file mode 100644
+index 00000000..0b7faf61
+--- /dev/null
++++ b/overlay/asteroidos/apps/settings-input.patch
+@@ -0,0 +1,220 @@
++diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
++index 127b351..e3b8778 100644
++--- a/src/CMakeLists.txt
+++++ b/src/CMakeLists.txt
++@@ -51,6 +51,7 @@ asteroid_app_qml_module(asteroid-settings
++ 	qml/NightstandPage.qml
++ 	qml/NightstandWatchfacePage.qml
++ 	qml/UnitsPage.qml
+++	qml/KeyboardPage.qml
++ 	qml/QuickPanelPage.qml
++ 	qml/WallpaperPage.qml
++ 	qml/WatchfacePage.qml
++diff --git a/src/qml/KeyboardPage.qml b/src/qml/KeyboardPage.qml
++new file mode 100644
++index 0000000..65f3413
++--- /dev/null
+++++ b/src/qml/KeyboardPage.qml
++@@ -0,0 +1,36 @@
+++// Downstream AsteroidOS keyboard preferences, GPL-3.0-or-later.
+++import QtQuick
+++import org.asteroid.controls
+++import QtQuick.VirtualKeyboard.Plugins.Rime
+++
+++Item {
+++    Flickable {
+++        anchors.fill: parent
+++        contentHeight: options.implicitHeight
+++        Column {
+++            id: options
+++            width: parent.width
+++            Item { width: parent.width; height: Dims.h(22) }
+++            ListItem {
+++                title: qsTr("Request phone input automatically")
+++                iconName: PhoneInputBridge.automaticPhoneInput ? "ios-checkmark-circle" : "ios-radio-button-off"
+++                onClicked: PhoneInputBridge.automaticPhoneInput = true
+++            }
+++            ListItem {
+++                title: qsTr("Tap phone button to request input")
+++                iconName: !PhoneInputBridge.automaticPhoneInput ? "ios-checkmark-circle" : "ios-radio-button-off"
+++                onClicked: PhoneInputBridge.automaticPhoneInput = false
+++            }
+++            Label {
+++                width: parent.width * 0.8
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                text: qsTr("The watch keyboard hides when text arrives from the phone.")
+++                wrapMode: Text.WordWrap
+++                horizontalAlignment: Text.AlignHCenter
+++                font.pixelSize: Dims.l(5)
+++            }
+++            Item { width: parent.width; height: Dims.h(15) }
+++        }
+++    }
+++    PageHeader { text: qsTr("Keyboard") }
+++}
++diff --git a/src/qml/WiFiConnectionDialog.qml b/src/qml/WiFiConnectionDialog.qml
++index f7c6df9..7824e38 100644
++--- a/src/qml/WiFiConnectionDialog.qml
+++++ b/src/qml/WiFiConnectionDialog.qml
++@@ -33,14 +33,59 @@ Item {
++     id: dialogItem
++     property string servicePath
++     property NetworkService modelData: NetworkService {path: dialogItem.servicePath}
+++    property bool inputPending: false
+++    property bool retryReply: false
+++    property bool submitting: false
+++    property string connectionStatus: ""
+++
+++    function submitCredentials() {
+++        Qt.inputMethod.commit()
+++        Qt.inputMethod.hide()
+++        if (!inputPending) {
+++            retryReply = true
+++            submitting = true
+++            connectionStatus = qsTr("Requesting connection…")
+++            modelData.requestConnect()
+++            return
+++        }
+++        var reply = {}
+++        for (const [field, args] of Object.entries(sourceFields)) {
+++            if (loginFields[field].text !== "" && args["Requirement"] !== "informational")
+++                reply[field] = loginFields[field].text
+++        }
+++        if (Object.keys(reply).length === 0) {
+++            connectionStatus = qsTr("Enter the network credentials first.")
+++            submitting = false
+++            return
+++        }
+++        userAgent.sendUserReply(reply)
+++        inputPending = false
+++        submitting = true
+++        connectionStatus = qsTr("Connecting…")
+++    }
+++
++     UserAgent {
++         id: userAgent
++         onUserInputRequested: (requestServicePath, fields) => {
++             dialogItem.servicePath = requestServicePath
++             dialogItem.sourceFields = fields
+++            inputPending = true
+++            submitting = false
+++            connectionStatus = ""
+++            if (retryReply) {
+++                retryReply = false
+++                Qt.callLater(submitCredentials)
+++            }
++         }
++-        onErrorReported: {
++-            console.log("Got error from model: " + error)
+++        onUserInputCanceled: {
+++            inputPending = false
+++            retryReply = false
+++            submitting = false
+++            connectionStatus = qsTr("Request expired. Tap the tick to retry.")
+++        }
+++        onErrorReported: (servicePath, error) => {
+++            submitting = false
+++            connectionStatus = qsTr("Connection failed. Tap the tick to retry.")
++         }
++     }
++     property var sourceFields: ({})
++@@ -81,12 +126,20 @@ Item {
++     Connections {
++         target: modelData
++         function onConnectRequestFailed(error) {
+++            submitting = false
+++            retryReply = false
+++            inputPending = false
+++            connectionStatus = qsTr("Connection failed. Tap the tick to retry.")
++             console.log(error)
++             layerStack.push(errorPopup, {networkService: modelData, text: qsTrId("id-wifi-connectionError")})
++         }
++ 
++-        function onConnectedChanged(connected) {
++-            if(connected) {
+++        function onConnectedChanged() {
+++            if(modelData.connected) {
+++                submitting = false
+++                inputPending = false
+++                retryReply = false
+++                connectionStatus = qsTr("Connected")
++                 sourceFields = {}
++             }
++         }
++@@ -168,22 +221,24 @@ Item {
++                 }
++             }
++ 
+++            Label {
+++                width: parent.width * 0.8
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                text: connectionStatus
+++                visible: text.length > 0
+++                wrapMode: Text.WordWrap
+++                horizontalAlignment: Text.AlignHCenter
+++                font.pixelSize: Dims.l(5)
+++            }
+++
++             IconButton {
++                 visible: loginFieldsColumn.children.length // easiest way to check if we've got some active agent fields
++                 iconName: "ios-checkmark-circle-outline"
++                 height: width
++                 width: Dims.w(20)
++                 anchors.horizontalCenter: parent.horizontalCenter
++-                onClicked: () => {
++-                    if(!modelData.connected) {
++-                        var reply = {}
++-                        for (const [field, args] of Object.entries(sourceFields)) {
++-                            if(loginFields[field].text != "" && args["Requirement"] != "informational")
++-                                reply[field] = loginFields[field].text
++-                        }
++-                        userAgent.sendUserReply(reply)
++-                    }
++-                }
+++                enabled: !submitting
+++                onClicked: submitCredentials()
++             }
++         }
++     }
++@@ -217,7 +272,7 @@ Item {
++             }
++             TextField {
++                 id: fieldInput
++-                text: modelData
+++                text: ""
++                 width: parent.width
++             }
++         }
++@@ -229,7 +284,7 @@ Item {
++             icon: "ios-remove-circle"
++             anchors.fill: undefined
++             property NetworkService networkService
++-            Component.onDestruction: networkService.requestConnect()
+++
++         }
++     }
++ }
++diff --git a/src/qml/main.qml b/src/qml/main.qml
++index 23791bc..65e82f6 100644
++--- a/src/qml/main.qml
+++++ b/src/qml/main.qml
++@@ -50,6 +50,7 @@ Application {
++     Component { id: soundLayer;                 SoundPage      { } }
++     Component { id: nightstandLayer;            NightstandPage { } }
++     Component { id: nightstandWatchfaceLayer;   NightstandWatchfacePage { } }
+++    Component { id: keyboardLayer; KeyboardPage { } }
++     Component { id: unitsLayer;                 UnitsPage      { } }
++     Component { id: wallpaperLayer;             WallpaperPage  { } }
++     Component { id: watchfaceLayer;             WatchfacePage  { } }
++@@ -142,6 +143,11 @@ Application {
++                     iconName: "ios-units-outline"
++                     onClicked: layerStack.push(unitsLayer)
++                 }
+++                ListItem {
+++                    title: qsTr("Keyboard")
+++                    iconName: "ios-keypad-outline"
+++                    onClicked: layerStack.push(keyboardLayer)
+++                }
++                 ListItem {
++                     //% "Language"
++                     title: qsTrId("id-language-page")

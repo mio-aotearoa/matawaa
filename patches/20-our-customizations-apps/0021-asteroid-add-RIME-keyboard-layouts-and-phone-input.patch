@@ -4,23 +4,38 @@ Date: Mon, 9 Nov 2026 10:55:52 +1100
 Subject: [PATCH] asteroid: add RIME keyboard layouts and phone input
 
 ---
- overlay/asteroidos/default.nix                             |    2 +++
- .../virtualkeyboard/0001-add-rime-plugin-and-layouts.patch |   52 ++++++++++++++
- overlay/asteroidos/virtualkeyboard/default.nix             |   93 ++++++++++++++++++
- overlay/asteroidos/virtualkeyboard/layouts/en_GB/main.qml  |  127 +++++++++++++++++++++++
- ...ay/asteroidos/virtualkeyboard/layouts/en_GB/symbols.qml |   54 +++++++++++++++
- overlay/asteroidos/virtualkeyboard/layouts/en_US/main.qml  |  127 +++++++++++++++++++++++
- ...ay/asteroidos/virtualkeyboard/layouts/en_US/symbols.qml |   54 +++++++++++++++
- overlay/asteroidos/virtualkeyboard/layouts/phone/main.qml  |  135 +++++++++++++++++++++++
- overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml  |  131 +++++++++++++++++++++++
- ...ay/asteroidos/virtualkeyboard/layouts/zh_CN/symbols.qml |   54 +++++++++++++++
- overlay/asteroidos/virtualkeyboard/layouts/zh_HK/main.qml  |  131 +++++++++++++++++++++++
- overlay/asteroidos/virtualkeyboard/layouts/zh_TW/main.qml  |  131 +++++++++++++++++++++++
- overlay/asteroidos/virtualkeyboard/phoneinputbridge.cpp    |   86 +++++++++++++++++++
- overlay/asteroidos/virtualkeyboard/phoneinputbridge.h      |   46 ++++++++++++++
- overlay/asteroidos/virtualkeyboard/rimeinputmethod.cpp     |  312 +++++++++++++++++++++++++++++++++++
- overlay/asteroidos/virtualkeyboard/rimeinputmethod.h       |   68 ++++++++++++++++
-16 files changed, 1603 insertions(+)
+ overlay/asteroidos/default.nix                |   2 +
+ .../0001-add-rime-plugin-and-layouts.patch    |  52 +++
+ .../asteroidos/virtualkeyboard/default.nix    |  93 ++++++
+ .../virtualkeyboard/layouts/en_GB/main.qml    | 122 +++++++
+ .../virtualkeyboard/layouts/en_GB/symbols.qml |  54 +++
+ .../virtualkeyboard/layouts/en_US/main.qml    | 122 +++++++
+ .../virtualkeyboard/layouts/en_US/symbols.qml |  54 +++
+ .../virtualkeyboard/layouts/phone/main.qml    | 122 +++++++
+ .../virtualkeyboard/layouts/zh_CN/main.qml    | 126 +++++++
+ .../virtualkeyboard/layouts/zh_CN/symbols.qml |  54 +++
+ .../virtualkeyboard/layouts/zh_HK/main.qml    | 126 +++++++
+ .../virtualkeyboard/layouts/zh_TW/main.qml    | 126 +++++++
+ .../virtualkeyboard/phoneinputbridge.cpp      | 131 ++++++++
+ .../virtualkeyboard/phoneinputbridge.h        |  57 ++++
+ .../virtualkeyboard/rimeinputmethod.cpp       | 312 ++++++++++++++++++
+ .../virtualkeyboard/rimeinputmethod.h         |  68 ++++
+ 16 files changed, 1621 insertions(+)
+ create mode 100644 overlay/asteroidos/virtualkeyboard/0001-add-rime-plugin-and-layouts.patch
+ create mode 100644 overlay/asteroidos/virtualkeyboard/default.nix
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/en_GB/main.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/en_GB/symbols.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/en_US/main.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/en_US/symbols.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/phone/main.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/zh_CN/symbols.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/zh_HK/main.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/layouts/zh_TW/main.qml
+ create mode 100644 overlay/asteroidos/virtualkeyboard/phoneinputbridge.cpp
+ create mode 100644 overlay/asteroidos/virtualkeyboard/phoneinputbridge.h
+ create mode 100644 overlay/asteroidos/virtualkeyboard/rimeinputmethod.cpp
+ create mode 100644 overlay/asteroidos/virtualkeyboard/rimeinputmethod.h
 
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
 index 262d4cf2..ceed388d 100644
@@ -192,10 +207,10 @@ index 0000000000000000000000000000000000000000..9ad1a161a816d346c7346f4b6b792781
 +}
 diff --git a/overlay/asteroidos/virtualkeyboard/layouts/en_GB/main.qml b/overlay/asteroidos/virtualkeyboard/layouts/en_GB/main.qml
 new file mode 100644
-index 00000000..81489b12
+index 00000000..6686f135
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/layouts/en_GB/main.qml
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,122 @@
 +import QtQuick
 +import QtQuick.VirtualKeyboard
 +import QtQuick.VirtualKeyboard.Plugins.Rime
@@ -204,12 +219,7 @@ index 00000000..81489b12
 +    id: enGBLayout
 +    inputMode: InputEngine.InputMode.Latin
 +
-+    PhoneInputBridge {
-+        id: phoneBridge
-+        onTextCommitted: function(text) {
-+            InputContext.commit(text)
-+        }
-+    }
++    readonly property var phoneBridge: PhoneInputBridge
 +
 +    keyWeight: 160
 +    KeyboardRow {
@@ -385,10 +395,10 @@ index 00000000..3619eaf0
 +}
 diff --git a/overlay/asteroidos/virtualkeyboard/layouts/en_US/main.qml b/overlay/asteroidos/virtualkeyboard/layouts/en_US/main.qml
 new file mode 100644
-index 00000000..a6c7b0e0
+index 00000000..0e4e3cf8
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/layouts/en_US/main.qml
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,122 @@
 +import QtQuick
 +import QtQuick.VirtualKeyboard
 +import QtQuick.VirtualKeyboard.Plugins.Rime
@@ -397,12 +407,7 @@ index 00000000..a6c7b0e0
 +    id: enUSLayout
 +    inputMode: InputEngine.InputMode.Latin
 +
-+    PhoneInputBridge {
-+        id: phoneBridge
-+        onTextCommitted: function(text) {
-+            InputContext.commit(text)
-+        }
-+    }
++    readonly property var phoneBridge: PhoneInputBridge
 +
 +    keyWeight: 160
 +    KeyboardRow {
@@ -578,10 +583,10 @@ index 00000000..28c40310
 +}
 diff --git a/overlay/asteroidos/virtualkeyboard/layouts/phone/main.qml b/overlay/asteroidos/virtualkeyboard/layouts/phone/main.qml
 new file mode 100644
-index 00000000..0fc5ec0c
+index 00000000..ee7f4278
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/layouts/phone/main.qml
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,122 @@
 +import QtQuick
 +import QtQuick.VirtualKeyboard
 +import QtQuick.VirtualKeyboard.Plugins.Rime
@@ -590,20 +595,7 @@ index 00000000..0fc5ec0c
 +    id: phoneLayout
 +    inputMode: InputEngine.InputMode.Latin
 +
-+    PhoneInputBridge {
-+        id: phoneBridge
-+        onTextCommitted: function(text) {
-+            InputContext.commit(text)
-+        }
-+    }
-+
-+    Component.onCompleted: {
-+        phoneBridge.requestInput()
-+    }
-+
-+    Component.onDestruction: {
-+        phoneBridge.closeInput()
-+    }
++    readonly property var phoneBridge: PhoneInputBridge
 +
 +    keyWeight: 160
 +    KeyboardRow {
@@ -719,10 +711,10 @@ index 00000000..0fc5ec0c
 +}
 diff --git a/overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml b/overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml
 new file mode 100644
-index 00000000..e5ffc029
+index 00000000..85c846ce
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,126 @@
 +import QtQuick
 +import QtQuick.VirtualKeyboard
 +import QtQuick.VirtualKeyboard.Plugins.Rime
@@ -735,12 +727,7 @@ index 00000000..e5ffc029
 +        return Qt.createQmlObject('import QtQuick; import QtQuick.VirtualKeyboard.Plugins.Rime; RimeInputMethod {}', parent, "inputMethod.qml")
 +    }
 +
-+    PhoneInputBridge {
-+        id: phoneBridge
-+        onTextCommitted: function(text) {
-+            InputContext.commit(text)
-+        }
-+    }
++    readonly property var phoneBridge: PhoneInputBridge
 +
 +    keyWeight: 160
 +    KeyboardRow {
@@ -916,10 +903,10 @@ index 00000000..9157df43
 +}
 diff --git a/overlay/asteroidos/virtualkeyboard/layouts/zh_HK/main.qml b/overlay/asteroidos/virtualkeyboard/layouts/zh_HK/main.qml
 new file mode 100644
-index 00000000..54e5f2ce
+index 00000000..94cf2a09
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/layouts/zh_HK/main.qml
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,126 @@
 +import QtQuick
 +import QtQuick.VirtualKeyboard
 +import QtQuick.VirtualKeyboard.Plugins.Rime
@@ -932,12 +919,7 @@ index 00000000..54e5f2ce
 +        return Qt.createQmlObject('import QtQuick; import QtQuick.VirtualKeyboard.Plugins.Rime; RimeInputMethod { Component.onCompleted: selectSchema("jyutping") }', parent, "inputMethod.qml")
 +    }
 +
-+    PhoneInputBridge {
-+        id: phoneBridge
-+        onTextCommitted: function(text) {
-+            InputContext.commit(text)
-+        }
-+    }
++    readonly property var phoneBridge: PhoneInputBridge
 +
 +    keyWeight: 160
 +    KeyboardRow {
@@ -1053,10 +1035,10 @@ index 00000000..54e5f2ce
 +}
 diff --git a/overlay/asteroidos/virtualkeyboard/layouts/zh_TW/main.qml b/overlay/asteroidos/virtualkeyboard/layouts/zh_TW/main.qml
 new file mode 100644
-index 00000000..2ec2dd21
+index 00000000..3801d3f4
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/layouts/zh_TW/main.qml
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,126 @@
 +import QtQuick
 +import QtQuick.VirtualKeyboard
 +import QtQuick.VirtualKeyboard.Plugins.Rime
@@ -1069,12 +1051,7 @@ index 00000000..2ec2dd21
 +        return Qt.createQmlObject('import QtQuick; import QtQuick.VirtualKeyboard.Plugins.Rime; RimeInputMethod { Component.onCompleted: selectSchema("bopomofo") }', parent, "inputMethod.qml")
 +    }
 +
-+    PhoneInputBridge {
-+        id: phoneBridge
-+        onTextCommitted: function(text) {
-+            InputContext.commit(text)
-+        }
-+    }
++    readonly property var phoneBridge: PhoneInputBridge
 +
 +    keyWeight: 160
 +    KeyboardRow {
@@ -1190,10 +1167,10 @@ index 00000000..2ec2dd21
 +}
 diff --git a/overlay/asteroidos/virtualkeyboard/phoneinputbridge.cpp b/overlay/asteroidos/virtualkeyboard/phoneinputbridge.cpp
 new file mode 100644
-index 00000000..a0a040d0
+index 00000000..93e33a72
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/phoneinputbridge.cpp
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,131 @@
 +/*
 + * AsteroidOS Virtual Keyboard - Phone Input Bridge
 + *
@@ -1201,6 +1178,11 @@ index 00000000..a0a040d0
 + */
 +
 +#include "phoneinputbridge.h"
++#include <QGuiApplication>
++#include <QInputMethod>
++#include <QInputMethodEvent>
++#include <QCoreApplication>
++#include <QTimer>
 +
 +#include <QDBusConnection>
 +#include <QDBusMessage>
@@ -1221,6 +1203,13 @@ index 00000000..a0a040d0
 +    : QObject(parent)
 +    , m_statusText(QStringLiteral("Type on phone..."))
 +{
++    connect(qGuiApp->inputMethod(), &QInputMethod::visibleChanged,
++            this, &PhoneInputBridge::maybeRequestInput);
++    connect(qGuiApp, &QGuiApplication::focusObjectChanged, this, [this]() {
++        if (m_active && m_inputTarget != qGuiApp->focusObject()) closeInput();
++        QTimer::singleShot(0, this, &PhoneInputBridge::maybeRequestInput);
++    });
++    QTimer::singleShot(0, this, &PhoneInputBridge::maybeRequestInput);
 +    QDBusConnection::systemBus().connect(
 +        kService, kPath, kInterface, QStringLiteral("messageReceived"),
 +        this, SLOT(onMessageReceived(QString, QString, QString)));
@@ -1233,8 +1222,33 @@ index 00000000..a0a040d0
 +    }
 +}
 +
++bool PhoneInputBridge::automaticPhoneInput() const
++{
++    return m_settings.value(QStringLiteral("automaticPhoneInput"), true).toBool();
++}
++
++void PhoneInputBridge::setAutomaticPhoneInput(bool enabled)
++{
++    m_settings.sync();
++    if (automaticPhoneInput() == enabled) return;
++    m_settings.setValue(QStringLiteral("automaticPhoneInput"), enabled);
++    m_settings.sync();
++    emit automaticPhoneInputChanged();
++    maybeRequestInput();
++}
++
++void PhoneInputBridge::maybeRequestInput()
++{
++    m_settings.sync();
++    if (automaticPhoneInput() && qGuiApp->inputMethod()->isVisible() && !m_active)
++        requestInput();
++}
++
 +void PhoneInputBridge::requestInput(const QString &hint)
 +{
++    if (m_active || !qGuiApp->focusObject()) return;
++    if (!QInputMethod::queryFocusObject(Qt::ImEnabled, QVariant()).toBool()) return;
++    m_inputTarget = qGuiApp->focusObject();
 +    m_active = true;
 +    m_statusText = QStringLiteral("Waiting for phone...");
 +    emit activeChanged();
@@ -1266,10 +1280,18 @@ index 00000000..a0a040d0
 +        return;
 +    }
 +
-+    qDebug() << "PhoneInputBridge: received" << appId << action << payload;
++    // Never log input payloads: Wi-Fi fields may contain passwords.
++    if (!m_active || !m_inputTarget || m_inputTarget != qGuiApp->focusObject()) return;
 +    if (action == QStringLiteral("commit") || action == QStringLiteral("text")) {
 +        if (!payload.isEmpty()) {
++            QInputMethodEvent event;
++            event.setCommitString(payload);
++            QCoreApplication::sendEvent(m_inputTarget, &event);
 +            emit textCommitted(payload);
++            qGuiApp->inputMethod()->hide();
++            // Phone notification replies are submitted once. End this request
++            // so reopening the keyboard can request another reply.
++            closeInput();
 +            m_statusText = QStringLiteral("Text received!");
 +            emit statusTextChanged();
 +        }
@@ -1282,10 +1304,10 @@ index 00000000..a0a040d0
 +} // namespace QtVirtualKeyboard
 diff --git a/overlay/asteroidos/virtualkeyboard/phoneinputbridge.h b/overlay/asteroidos/virtualkeyboard/phoneinputbridge.h
 new file mode 100644
-index 00000000..d8eb7d07
+index 00000000..9457330b
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/phoneinputbridge.h
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,57 @@
 +/*
 + * AsteroidOS Virtual Keyboard - Phone Input Bridge
 + *
@@ -1296,6 +1318,8 @@ index 00000000..d8eb7d07
 +
 +#include <QObject>
 +#include <QString>
++#include <QSettings>
++#include <QPointer>
 +#include <QtQml/qqml.h>
 +
 +namespace QtVirtualKeyboard {
@@ -1304,13 +1328,18 @@ index 00000000..d8eb7d07
 +{
 +    Q_OBJECT
 +    QML_ELEMENT
++    QML_SINGLETON
 +    QML_ADDED_IN_VERSION(1, 0)
++    Q_PROPERTY(bool automaticPhoneInput READ automaticPhoneInput WRITE setAutomaticPhoneInput NOTIFY automaticPhoneInputChanged)
 +    Q_PROPERTY(bool active READ isActive NOTIFY activeChanged)
 +    Q_PROPERTY(QString statusText READ statusText NOTIFY statusTextChanged)
 +
 +public:
 +    explicit PhoneInputBridge(QObject *parent = nullptr);
 +    ~PhoneInputBridge() override;
++
++    bool automaticPhoneInput() const;
++    void setAutomaticPhoneInput(bool enabled);
 +
 +    bool isActive() const { return m_active; }
 +    QString statusText() const { return m_statusText; }
@@ -1319,6 +1348,7 @@ index 00000000..d8eb7d07
 +    Q_INVOKABLE void closeInput();
 +
 +Q_SIGNALS:
++    void automaticPhoneInputChanged();
 +    void activeChanged();
 +    void statusTextChanged();
 +    void textCommitted(const QString &text);
@@ -1327,6 +1357,9 @@ index 00000000..d8eb7d07
 +    void onMessageReceived(const QString &appId, const QString &action, const QString &payload);
 +
 +private:
++    void maybeRequestInput();
++    QSettings m_settings{QStringLiteral("AsteroidOS"), QStringLiteral("VirtualKeyboard")};
++    QPointer<QObject> m_inputTarget;
 +    bool m_active = false;
 +    QString m_statusText;
 +};
