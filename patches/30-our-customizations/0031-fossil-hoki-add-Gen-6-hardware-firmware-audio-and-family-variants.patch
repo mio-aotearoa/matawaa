@@ -9,21 +9,21 @@ Subject: [PATCH] fossil-hoki: add Gen 6 hardware firmware audio and family
  devices/fossil-hoki/android-init.nix          | 233 +++++++
  devices/fossil-hoki/android-system-data.nix   |  28 +
  devices/fossil-hoki/audio-modules.nix         | 122 ++++
- devices/fossil-hoki/default.nix               | 595 ++++++++++++++++++
+ devices/fossil-hoki/default.nix               | 600 ++++++++++++++++++
  devices/fossil-hoki/gps_xtra.ini              |   2 +
  .../hwcomposer-allocation-diagnostics.patch   |  31 +
  devices/fossil-hoki/hybris-android.nix        |  32 +
  devices/fossil-hoki/hybris.nix                |  47 ++
  devices/fossil-hoki/tfa9890.cnt.base64        |  93 +++
  devices/fossil-hoki/wlan-firmware-hoki.sh     |  42 ++
- devices/fossil-hoki/wlan.nix                  | 131 ++++
+ devices/fossil-hoki/wlan.nix                  | 142 ++++
  ...co_profile-fix-use-of-adapter-before.patch |  30 +
  ...C-LD-AR-OBJCOPY-STRIP-in-nested-make.patch |  25 +
  ...man-respect-interface-sae-capability.patch |  16 +
  devices/fossil-hoki/wlan/wakelock.h           |   3 +
  devices/fossil-ray/default.nix                |  56 ++
  devices/fossil-triggerfish/default.nix        |  56 ++
- 18 files changed, 1598 insertions(+)
+ 18 files changed, 1614 insertions(+)
  create mode 100644 devices/fossil-firefish/default.nix
  create mode 100644 devices/fossil-hoki/android-init.nix
  create mode 100644 devices/fossil-hoki/android-system-data.nix
@@ -508,10 +508,10 @@ index 00000000..4bcf1878
 +}
 diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
 new file mode 100644
-index 00000000..1d7f7e96
+index 00000000..47a5dd97
 --- /dev/null
 +++ b/devices/fossil-hoki/default.nix
-@@ -0,0 +1,595 @@
+@@ -0,0 +1,600 @@
 +{
 +  config,
 +  lib,
@@ -615,6 +615,11 @@ index 00000000..1d7f7e96
 +  mobile.boot.stage-1 = {
 +    kernel.package = pkgs.callPackage ./kernel {
 +      enableDroidspacesBackports = config.mobile.hardware.watch.kernel == "legacy-backports";
++      # First controlled batch: consecutive kernel.org 4.14.207 through .216.
++      # Keep the later stable/OpenELA/AL2 trains out while testing this prefix.
++      enableStableBackports = true;
++      stableBackportTarget = 216;
++      enableAmzn2Backports = false;
 +    };
 +  };
 +
@@ -1392,10 +1397,10 @@ index 00000000..95d80bb2
 +modprobe wlan
 diff --git a/devices/fossil-hoki/wlan.nix b/devices/fossil-hoki/wlan.nix
 new file mode 100644
-index 00000000..95a54166
+index 00000000..0df4a572
 --- /dev/null
 +++ b/devices/fossil-hoki/wlan.nix
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,142 @@
 +{
 +  config,
 +  lib,
@@ -1459,10 +1464,21 @@ index 00000000..95a54166
 +      for p in ${lib.concatMapStringsSep " " (p: "${p}") kernel.patches}; do
 +        patch -d kernel-src -p1 < "$p"
 +      done
++      # Stable increments omit Makefile version hunks. Reuse the kernel's
++      # postPatch so this tree has the same release (and reproducibility fixes).
++      (
++        cd kernel-src
++        ${kernel.postPatch}
++      )
 +      cp ${kernel.configfile} kernel-src/.config
 +      cp ${./wlan/wakelock.h} kernel-src/include/linux/wakelock.h
 +      make -C kernel-src ARCH=arm CROSS_COMPILE=${pkgs.stdenv.cc.targetPrefix} HOSTCC=${pkgs.buildPackages.buildPackages.gcc}/bin/gcc olddefconfig
 +      make -C kernel-src ARCH=arm CROSS_COMPILE=${pkgs.stdenv.cc.targetPrefix} HOSTCC=${pkgs.buildPackages.buildPackages.gcc}/bin/gcc modules_prepare
++      wlan_kernel_release=$(make -s -C kernel-src ARCH=arm kernelrelease)
++      if [ "$wlan_kernel_release" != "${kernel.modDirVersion}" ]; then
++        echo "Wi-Fi build tree release $wlan_kernel_release does not match ${kernel.modDirVersion}" >&2
++        exit 1
++      fi
 +
 +      # Extract vmlinux Module.symvers from the built kernel zImage + System.map
 +      # so CONFIG_MODVERSIONS=y CRC checks (including module_layout) pass at load time.

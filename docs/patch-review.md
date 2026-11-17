@@ -207,3 +207,33 @@ An explicit display-off/display-on cycle completed, and reopening Browser
 reported a successful page load. The compositor and sync service stayed active,
 Wi-Fi was online, Bluetooth remained connected, and no system services failed.
 This validation did not reboot the watch or measure battery life.
+
+### Hoki bounded stable backports
+
+Hoki now selects ten consecutive upstream stable increments from its vendor
+4.14.206 base: 4.14.207 through 4.14.216. These releases contain general bug
+fixes as well as security fixes; this is not ten individual security patches.
+The existing vendor filters remain in effect. The filtered batch touches 464
+files (4,592 insertions and 2,162 deletions), so hardware testing still matters.
+Later stable, OpenELA, and Amazon Linux 2 trains are disabled for this default.
+
+The kernel package accepts a bounded target from 207 through 216. Invalid or
+incompatible selections fail evaluation. A null target retains the existing
+full-train build modes, and disabling both trains retains the vendor baseline.
+Wi-Fi's separate kernel source preparation now runs the kernel postPatch and
+checks its release before building, avoiding a 4.14.206 module vermagic against
+the new 4.14.216 kernel.
+
+Selection checks cover the vendor baseline, first increment, ten increments,
+existing full modes, and invalid combinations. Nix formatting and source
+whitespace checks pass. The kernel and complete system build successfully:
+`/nix/store/zg6vkq9hw91a41ipl5vcc2ih60dj37bq-nixos-system-hoki-26.11pre-git`.
+The resulting wlan.ko vermagic starts with `4.14.216`. Three fuzzy-context
+applications were reviewed in USB MIDI, ath10k USB, and the linker script;
+all landed in their intended sections.
+
+The previous experimental kernel-toggle patch 0055 is folded into base patches
+0030 and 0031. All remaining 44 patches replay without three-way fallback to
+the exact source tree `0b277df64e9f86a7f4c223cdd22d6f64b440063f`.
+This image has not been deployed or boot-tested on the watch. The bounded
+vendor-adapted batch does not provide the full later security backport set.
