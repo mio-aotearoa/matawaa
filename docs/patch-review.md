@@ -162,3 +162,18 @@ and renderer termination. All 45 patches replay to source tree
 `0c6e298010470f8aecda0641382dc48893e64ab0`; the system builds to
 `/nix/store/40vs4k6qwbxvcdykiydxz8pbmbkkai08-nixos-system-hoki-26.11pre-git`.
 The fix is folded into `0024`, with nixfmt and whitespace checks passing.
+
+### Bluetooth popup labels
+
+The reported raw `id-connected` appears in the watch's Bluetooth popup. The
+installed English catalog contains that entry and resolves it to `Connected`
+in a Qt translation probe; the runtime reason for the failed lookup remains
+unconfirmed. Added a popup fallback for Bluetooth on/off and connected/not
+connected. It retains successful localized translations and substitutes English
+only when a lookup returns its raw ID or an empty string. Literal `qsTrId`
+calls remain available to the translation extractor.
+
+Checks cover missing, empty, and successful translations for all four labels.
+The system builds successfully, and all 45 patches replay to source tree
+`73eb04a2c08a3038a8b82ebd5a6757663bb81864`. The change is folded into app patch
+`0022`; no standalone top-level fixup was added.

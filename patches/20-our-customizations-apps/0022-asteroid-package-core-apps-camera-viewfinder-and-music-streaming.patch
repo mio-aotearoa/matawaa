@@ -8,12 +8,13 @@ Subject: [PATCH] asteroid: package core apps camera viewfinder and music
  .../apps/camera/camera-companion.patch        | 566 ++++++++++++++++++
  .../apps/camera/remotecamerabridge.cpp        | 130 ++++
  .../apps/camera/remotecamerabridge.h          |  61 ++
- overlay/asteroidos/apps/default.nix           | 145 +++++
+ overlay/asteroidos/apps/default.nix           | 148 +++++
  .../apps/music-ytmusic-streaming.patch        | 306 ++++++++++
  overlay/asteroidos/apps/settings-input.patch  | 244 ++++++++
  overlay/asteroidos/assets/default.nix         | 195 ++++++
  overlay/asteroidos/default.nix                |  12 +
- 8 files changed, 1659 insertions(+)
+ overlay/asteroidos/apps/settings-bluetooth-labels.patch | 28 +
+ 9 files changed, 1690 insertions(+)
  create mode 100644 overlay/asteroidos/apps/camera/camera-companion.patch
  create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.cpp
  create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.h
@@ -21,6 +22,7 @@ Subject: [PATCH] asteroid: package core apps camera viewfinder and music
  create mode 100644 overlay/asteroidos/apps/music-ytmusic-streaming.patch
  create mode 100644 overlay/asteroidos/apps/settings-input.patch
  create mode 100644 overlay/asteroidos/assets/default.nix
+ create mode 100644 overlay/asteroidos/apps/settings-bluetooth-labels.patch
 
 diff --git a/overlay/asteroidos/apps/camera/camera-companion.patch b/overlay/asteroidos/apps/camera/camera-companion.patch
 new file mode 100644
@@ -799,10 +801,10 @@ index 00000000..2a57118f
 +#endif // REMOTECAMERABRIDGE_H
 diff --git a/overlay/asteroidos/apps/default.nix b/overlay/asteroidos/apps/default.nix
 new file mode 100644
-index 00000000..3b9c7fd8
+index 00000000..d8ce80b9
 --- /dev/null
 +++ b/overlay/asteroidos/apps/default.nix
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,148 @@
 +{
 +  qt6,
 +  mkAsteroidApp,
@@ -842,7 +844,10 @@ index 00000000..3b9c7fd8
 +  settings = mkAsteroidApp {
 +    name = "settings";
 +    desc = "Smartwatch preferences and configuration application";
-+    patches = [ ./settings-input.patch ];
++    patches = [
++      ./settings-input.patch
++      ./settings-bluetooth-labels.patch
++    ];
 +    rev = "b1717016d481d1f1b9dbd98b59ad7d2068f11b4c";
 +    hash = "sha256-ZnGMQAsIR6sNohEppwIRz1LESKXP9MNRpDmgKOEWSTo=";
 +    postPatch = ''
@@ -1734,3 +1739,37 @@ index 00000000..2804d743
 +                 ListItem {
 +                     //% "Language"
 +                     title: qsTrId("id-language-page")
+diff --git a/overlay/asteroidos/apps/settings-bluetooth-labels.patch b/overlay/asteroidos/apps/settings-bluetooth-labels.patch
+new file mode 100644
+index 00000000..9a81d5ea
+--- /dev/null
++++ b/overlay/asteroidos/apps/settings-bluetooth-labels.patch
+@@ -0,0 +1,28 @@
++diff --git a/src/qml/BluetoothPage.qml b/src/qml/BluetoothPage.qml
++--- a/src/qml/BluetoothPage.qml
+++++ b/src/qml/BluetoothPage.qml
++@@ -26,14 +26,20 @@ Item {
++     BluetoothStatus { id: btStatus }
++ 
++     StatusPage {
+++        // A missing catalog entry must not expose its message ID to the user.
+++        function statusLabel(id, translated, fallback) {
+++            return translated === id || translated.length === 0
+++                    ? fallback : translated
+++        }
+++
++         //% "Bluetooth on"
++-        property string bluetoothOnStr: qsTrId("id-bluetooth-on")
+++        property string bluetoothOnStr: statusLabel("id-bluetooth-on", qsTrId("id-bluetooth-on"), "Bluetooth on")
++         //% "Bluetooth off"
++-        property string bluetoothOffStr: qsTrId("id-bluetooth-off")
+++        property string bluetoothOffStr: statusLabel("id-bluetooth-off", qsTrId("id-bluetooth-off"), "Bluetooth off")
++         //% "Connected"
++-        property string connectedStr: qsTrId("id-connected")
+++        property string connectedStr: statusLabel("id-connected", qsTrId("id-connected"), "Connected")
++         //% "Not connected"
++-        property string notConnectedStr: qsTrId("id-disconnected")
+++        property string notConnectedStr: statusLabel("id-disconnected", qsTrId("id-disconnected"), "Not connected")
++         text: "<h3>" + (btStatus.powered ? bluetoothOnStr : bluetoothOffStr) + "</h3>\n" + (btStatus.connected ? connectedStr : notConnectedStr)
++         icon: btStatus.powered ? "ios-bluetooth-outline" : "ios-bluetooth-off-outline"
++         clickable: true
