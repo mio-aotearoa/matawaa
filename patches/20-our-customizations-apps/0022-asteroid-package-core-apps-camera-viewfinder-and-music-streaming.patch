@@ -10,10 +10,10 @@ Subject: [PATCH] asteroid: package core apps camera viewfinder and music
  .../apps/camera/remotecamerabridge.h          |  61 ++
  overlay/asteroidos/apps/default.nix           | 145 +++++
  .../apps/music-ytmusic-streaming.patch        | 306 ++++++++++
- overlay/asteroidos/apps/settings-input.patch  | 220 +++++++
+ overlay/asteroidos/apps/settings-input.patch  | 244 ++++++++
  overlay/asteroidos/assets/default.nix         | 195 ++++++
  overlay/asteroidos/default.nix                |  12 +
- 8 files changed, 1635 insertions(+)
+ 8 files changed, 1659 insertions(+)
  create mode 100644 overlay/asteroidos/apps/camera/camera-companion.patch
  create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.cpp
  create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.h
@@ -1486,10 +1486,10 @@ index ceed388d..6cbaf356 100644
  }
 diff --git a/overlay/asteroidos/apps/settings-input.patch b/overlay/asteroidos/apps/settings-input.patch
 new file mode 100644
-index 00000000..0b7faf61
+index 00000000..2804d743
 --- /dev/null
 +++ b/overlay/asteroidos/apps/settings-input.patch
-@@ -0,0 +1,220 @@
+@@ -0,0 +1,244 @@
 +diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
 +index 127b351..e3b8778 100644
 +--- a/src/CMakeLists.txt
@@ -1545,16 +1545,17 @@ index 00000000..0b7faf61
 ++    PageHeader { text: qsTr("Keyboard") }
 ++}
 +diff --git a/src/qml/WiFiConnectionDialog.qml b/src/qml/WiFiConnectionDialog.qml
-+index f7c6df9..7824e38 100644
++index f7c6df9..ee539aa 100644
 +--- a/src/qml/WiFiConnectionDialog.qml
 ++++ b/src/qml/WiFiConnectionDialog.qml
-+@@ -33,14 +33,59 @@ Item {
++@@ -33,14 +33,62 @@ Item {
 +     id: dialogItem
 +     property string servicePath
 +     property NetworkService modelData: NetworkService {path: dialogItem.servicePath}
 ++    property bool inputPending: false
 ++    property bool retryReply: false
 ++    property bool submitting: false
+++    property bool attemptStarted: false
 ++    property string connectionStatus: ""
 ++
 ++    function submitCredentials() {
@@ -1563,6 +1564,7 @@ index 00000000..0b7faf61
 ++        if (!inputPending) {
 ++            retryReply = true
 ++            submitting = true
+++            attemptStarted = false
 ++            connectionStatus = qsTr("Requesting connection…")
 ++            modelData.requestConnect()
 ++            return
@@ -1580,6 +1582,7 @@ index 00000000..0b7faf61
 ++        userAgent.sendUserReply(reply)
 ++        inputPending = false
 ++        submitting = true
+++        attemptStarted = false
 ++        connectionStatus = qsTr("Connecting…")
 ++    }
 ++
@@ -1610,7 +1613,7 @@ index 00000000..0b7faf61
 +         }
 +     }
 +     property var sourceFields: ({})
-+@@ -81,12 +126,20 @@ Item {
++@@ -81,15 +129,41 @@ Item {
 +     Connections {
 +         target: modelData
 +         function onConnectRequestFailed(error) {
@@ -1633,7 +1636,28 @@ index 00000000..0b7faf61
 +                 sourceFields = {}
 +             }
 +         }
-+@@ -168,22 +221,24 @@ Item {
+++
+++        // ConnMan reports most failures (driver rejects, wrong key, DHCP)
+++        // only through the service State; there is no D-Bus error reply.
+++        function onStateChanged() {
+++            if (!submitting)
+++                return
+++            var state = modelData.state
+++            if (state === "association" || state === "configuration") {
+++                attemptStarted = true
+++                connectionStatus = qsTr("Connecting…")
+++            } else if (state === "failure" || (attemptStarted && (state === "idle" || state === "disconnect"))) {
+++                submitting = false
+++                retryReply = false
+++                connectionStatus = modelData.error !== ""
+++                        ? qsTr("Connection failed (%1). Tap the tick to retry.").arg(modelData.error)
+++                        : qsTr("Connection failed. Tap the tick to retry.")
+++            }
+++        }
++     }
++ 
++     Flickable {
++@@ -168,22 +242,24 @@ Item {
 +                 }
 +             }
 + 
@@ -1668,7 +1692,7 @@ index 00000000..0b7faf61
 +             }
 +         }
 +     }
-+@@ -217,7 +272,7 @@ Item {
++@@ -217,7 +293,7 @@ Item {
 +             }
 +             TextField {
 +                 id: fieldInput
@@ -1677,7 +1701,7 @@ index 00000000..0b7faf61
 +                 width: parent.width
 +             }
 +         }
-+@@ -229,7 +284,7 @@ Item {
++@@ -229,7 +305,7 @@ Item {
 +             icon: "ios-remove-circle"
 +             anchors.fill: undefined
 +             property NetworkService networkService

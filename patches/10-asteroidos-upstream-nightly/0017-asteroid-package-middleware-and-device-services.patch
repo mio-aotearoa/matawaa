@@ -40,14 +40,14 @@ Subject: [PATCH] asteroid: package middleware and device services
  overlay/asteroidos/ngf-qt6/default.nix        |  96 +++++++
  .../0005-gst-sink-fallback-to-alsasink.patch  |  22 ++
  overlay/asteroidos/ngfd/default.nix           | 113 ++++++++
- overlay/asteroidos/sensorfw/CMakeLists.txt    | 264 ++++++++++++++++++
+ overlay/asteroidos/sensorfw/CMakeLists.txt    | 266 ++++++++++++++++++
  overlay/asteroidos/sensorfw/default.nix       |  71 +++++
  overlay/asteroidos/swclock-offset/default.nix |  30 ++
- overlay/asteroidos/timed-qt6/default.nix      | 109 ++++++++
+ overlay/asteroidos/timed-qt6/default.nix      | 109 +++++++
  .../asteroidos/udev-droid-system/default.nix  |  24 ++
  overlay/asteroidos/usb-moded-dev/default.nix  |  42 +++
  overlay/asteroidos/usb-moded-qt6/default.nix  |  90 ++++++
- 43 files changed, 3520 insertions(+)
+ 43 files changed, 3522 insertions(+)
  create mode 100644 overlay/asteroidos/accounts-qt/default.nix
  create mode 100644 overlay/asteroidos/amber-mpris/CMakeLists.txt
  create mode 100644 overlay/asteroidos/amber-mpris/default.nix
@@ -3210,10 +3210,10 @@ index 00000000..f05731fc
 +}
 diff --git a/overlay/asteroidos/sensorfw/CMakeLists.txt b/overlay/asteroidos/sensorfw/CMakeLists.txt
 new file mode 100644
-index 00000000..6ad5cc23
+index 00000000..47bb6a51
 --- /dev/null
 +++ b/overlay/asteroidos/sensorfw/CMakeLists.txt
-@@ -0,0 +1,264 @@
+@@ -0,0 +1,266 @@
 +# CMake build for Nemomobile SensorFW.
 +#
 +# The upstream project ships qmake files only. nixpkgs' qmake cannot be used
@@ -3338,6 +3338,8 @@ index 00000000..6ad5cc23
 +  file(GLOB srcs ${dir}/*.cpp)
 +  file(GLOB hdrs ${dir}/*.h)
 +  add_library(${target} MODULE ${srcs} ${hdrs})
++  # Loader::pluginFileName builds lib${name}-qt6.so (see core/loader.cpp).
++  set_target_properties(${target} PROPERTIES PREFIX "lib" SUFFIX "-qt6.so")
 +  target_include_directories(${target} PRIVATE ${dir})
 +  target_link_libraries(${target} PRIVATE
 +    sensorfw-qt6

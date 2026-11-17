@@ -91,7 +91,8 @@ before writing adaptors (`scripts/probeHealthSensors.sh`).
 forward cannot silently copy to a local `:22` sshd.
 
 Expect SensorFW plugins named `lib*-qt6.so` (e.g. `libhybrishrmadaptor-qt6.so`).
-If `sensorfwd` still logs `Plugin not available`, the image lacks patch `0053`.
+If `sensorfwd` still logs `Plugin not available`, check that it includes the
+`-qt6.so` suffix fix now folded into middleware patch `0017`.
 
 ## Recommended next steps
 

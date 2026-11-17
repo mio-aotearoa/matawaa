@@ -5,10 +5,10 @@ Subject: [PATCH] examples: add AsteroidOS desktop and smartwatch system
 
 ---
  devices/fossil-hoki/mce-keep-aod.patch |  25 +
- examples/asteroid/asteroid-desktop.nix | 959 +++++++++++++++++++++++++
+ examples/asteroid/asteroid-desktop.nix | 986 +++++++++++++++++++++++++
  examples/asteroid/configuration.nix    |  43 ++
  examples/asteroid/default.nix          |  15 +
- 4 files changed, 1042 insertions(+)
+ 4 files changed, 1069 insertions(+)
  create mode 100644 devices/fossil-hoki/mce-keep-aod.patch
  create mode 100644 examples/asteroid/asteroid-desktop.nix
  create mode 100644 examples/asteroid/configuration.nix
@@ -117,10 +117,10 @@ index 00000000..5eca754f
 +)
 diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
 new file mode 100644
-index 00000000..1d2bcebf
+index 00000000..d0ced069
 --- /dev/null
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -0,0 +1,959 @@
+@@ -0,0 +1,986 @@
 +{
 +  config,
 +  lib,
@@ -550,14 +550,22 @@ index 00000000..1d2bcebf
 +
 +      # SensorFW daemon — backend for the Qt Sensors sensorfw plugin.
 +      # Upstream unit: https://github.com/AsteroidOS/meta-asteroid/blob/master/recipes-nemomobile/sensorfw/files/sensorfwd.service
++      # On hoki, HR (and future SpO2/sleep) come from the Android Sensors HAL
++      # via libhybris (PAH813x PPG + LifeQ on SSC/SLPI), so wait for android-init.
 +      systemd.services.sensorfwd = {
 +        description = "Sensor daemon for sensor framework";
 +        wantedBy = [ "multi-user.target" ];
-+        after = [ "dbus.socket" ];
++        after = [
++          "dbus.socket"
++          "android-init.service"
++        ];
 +        requires = [ "dbus.service" ];
++        wants = [ "android-init.service" ];
 +        conflicts = [ "shutdown.target" ];
 +        serviceConfig = {
 +          Type = "notify";
++          # Give SLPI / sensors.ssc a moment after android-init starts.
++          ExecStartPre = "${pkgs.coreutils}/bin/sleep 2";
 +          ExecStart = "${pkgs.asteroid.sensorfw}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=${
 +            if debugBuild then "debug" else "warning"
 +          } --no-magnetometer-bg-calibration";
@@ -653,6 +661,18 @@ index 00000000..1d2bcebf
 +              fi
 +            ''}"
 +            "-${pkgs.asteroid.bluebinder}/libexec/bluebinder_post.sh"
++            # systemd-rfkill can restore a soft-block from
++            # /var/lib/systemd/rfkill/*bluetooth* before bluebinder is up;
++            # bluetoothd then fails with "Blocked through rfkill" and the UI
++            # toggle never powers the adapter. Clear sticky state and unblock
++            # before bluetooth.service (After this unit) starts.
++            "-${pkgs.writeShellScript "bluebinder-unblock-rfkill" ''
++              for f in /var/lib/systemd/rfkill/*bluetooth*; do
++                [ -f "$f" ] || continue
++                printf '0\n' > "$f" || true
++              done
++              ${pkgs.util-linux}/bin/rfkill unblock bluetooth || true
++            ''}"
 +          ];
 +          Restart = "always";
 +          # First start can race android-init / binder; give the HAL a moment.
@@ -1063,6 +1083,13 @@ index 00000000..1d2bcebf
 +          }
 +        });
 +      '';
++
++      # hoki's RTC is not writable; phone BLE time sync (Gadgetbridge /
++      # AsteroidOS Sync → btsyncd → timedated SetTime) is the clock source.
++      # systemd-timesyncd leaves NTP "active" without syncing when offline, and
++      # timedated then rejects SetTime with "Automatic time synchronization is
++      # enabled". NixOS also stubs SetNTP, so disable timesyncd instead.
++      services.timesyncd.enable = false;
 +
 +      # AsteroidOS Bluetooth synchronization daemon (upstream user service)
 +      systemd.user.services.asteroid-btsyncd = {

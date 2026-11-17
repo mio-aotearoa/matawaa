@@ -5,24 +5,43 @@ Subject: [PATCH] fossil-hoki: add Gen 6 hardware firmware audio and family
  variants
 
 ---
- devices/fossil-firefish/default.nix                        |   56 +++++++++++++++
- devices/fossil-hoki/android-init.nix                       |  232 ++++++++++++++++++++++++++++++
- devices/fossil-hoki/android-system-data.nix                |   28 +++++++++++
- devices/fossil-hoki/audio-modules.nix                      |  122 ++++++++++++++++++++++
- devices/fossil-hoki/default.nix                            |  590 ++++++++++++++++++++++++++++++++++++++++++
- devices/fossil-hoki/gps_xtra.ini                           |    2 +++
- ...ces/fossil-hoki/hwcomposer-allocation-diagnostics.patch |   31 +++++++++++
- devices/fossil-hoki/hybris-android.nix                     |   32 +++++++++++
- devices/fossil-hoki/hybris.nix                             |   47 ++++++++++++++
- devices/fossil-hoki/tfa9890.cnt.base64                     |   93 +++++++++++++++++++
- devices/fossil-hoki/wlan-firmware-hoki.sh                  |   42 +++++++++++++
- devices/fossil-hoki/wlan.nix                               |  114 +++++++++++++++++++++
- ..._process_bt_sco_profile-fix-use-of-adapter-before.patch |   30 +++++++++++
- ...efile-quote-CC-LD-AR-OBJCOPY-STRIP-in-nested-make.patch |   25 ++++++++++
- devices/fossil-hoki/wlan/wakelock.h                        |    3 +++
- devices/fossil-ray/default.nix                             |   56 +++++++++++++++
- devices/fossil-triggerfish/default.nix                     |   56 +++++++++++++++
-17 files changed, 1559 insertions(+)
+ devices/fossil-firefish/default.nix           |  56 ++
+ devices/fossil-hoki/android-init.nix          | 233 +++++++
+ devices/fossil-hoki/android-system-data.nix   |  28 +
+ devices/fossil-hoki/audio-modules.nix         | 122 ++++
+ devices/fossil-hoki/default.nix               | 595 ++++++++++++++++++
+ devices/fossil-hoki/gps_xtra.ini              |   2 +
+ .../hwcomposer-allocation-diagnostics.patch   |  31 +
+ devices/fossil-hoki/hybris-android.nix        |  32 +
+ devices/fossil-hoki/hybris.nix                |  47 ++
+ devices/fossil-hoki/tfa9890.cnt.base64        |  93 +++
+ devices/fossil-hoki/wlan-firmware-hoki.sh     |  42 ++
+ devices/fossil-hoki/wlan.nix                  | 131 ++++
+ ...co_profile-fix-use-of-adapter-before.patch |  30 +
+ ...C-LD-AR-OBJCOPY-STRIP-in-nested-make.patch |  25 +
+ ...man-respect-interface-sae-capability.patch |  16 +
+ devices/fossil-hoki/wlan/wakelock.h           |   3 +
+ devices/fossil-ray/default.nix                |  56 ++
+ devices/fossil-triggerfish/default.nix        |  56 ++
+ 18 files changed, 1598 insertions(+)
+ create mode 100644 devices/fossil-firefish/default.nix
+ create mode 100644 devices/fossil-hoki/android-init.nix
+ create mode 100644 devices/fossil-hoki/android-system-data.nix
+ create mode 100644 devices/fossil-hoki/audio-modules.nix
+ create mode 100644 devices/fossil-hoki/default.nix
+ create mode 100644 devices/fossil-hoki/gps_xtra.ini
+ create mode 100644 devices/fossil-hoki/hwcomposer-allocation-diagnostics.patch
+ create mode 100644 devices/fossil-hoki/hybris-android.nix
+ create mode 100644 devices/fossil-hoki/hybris.nix
+ create mode 100644 devices/fossil-hoki/tfa9890.cnt.base64
+ create mode 100644 devices/fossil-hoki/wlan-firmware-hoki.sh
+ create mode 100644 devices/fossil-hoki/wlan.nix
+ create mode 100644 devices/fossil-hoki/wlan/0001-hdd_process_bt_sco_profile-fix-use-of-adapter-before.patch
+ create mode 100644 devices/fossil-hoki/wlan/0002-Makefile-quote-CC-LD-AR-OBJCOPY-STRIP-in-nested-make.patch
+ create mode 100644 devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch
+ create mode 100644 devices/fossil-hoki/wlan/wakelock.h
+ create mode 100644 devices/fossil-ray/default.nix
+ create mode 100644 devices/fossil-triggerfish/default.nix
 
 diff --git a/devices/fossil-firefish/default.nix b/devices/fossil-firefish/default.nix
 new file mode 100644
@@ -88,10 +107,10 @@ index 00000000..b8605a4c
 +}
 diff --git a/devices/fossil-hoki/android-init.nix b/devices/fossil-hoki/android-init.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..14061645223aee82b61956c8a5c8bebf7bd4e2bf
+index 00000000..5cb81dee
 --- /dev/null
 +++ b/devices/fossil-hoki/android-init.nix
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,233 @@
 +{
 +  lib,
 +  pkgs,
@@ -191,7 +210,8 @@ index 0000000000000000000000000000000000000000..14061645223aee82b61956c8a5c8bebf
 +      "network.target"
 +      "bluetooth.service"
 +      "ofono.service"
-+      "sensord.service"
++      # SensorFW unit name is sensorfwd (not legacy sensord).
++      "sensorfwd.service"
 +    ];
 +    unitConfig.DefaultDependencies = false;
 +    unitConfig.Conflicts = [ "shutdown.target" ];
@@ -488,10 +508,10 @@ index 00000000..4bcf1878
 +}
 diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
 new file mode 100644
-index 00000000..a6a6e41d
+index 00000000..1d7f7e96
 --- /dev/null
 +++ b/devices/fossil-hoki/default.nix
-@@ -0,0 +1,590 @@
+@@ -0,0 +1,595 @@
 +{
 +  config,
 +  lib,
@@ -550,6 +570,11 @@ index 00000000..a6a6e41d
 +    name = "Gen 6";
 +    manufacturer = "Fossil";
 +  };
++
++  # Upstream AsteroidOS advertises the short machine codename over BLE so
++  # Gadgetbridge can match KNOWN_DEVICE_CODENAMES ("hoki"). Default NixOS
++  # hostname "nixos" breaks that discovery path.
++  networking.hostName = lib.mkDefault "hoki";
 +
 +  mobile.device.supportLevel = "supported";
 +
@@ -1367,10 +1392,10 @@ index 00000000..95d80bb2
 +modprobe wlan
 diff --git a/devices/fossil-hoki/wlan.nix b/devices/fossil-hoki/wlan.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..10b15f15f085354c96c4e0dafe93a6b041b4afc1
+index 00000000..95a54166
 --- /dev/null
 +++ b/devices/fossil-hoki/wlan.nix
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,131 @@
 +{
 +  config,
 +  lib,
@@ -1401,6 +1426,15 @@ index 0000000000000000000000000000000000000000..10b15f15f085354c96c4e0dafe93a6b0
 +      ./wlan/0001-hdd_process_bt_sco_profile-fix-use-of-adapter-before.patch
 +      ./wlan/0002-Makefile-quote-CC-LD-AR-OBJCOPY-STRIP-in-nested-make.patch
 +    ];
++
++    # The vendor WCNSS_qcom_cfg.ini has no sae_enabled key, so prima falls
++    # back to advertising NL80211_FEATURE_SAE. ConnMan then picks WPA3-SAE on
++    # WPA2/WPA3 transition networks, and every connect fails with -EINVAL
++    # ("Association request to the driver failed"). WPA2-PSK works.
++    postPatch = ''
++      substituteInPlace CORE/HDD/inc/wlan_hdd_cfg.h \
++        --replace-fail '#define CFG_IS_SAE_ENABLED_DEFAULT (1)' '#define CFG_IS_SAE_ENABLED_DEFAULT (0)'
++    '';
 +
 +    nativeBuildInputs =
 +      (with pkgs.buildPackages; [
@@ -1478,6 +1512,14 @@ index 0000000000000000000000000000000000000000..10b15f15f085354c96c4e0dafe93a6b0
 +  };
 +in
 +{
++  # ConnMan otherwise enables SAE and optional PMF from the AP's advertised
++  # capabilities even when the interface does not support SAE. Prima rejects
++  # that optional-PMF profile. Use ordinary WPA2 on transition networks when
++  # the interface only supports PSK; retain PMF support for other profiles.
++  services.connman.package = pkgs.connman.overrideAttrs (old: {
++    patches = (old.patches or [ ]) ++ [ ./wlan/0003-connman-respect-interface-sae-capability.patch ];
++  });
++
 +  # wlan-firmware-hoki.sh symlinks the vendor firmware, powers WCNSS up and
 +  # loads this module itself. Do not also list it in boot.kernelModules:
 +  # systemd-modules-load runs before those symlinks exist, so the prima probe
@@ -1685,3 +1727,25 @@ index 00000000..b29f7d73
 +    "vmalloc=300M"
 +  ];
 +}
+diff --git a/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch b/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch
+new file mode 100644
+index 00000000..12833fc9
+--- /dev/null
++++ b/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch
+@@ -0,0 +1,16 @@
++diff --git a/gsupplicant/supplicant.c b/gsupplicant/supplicant.c
++--- a/gsupplicant/supplicant.c
+++++ b/gsupplicant/supplicant.c
++@@ -5017,6 +5017,12 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
++ 	struct interface_connect_data *data = user_data;
++ 	GSupplicantSSID *ssid = data->ssid;
++ 
+++	/* A transition AP's SAE support does not imply driver SAE support. */
+++	if ((ssid->keymgmt & G_SUPPLICANT_KEYMGMT_WPA_PSK) &&
+++			!(data->interface->keymgmt_capa &
+++				G_SUPPLICANT_KEYMGMT_SAE))
+++		ssid->keymgmt &= ~G_SUPPLICANT_KEYMGMT_SAE;
+++
++ 	supplicant_dbus_dict_open(iter, &dict);
++ 
++ 	if (ssid->scan_ssid)

@@ -82,3 +82,45 @@ The patch series has since been consolidated and reorganized: the launch-cache a
 - Bumped project tips ahead of recipes where GitHub moved: `asteroid-settings` `b1717016d481`, `asteroid-flashlight` `74a3638f4f45`, plus community `beatfork`, `docking-bay`, and `rag`. Folded into base patches `0022` / `0023` (no standalone fixup).
 - Category 50 MCU timepiece / kernel-timezone work still tracks open meta-asteroid [PR 332](https://github.com/AsteroidOS/meta-asteroid/pull/332) (`3ca9e1e`); not merged into nightly. Timepiece user services are behind `services.asteroid-desktop.timepiece.enable` (default off). Category 40 keeps an opt-in `QPA_HWC2_DOZE_UPDATE` plugin path; Hoki device default matches upstream `QPA_HWC2_FORCE_DOZE_UPDATE`.
 - Built `nixosConfigurations.fossil-hoki.config.system.build.toplevel` successfully after the pin bumps.
+
+### Connectivity review and fixup consolidation
+
+The outstanding changes preserve automatic phone input by default, the manual
+phone-button option, keyboard hiding on phone text, credential submission from
+the Wi-Fi tick button, and the `p2p0` blacklist that prevents duplicate SSIDs.
+The previous Wi-Fi implementation was worse: it could leave the dialog on
+"Connecting…" indefinitely and select an unusable WPA3 profile on Hoki.
+
+- Kept the Prima SAE advertisement fix and added a Hoki-scoped ConnMan patch.
+  ConnMan now checks interface SAE support before selecting SAE and optional
+  PMF for WPA2/WPA3 transition networks. This preserves WPA2 fallback without
+  disabling protected management frames globally.
+- Kept the dialog's service-state watcher, failure reason, and retry guard.
+  Checks of the actual JavaScript handlers cover stale idle state on retry,
+  association/configuration progress, failure/disconnect, empty credentials,
+  credential submission, retry requests, and success. These checks do not
+  replace QML runtime or hardware testing.
+- Built and deployed the system; the watch subsequently reported Wi-Fi online
+  on Meow and an active Bluetooth link to the Pixel 9 Pro XL. The sync service
+  was running. Temporary diagnostic credentials were removed.
+- Live activation restarted systemd-rfkill and was followed by a Bluetooth
+  soft-block. Clearing it restored Bluetooth; both saved Bluetooth rfkill states
+  now contain `0`. The existing boot-time unblock remains in place. This is not
+  a new reboot or battery-life validation.
+- Folded standalone fixups `0050`–`0054` from category 30 into their owning
+  patches: MCE timeout guards into `0044`, Hoki identity and Android ordering
+  into `0031`, desktop time sync/sensor ordering/Bluetooth unblock into `0040`,
+  and SensorFW plugin names into `0017`. Category 40's separate `0050` ambient
+  display patch is retained.
+- Formatted the changed Nix expression with nixfmt. Preserved unrelated patch
+  sections and source formatting. Folding the fixups reproduces the same
+  source tree, including the reviewed connectivity changes.
+- Replayed all 45 consolidated patches without three-way fallback. The fresh
+  checkout exactly matches source tree `d875863d8486dc46b0a93cc6cbced20c8d5f4acf`
+  and builds to the deployed system
+  `/nix/store/zc77x74hg2j05ab2rz0nkqd4l0ac807k-nixos-system-hoki-26.11pre-git`.
+
+Earlier camera, companion-app, kernel comparison, minute-update AOD, and
+default-off MCU timepiece requirements are preserved. This review does not
+claim new APK, health-sensor, suspend, or camera validation; those components
+were not changed. Commits remain local; nothing is pushed or published.
