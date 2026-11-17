@@ -6,13 +6,13 @@ Subject: [PATCH] asteroid: add RIME keyboard layouts and phone input
 ---
  overlay/asteroidos/default.nix                             |    2 +++
  .../virtualkeyboard/0001-add-rime-plugin-and-layouts.patch |   52 ++++++++++++++
- overlay/asteroidos/virtualkeyboard/default.nix             |   79 ++++++++++++++++++
+ overlay/asteroidos/virtualkeyboard/default.nix             |   93 ++++++++++++++++++
  overlay/asteroidos/virtualkeyboard/layouts/en_GB/main.qml  |  127 +++++++++++++++++++++++
  ...ay/asteroidos/virtualkeyboard/layouts/en_GB/symbols.qml |   54 +++++++++++++++
  overlay/asteroidos/virtualkeyboard/layouts/en_US/main.qml  |  127 +++++++++++++++++++++++
  ...ay/asteroidos/virtualkeyboard/layouts/en_US/symbols.qml |   54 +++++++++++++++
  overlay/asteroidos/virtualkeyboard/layouts/phone/main.qml  |  135 +++++++++++++++++++++++
- overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml  |  130 +++++++++++++++++++++++
+ overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml  |  131 +++++++++++++++++++++++
  ...ay/asteroidos/virtualkeyboard/layouts/zh_CN/symbols.qml |   54 +++++++++++++++
  overlay/asteroidos/virtualkeyboard/layouts/zh_HK/main.qml  |  131 +++++++++++++++++++++++
  overlay/asteroidos/virtualkeyboard/layouts/zh_TW/main.qml  |  131 +++++++++++++++++++++++
@@ -20,7 +20,7 @@ Subject: [PATCH] asteroid: add RIME keyboard layouts and phone input
  overlay/asteroidos/virtualkeyboard/phoneinputbridge.h      |   46 ++++++++++++++
  overlay/asteroidos/virtualkeyboard/rimeinputmethod.cpp     |  312 +++++++++++++++++++++++++++++++++++
  overlay/asteroidos/virtualkeyboard/rimeinputmethod.h       |   68 ++++++++++++++++
-16 files changed, 1588 insertions(+)
+16 files changed, 1603 insertions(+)
 
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
 index 262d4cf2..ceed388d 100644
@@ -96,7 +96,7 @@ new file mode 100644
 index 0000000000000000000000000000000000000000..9ad1a161a816d346c7346f4b6b7927817e43a520
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/default.nix
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,93 @@
 +{
 +  lib,
 +  stdenv,
@@ -167,6 +167,20 @@ index 0000000000000000000000000000000000000000..9ad1a161a816d346c7346f4b6b792781
 +  postInstall = ''
 +    mkdir -p "$out/share/rime-data"
 +    cp -r ${rime-data}/share/rime-data/. "$out/share/rime-data/"
++
++    # qt_add_qml_module embeds qmldir inside the plugin resource, but the QML
++    # engine still needs a filesystem qmldir beside the .so to discover it.
++    # Without this, every layout that imports Plugins.Rime fails to load and
++    # the InputPanel is a black rectangle with no keys (and no phone-input
++    # bridge / Gadgetbridge notification path).
++    rimeQml="$out/lib/qt-6/qml/QtQuick/VirtualKeyboard/Plugins/Rime"
++    cat > "$rimeQml/qmldir" <<'EOF'
++module QtQuick.VirtualKeyboard.Plugins.Rime
++linktarget qtvkbrimeplugin
++optional plugin qtvkbrimeplugin
++classname QtQuick_VirtualKeyboard_Plugins_RimePlugin
++prefer :/QtQuick/VirtualKeyboard/Plugins/Rime/
++EOF
 +  '';
 +
 +  meta = with lib; {
@@ -708,9 +722,10 @@ new file mode 100644
 index 00000000..e5ffc029
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/layouts/zh_CN/main.qml
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,131 @@
 +import QtQuick
 +import QtQuick.VirtualKeyboard
++import QtQuick.VirtualKeyboard.Plugins.Rime
 +
 +KeyboardLayout {
 +    id: zhCNLayout
