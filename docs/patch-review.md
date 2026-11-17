@@ -177,3 +177,33 @@ Checks cover missing, empty, and successful translations for all four labels.
 The system builds successfully, and all 45 patches replay to source tree
 `73eb04a2c08a3038a8b82ebd5a6757663bb81864`. The change is folded into app patch
 `0022`; no standalone top-level fixup was added.
+
+### Hoki black-screen investigation
+
+When the watch went black with Browser open, SSH still worked, the compositor
+had not restarted, memory was available, and no OOM kill was recorded. Browser
+had reported a successful page load. MCE logged repeated proximity
+covered/uncovered transitions and `NOT UNBLANKING; proximity covered`, including
+after Browser was closed. Closing Browser and requesting display-on restored
+the UI, which the user confirmed.
+
+Disabling MCE's proximity mode stopped the covered-state updates and allowed
+display-on to complete. Added the same default to Hoki's existing MCE package
+override through `90-hoki-proximity.conf`, using MCE's supported per-setting
+configuration. Other device packages are unchanged; idle sleep and the separate
+palm/power-key handling are retained. This does not establish that every future
+black-screen or GPU issue is resolved.
+
+The system builds to
+`/nix/store/23bzialdbz2cv45bnfqyrl1mjm73cw83-nixos-system-hoki-26.11pre-git`.
+All 45 patches replay to source tree
+`8ff7dadd6435efa10a55b439f77ec6ebf7e1959c`. The change is folded into `0040`,
+with nixfmt and source-whitespace checks passing.
+
+After deployment, MCE logged loading `90-hoki-proximity.conf`. Resetting just
+the proximity setting to its packaged default still reported proximity mode
+disabled, confirming the fix does not require the earlier saved override.
+An explicit display-off/display-on cycle completed, and reopening Browser
+reported a successful page load. The compositor and sync service stayed active,
+Wi-Fi was online, Bluetooth remained connected, and no system services failed.
+This validation did not reboot the watch or measure battery life.
