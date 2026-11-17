@@ -146,3 +146,19 @@ were not changed. Commits remain local; nothing is pushed or published.
   errors in their log; Wi-Fi remained online and Bluetooth stayed connected.
 - Applied nixfmt to the browser expression and folded the changes into browser
   patch `0024`, preserving unrelated patch sections.
+
+### Browser HTTPS follow-up
+
+The visible browser UI did not establish that web pages loaded. Instrumenting
+page loading exposed `G_TLS_ERROR_UNAVAILABLE`: the package lacked
+`glib-networking`, so GLib's TLS backend was absent even though curl could
+reach DuckDuckGo. Added the dependency; the generated wrapper now exposes its
+GIO modules. The user then confirmed the DuckDuckGo webpage was visible.
+
+Loading, page errors, and renderer termination now have GTK status text instead
+of an unexplained black page. Callback checks cover a TLS failure surviving the
+subsequent finished event, successful retry clearing the error, cancellation,
+and renderer termination. All 45 patches replay to source tree
+`0c6e298010470f8aecda0641382dc48893e64ab0`; the system builds to
+`/nix/store/40vs4k6qwbxvcdykiydxz8pbmbkkai08-nixos-system-hoki-26.11pre-git`.
+The fix is folded into `0024`, with nixfmt and whitespace checks passing.

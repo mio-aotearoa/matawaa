@@ -7,13 +7,13 @@ Subject: [PATCH] asteroid: add WebKit browser for wearables
  overlay/asteroidos/browser/CMakeLists.txt                  |   54 +++++++++++++++
  overlay/asteroidos/browser/asteroid-browser.desktop        |   12 +++++++
  overlay/asteroidos/browser/asteroid-browser.svg            |   22 +++++++++
- overlay/asteroidos/browser/default.nix                     |   58 ++++++++++++++
+ overlay/asteroidos/browser/default.nix                     |   60 ++++++++++++++
  overlay/asteroidos/browser/portal.html                     |  237 +++++++++++++++++++++++++++++++
- overlay/asteroidos/browser/src/main.c                      |  442 +++++++++++++++++++++++++++++++++++++++
+ overlay/asteroidos/browser/src/main.c                      |  491 +++++++++++++++++++++++++++++++++++++++
  overlay/asteroidos/default.nix                             |    8 +++++-
  overlay/asteroidos/wpewebkit-qt/default.nix                |   70 +++++++++++++++++
  overlay/wpewebkit/default.nix                              |  163 ++++++++++++++++++++++++++
-9 files changed, 1065 insertions(+), 1 deletions(-)
+9 files changed, 1116 insertions(+), 1 deletions(-)
 
 diff --git a/overlay/asteroidos/browser/CMakeLists.txt b/overlay/asteroidos/browser/CMakeLists.txt
 new file mode 100644
@@ -123,10 +123,10 @@ index 00000000..6ce8f579
 +</svg>
 diff --git a/overlay/asteroidos/browser/default.nix b/overlay/asteroidos/browser/default.nix
 new file mode 100644
-index 00000000..c2ace999
+index 00000000..59737469
 --- /dev/null
 +++ b/overlay/asteroidos/browser/default.nix
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,60 @@
 +# AsteroidOS native smartwatch web browser
 +# Real WebKit browser engine (WebKitGTK 6.0) optimized for wearable displays
 +# Upstream architecture: https://asteroidos.org/
@@ -139,6 +139,7 @@ index 00000000..c2ace999
 +  gtk4,
 +  wrapGAppsHook4,
 +  glib,
++  glib-networking,
 +}:
 +
 +stdenv.mkDerivation {
@@ -159,6 +160,7 @@ index 00000000..c2ace999
 +    webkitgtk_6_0
 +    gtk4
 +    glib
++    glib-networking
 +  ];
 +
 +  dontWrapGApps = false;
@@ -430,10 +432,10 @@ index 00000000..1924bbc8
 +</html>
 diff --git a/overlay/asteroidos/browser/src/main.c b/overlay/asteroidos/browser/src/main.c
 new file mode 100644
-index 00000000..f9db3876
+index 00000000..184c4a3f
 --- /dev/null
 +++ b/overlay/asteroidos/browser/src/main.c
-@@ -0,0 +1,442 @@
+@@ -0,0 +1,491 @@
 +#include <gtk/gtk.h>
 +#include <webkit/webkit.h>
 +#include <math.h>
@@ -451,6 +453,7 @@ index 00000000..f9db3876
 +    GtkWidget *overlay;
 +    GtkWidget *web_view;
 +    GtkWidget *progress_bar;
++    GtkWidget *page_status;
 +    GtkWidget *hud_box;
 +    GtkWidget *search_box;
 +    GtkWidget *search_entry;
@@ -461,6 +464,7 @@ index 00000000..f9db3876
 +    GtkWidget *btn_home;
 +    char *initial_url;
 +    SearchEngine search_engine;
++    gboolean load_failed;
 +} WatchBrowserApp;
 +
 +static WatchBrowserApp g_app_data;
@@ -537,13 +541,20 @@ index 00000000..f9db3876
 +
 +    switch (load_event) {
 +    case WEBKIT_LOAD_STARTED:
++        app->load_failed = FALSE;
++        gtk_label_set_text(GTK_LABEL(app->page_status), "Loading…");
++        gtk_widget_set_visible(app->page_status, TRUE);
++        g_message("Page load started");
 +        gtk_widget_set_visible(app->progress_bar, TRUE);
 +        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(app->progress_bar), 0.1);
 +        break;
 +    case WEBKIT_LOAD_COMMITTED:
++        g_message("Page load committed");
 +        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(app->progress_bar), 0.5);
 +        break;
 +    case WEBKIT_LOAD_FINISHED:
++        gtk_widget_set_visible(app->page_status, app->load_failed);
++        g_message("Page load finished (failed=%d)", app->load_failed);
 +        gtk_widget_set_visible(app->progress_bar, FALSE);
 +        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(app->progress_bar), 0.0);
 +        break;
@@ -553,6 +564,34 @@ index 00000000..f9db3876
 +
 +    gtk_widget_set_sensitive(app->btn_back, webkit_web_view_can_go_back(web_view));
 +    gtk_widget_set_sensitive(app->btn_forward, webkit_web_view_can_go_forward(web_view));
++}
++
++static gboolean on_load_failed(WebKitWebView *view, WebKitLoadEvent event,
++                               const char *uri, GError *error, gpointer user_data)
++{
++    if (g_error_matches(error, WEBKIT_NETWORK_ERROR, WEBKIT_NETWORK_ERROR_CANCELLED))
++        return FALSE;
++
++    WatchBrowserApp *app = user_data;
++    app->load_failed = TRUE;
++    char *message = g_strdup_printf("Page could not load:\n%s\n\nTap reload to retry.", error->message);
++    gtk_label_set_text(GTK_LABEL(app->page_status), message);
++    gtk_widget_set_visible(app->page_status, TRUE);
++    g_free(message);
++    g_warning("Page load failed (%s:%d)", g_quark_to_string(error->domain), error->code);
++    return TRUE;
++}
++
++static void on_web_process_terminated(WebKitWebView *view,
++                                      WebKitWebProcessTerminationReason reason,
++                                      gpointer user_data)
++{
++    WatchBrowserApp *app = user_data;
++    app->load_failed = TRUE;
++    gtk_label_set_text(GTK_LABEL(app->page_status), "Page renderer stopped.\nTap reload to retry.");
++    gtk_widget_set_visible(app->page_status, TRUE);
++    gtk_widget_set_visible(app->progress_bar, FALSE);
++    g_warning("Page renderer terminated (reason=%d)", reason);
 +}
 +
 +static void on_notify_progress(GObject *object, GParamSpec *pspec, gpointer user_data)
@@ -753,7 +792,19 @@ index 00000000..f9db3876
 +    gtk_widget_set_visible(progress, FALSE);
 +    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), progress);
 +
++    GtkWidget *page_status = gtk_label_new("Loading…");
++    app_data->page_status = page_status;
++    gtk_label_set_wrap(GTK_LABEL(page_status), TRUE);
++    gtk_label_set_max_width_chars(GTK_LABEL(page_status), 28);
++    gtk_label_set_justify(GTK_LABEL(page_status), GTK_JUSTIFY_CENTER);
++    gtk_widget_set_halign(page_status, GTK_ALIGN_CENTER);
++    gtk_widget_set_valign(page_status, GTK_ALIGN_CENTER);
++    gtk_widget_set_can_target(page_status, FALSE);
++    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), page_status);
++
 +    g_signal_connect(web_view, "load-changed", G_CALLBACK(on_load_changed), app_data);
++    g_signal_connect(web_view, "load-failed", G_CALLBACK(on_load_failed), app_data);
++    g_signal_connect(web_view, "web-process-terminated", G_CALLBACK(on_web_process_terminated), app_data);
 +    g_signal_connect(web_view, "notify::estimated-load-progress", G_CALLBACK(on_notify_progress), app_data);
 +
 +    /* Search & URL entry dialog box */
