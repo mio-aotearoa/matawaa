@@ -5,11 +5,11 @@ Subject: [PATCH] overlay: integrate smartwatch packages and cross-compilation
  fixes
 
 ---
- modules/cross-workarounds.nix |  55 +++----
- overlay/cross-compile.nix     | 295 ++++++++++++++++++++++++++++++++++
- overlay/default.nix           |   8 +
- overlay/overlay.nix           |  48 +++++-
- 4 files changed, 366 insertions(+), 40 deletions(-)
+ modules/cross-workarounds.nix |   55 +++-----
+ overlay/cross-compile.nix     |  286 +++++++++++++++++++++++++++++++++++++++++
+ overlay/default.nix           |    8 +
+ overlay/overlay.nix           |   48 ++++++-
+ 4 files changed, 357 insertions(+), 40 deletions(-)
  create mode 100644 overlay/cross-compile.nix
  create mode 100644 overlay/default.nix
 
@@ -82,10 +82,10 @@ index 185117de..9d894d94 100644
  ])
 diff --git a/overlay/cross-compile.nix b/overlay/cross-compile.nix
 new file mode 100644
-index 00000000..26d8db46
+index 00000000..7dfa7fa3
 --- /dev/null
 +++ b/overlay/cross-compile.nix
-@@ -0,0 +1,295 @@
+@@ -0,0 +1,286 @@
 +# Overlays and package workarounds that only make sense during cross-compilation.
 +#
 +# When building natively, this overlay selects vendored Qt 6.11 for matching
@@ -132,6 +132,15 @@ index 00000000..26d8db46
 +      preInstall = (old.preInstall or "") + ''
 +        mkdir -p $out/lib
 +        ln -sf "$PWD/src/.libs/libcanberra.so.0.2.5" "$out/lib/libcanberra.so"
++      '';
++    });
++
++    # libmad 0.16.5 uses a lowercase CMake boolean operator in its ARM path.
++    # Correct the syntax while retaining upstream's disabled assembly branch.
++    libmad = super.libmad.overrideAttrs (old: {
++      postPatch = (old.postPatch or "") + ''
++        substituteInPlace CMakeLists.txt \
++          --replace-fail 'if(ASO and FALSE)' 'if(ASO AND FALSE)'
 +      '';
 +    });
 +
@@ -343,24 +352,6 @@ index 00000000..26d8db46
 +    });
 +  }
 +  // super.lib.optionalAttrs (superStdenv != null && superStdenv.hostPlatform.isAarch32) {
-+    # GCC 16 triggers format-truncation errors in libgomp during 32-bit ARM cross compilation.
-+    # Disable -Werror on target library builds so Clang/Mesa toolchain dependencies succeed.
-+    gcc-unwrapped = super.gcc-unwrapped.overrideAttrs (old: {
-+      configureFlags = (old.configureFlags or [ ]) ++ [
-+        "--disable-werror"
-+      ];
-+      env = (old.env or { }) // {
-+        EXTRA_FLAGS_FOR_TARGET = (old.env.EXTRA_FLAGS_FOR_TARGET or "") + " -Wno-error=format-truncation";
-+      };
-+    });
-+
-+    # Ensure Clang wrapper links target C++ libraries from the patched GCC runtime
-+    llvmPackages = super.llvmPackages // {
-+      clang = super.llvmPackages.clang.override {
-+        gccForLibs = final.gcc-unwrapped;
-+      };
-+    };
-+
 +    # libpcap pulls in rdma-core (InfiniBand/RoCE), which fails to cross-compile
 +    # on 32-bit ARM due to CMake Python host/target architecture checks.
 +    # Smartwatches do not use InfiniBand, so disable RDMA.

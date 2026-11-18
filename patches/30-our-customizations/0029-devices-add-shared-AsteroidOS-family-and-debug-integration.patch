@@ -4,21 +4,22 @@ Date: Mon, 9 Nov 2026 10:55:55 +1100
 Subject: [PATCH] devices: add shared AsteroidOS family and debug integration
 
 ---
- devices/families/asteroidos.nix | 329 ++++++++++++++++++++++++++++++++
- 1 file changed, 329 insertions(+)
+ devices/families/asteroidos.nix |  371 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 371 insertions(+)
  create mode 100644 devices/families/asteroidos.nix
 
 diff --git a/devices/families/asteroidos.nix b/devices/families/asteroidos.nix
 new file mode 100644
-index 00000000..d872bf98
+index 00000000..35afae13
 --- /dev/null
 +++ b/devices/families/asteroidos.nix
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,371 @@
 +{
 +  config,
 +  options,
 +  lib,
 +  pkgs,
++  utils,
 +  ...
 +}:
 +
@@ -51,6 +52,47 @@ index 00000000..d872bf98
 +        }
 +      )
 +    ]
++  );
++
++  # New NixOS expects this newer unit, but neither systemd 257 nor its udev
++  # rules implement that loop-image attachment path. Keep legacy loop handling.
++  systemd.suppressedSystemUnits = lib.mkIf (kernelMode == "legacy-systemd257") [
++    "systemd-loop@.service"
++  ];
++
++  # New NixOS adds user VM/storage/password units absent from systemd 257.
++  # Keep its supported upstream set and the normal declarative/package units.
++  environment.etc."systemd/user".source = lib.mkIf (kernelMode == "legacy-systemd257") (
++    lib.mkForce (
++      utils.systemdUtils.lib.generateUnits {
++        type = "user";
++        inherit (config.systemd.user) units;
++        upstreamUnits = [
++          "app.slice"
++          "background.slice"
++          "basic.target"
++          "bluetooth.target"
++          "capsule@.target"
++          "default.target"
++          "exit.target"
++          "graphical-session-pre.target"
++          "graphical-session.target"
++          "paths.target"
++          "printer.target"
++          "session.slice"
++          "shutdown.target"
++          "smartcard.target"
++          "sockets.target"
++          "sound.target"
++          "systemd-exit.service"
++          "timers.target"
++          "xdg-desktop-autostart.target"
++        ]
++        ++ config.systemd.additionalUpstreamUserUnits;
++        # 257 has no bundled user socket wants; declared links are generated below.
++        upstreamWants = [ ];
++      }
++    )
 +  );
 +
 +  assertions = [

@@ -1,88 +1,74 @@
-# Hoki ambient display and MCU timepiece mode
+# Hoki display and Extreme battery saver
 
-These are separate display paths. Normal ambient mode keeps the NixOS session
-available. MCU timepiece mode shuts Linux down; it is not a suspend/wake watchface.
+## Open issue: periodic bright flashes after 4.14.216 deployment
 
-## Normal ambient mode (default)
+Recorded 2026-11-18: the user still sees a brighter flash roughly once per
+second. Cause unresolved; the existing minute-update workaround is not a
+verified fix for this report.
 
-Match AsteroidOS meta-hoki:
+- Running image: `/nix/store/zg6vkq9hw91a41ipl5vcc2ih60dj37bq-nixos-system-hoki-26.11pre-git`.
+- Kernel and Wi-Fi module: 4.14.216. Boot ID: `ed47b743-9f2d-405b-9a56-f5ef439f707f`.
+- Compositor: zero restarts; no kernel oops found in the collected log.
+- Environment: `QPA_HWC2_FORCE_DOZE_UPDATE=1`; experimental `QPA_HWC2_DOZE_UPDATE` absent.
+- HWC logs show ambient presents switching briefly to ON, then DOZE_SUSPEND.
+  A fresh 18-second capture did not establish a repeating one-second transition.
+- Temporary `mcetool --unblank-screen` / `--blank-prevent` reached ON. Whether
+  that stops the visible flashing is unconfirmed. No permanent setting changed.
+- Wi-Fi disappeared intermittently while idle. Suspend stats recorded six
+  successes and eight failures, including wcnss-wlan failures. SensorFW repeatedly
+  failed `hw_get_module()` and restarted; its connection to flashing is unknown.
 
-- `QPA_HWC_FORCE_GLES=1`
-- `QPA_HWC2_FORCE_DOZE_UPDATE=1` (upstream ambient present workaround)
+Last SSH address: `root@192.168.8.183` over Wi-Fi.
+Logs: `/tmp/hoki-216-debug` on the development host (temporary). Previous boot
+image: `/var/lib/hoki-kernel-debug/pre-216-boot.img` on the watch.
+Next: capture timestamped HWC transitions and panel brightness during visible
+flashing; compare awake/ambient mode, then isolate suspend/resume.
 
-Lipstick schedules ambient redraws with a realtime alarm at the next minute
-boundary (`scheduleAmbientUpdate`: `mktime(...) + 60`), then disables updates
-again after a short settle. That is the intended “minute updates” path — not
-one present per second.
+## Normal ambient mode
 
-Launcher `MainScreen.qml` binds `WallClock` to `Minute` while
-`displayAmbient` is true (patch `0050` / `ambient-wallclock-minute.patch`).
-Leaving it at `Second` with `FORCE_DOZE_UPDATE` produced ~1 Hz full-ON present
-flashes whenever ambient updates stayed enabled.
+Defaults match upstream Hoki: `QPA_HWC_FORCE_GLES=1` and
+`QPA_HWC2_FORCE_DOZE_UPDATE=1`. Lipstick wakes ambient updates on minute
+boundaries; `WallClock.Minute` prevents a seconds-updating clock from repeatedly
+triggering the full-ON workaround. `hoki-clear-sticky-doze-update` removes the
+experimental `DOZE_UPDATE` flag from persistent compositor drop-ins.
 
-`QPA_HWC2_DOZE_UPDATE=1` remains an opt-in plugin path (ambient presents in
-HWC2 `DOZE` then restore `DOZE_SUSPEND`) for experiments; it is not the device
-default. Enabling it with a seconds-updating watchface caused ~1 Hz flashes and
-worse idle drain.
+MCE proximity monitoring defaults off because the sensor stream falsely
+reported covered and blocked unblanking. Idle blanking, palm and power-key
+handling remain available. Saved MCE settings can override this default.
 
-Hoki-specific MCE policy (`mce-keep-aod.patch`) disables the `LPM_ON` →
-`LPM_OFF` proximity blank timeout because this watch has no proximity sensor.
-Touch or the power key still wakes the interactive display.
+## Extreme battery saver app
 
-Hoki's MCE package also sets `/system/osso/dsm/proximity/ps_enabled=false`
-through `90-hoki-proximity.conf`. The SensorFW proximity stream was repeatedly
-reporting covered/uncovered and MCE refused to unblank while covered, even
-after the browser was closed. This disables proximity monitoring on Hoki and
-uses MCE's uncovered fallback; normal idle blanking and the separate palm and
-power-key actions remain available. Other devices retain their existing MCE
-defaults. Existing saved MCE settings can override the packaged default.
-
-Upstream ambient implementation:
-[meta-asteroid ambient patch](https://github.com/AsteroidOS/meta-asteroid/blob/20a8d379f67038208a32b8b59a3093fac8410c73/recipes-qt/qt6/qt6-qpa-hwcomposer-plugin/0001-Add-ambient-mode-display-support.patch).
-
-System suspend while in ambient is still expected for good multi-day battery;
-last long on-device boot recorded **zero** suspend entries. Getting autosleep
-working is a separate follow-up from the HWC flag choice.
-
-A oneshot (`hoki-clear-sticky-doze-update`, hardened in `0050`) strips leftover
-`QPA_HWC2_DOZE_UPDATE=` lines from every
-`/var/lib/environment/compositor/*.conf` drop-in and ensures
-`FORCE_DOZE_UPDATE=1` is present in `20-device.conf`, so upgraded watches do not
-keep the experimental 1 Hz present path.
-
-## MCU timepiece mode (opt-in, default off)
+Enabled on Hoki by default. To remove the app and Sidekick services:
 
 ```nix
-services.asteroid-desktop.timepiece.enable = true;
+services.asteroid-desktop.timepiece.enable = false;
 ```
 
-Default is **false**. When enabled, the Sidekick `asteroid-seconddisplay`
-daemon and sync-time timer are installed/started. Entering timepiece is still
-an explicit action:
+Opening the app only checks capabilities. **Continue → Start timepiece mode**
+explicitly hands the clock to the MCU and powers Linux off. Apps, notifications,
+Linux alarms, Wi-Fi, and Bluetooth stop. Hold the power button to boot the normal
+watch again. There is no automatic idle handoff.
 
-```sh
-asteroid-seconddisplay --enter-timepiece
-```
+The app shows unavailable-backend and handoff errors. Its mock-daemon and UI
+startup tests pass; its real hardware handoff still needs validation. The backend
+remains the unmerged [Hoki timepiece PR](https://github.com/MagneFire/asteroid-coprocessor/pull/3),
+pinned to `976d3432347e2f67d23e3de7baac60a852ae823f`.
 
-That hands the panel to the BG MCU and **powers Linux off**. Return requires a
-hardware boot; this branch does not implement a reversible MCU AOD handoff.
-`--prepare-timepiece` reloads BG firmware — not a harmless probe. Nothing enters
-timepiece automatically on idle or suspend.
-
-The package pins the upstream author's Hoki branch of
-[asteroid-coprocessor PR 3](https://github.com/MagneFire/asteroid-coprocessor/pull/3)
-at `976d3432347e2f67d23e3de7baac60a852ae823f` (open draft, not in nightly).
-
-`kernel-timezone` stays enabled whenever the desktop is on (Android HALs read
-the kernel offset); it is independent of the timepiece option. Helper source:
-[meta-asteroid PR 332](https://github.com/AsteroidOS/meta-asteroid/pull/332).
-
-From a **ceres** session when timepiece is enabled:
+From a `ceres` session, query support without entering timepiece mode:
 
 ```sh
 busctl --user get-property org.asteroid.SecondDisplay /Display \
   org.asteroid.SecondDisplay.Display Capabilities
-asteroid-seconddisplay --sync-time
 ```
 
-Capabilities `3` means time synchronization and timepiece mode.
+Capabilities `3` means time synchronization and timepiece mode. The CLI
+`asteroid-seconddisplay --enter-timepiece` performs the same handoff;
+`--prepare-timepiece` reloads MCU resources and is not a harmless probe.
+`kernel-timezone` remains enabled independently for Android HALs.
+
+## Wearing wrist
+
+First-run setup asks left/right wrist after language selection. Left selects
+0°, right selects 180°. Existing users can change **Settings → Display → Rotate
+by 180°**. Both use `/desktop/asteroid/display-rotation`; the upstream nightstand
+policy can override it while the orientation sensor has a valid reading.

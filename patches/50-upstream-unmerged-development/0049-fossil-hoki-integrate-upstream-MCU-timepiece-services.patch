@@ -3,24 +3,42 @@ From: Mio <mio@mio19.uk>
 Date: Tue, 10 Nov 2026 11:36:16 +1100
 Subject: [PATCH] fossil-hoki: integrate upstream MCU timepiece services
 
-Gate Sidekick timepiece user services behind
-services.asteroid-desktop.timepiece.enable (default off). Kernel timezone
-stays enabled for Android HALs. Entering timepiece remains an explicit
-asteroid-seconddisplay --enter-timepiece action that powers Linux off.
-
+Enable Hoki's Sidekick services and expose explicit MCU handoff through the
+Extreme battery saver launcher app. Opening the app only checks capability;
+shutdown requires confirmation and failed handoffs show an error. The feature
+can be disabled with services.asteroid-desktop.timepiece.enable. Kernel
+timezone stays enabled for Android HALs. No idle action enters timepiece mode.
 ---
- devices/fossil-hoki/default.nix               |  1 +
- devices/fossil-hoki/timepiece.nix             | 77 +++++++++++++++++++
- .../asteroid-seconddisplay/default.nix        | 52 +++++++++++++++
- overlay/asteroidos/default.nix                |  2 +
- .../asteroidos/kernel-timezone/default.nix    | 38 +++++++++++
- 5 files changed, 170 insertions(+)
+ devices/fossil-hoki/default.nix                    |    1 
+ devices/fossil-hoki/timepiece.nix                  |   84 ++++++++++++++++++++
+ .../asteroidos/asteroid-seconddisplay/default.nix  |   52 ++++++++++++
+ overlay/asteroidos/default.nix                     |    3 +
+ .../extreme-battery-saver/CMakeLists.txt           |   20 +++++
+ overlay/asteroidos/extreme-battery-saver/Main.qml  |   82 ++++++++++++++++++++
+ .../asteroid-extreme-battery-saver.desktop         |    8 ++
+ .../asteroid-extreme-battery-saver.svg             |    5 +
+ .../extreme-battery-saver/controller-test.cpp      |   69 ++++++++++++++++
+ .../asteroidos/extreme-battery-saver/controller.h  |   70 +++++++++++++++++
+ .../asteroidos/extreme-battery-saver/default.nix   |   56 +++++++++++++
+ overlay/asteroidos/extreme-battery-saver/main.cpp  |   18 ++++
+ .../asteroidos/extreme-battery-saver/resources.qrc |    1 
+ overlay/asteroidos/kernel-timezone/default.nix     |   38 +++++++++
+ 14 files changed, 507 insertions(+)
  create mode 100644 devices/fossil-hoki/timepiece.nix
  create mode 100644 overlay/asteroidos/asteroid-seconddisplay/default.nix
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/CMakeLists.txt
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/Main.qml
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.svg
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/controller-test.cpp
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/controller.h
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/default.nix
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/main.cpp
+ create mode 100644 overlay/asteroidos/extreme-battery-saver/resources.qrc
  create mode 100644 overlay/asteroidos/kernel-timezone/default.nix
 
 diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
-index 9019a3a4..9182f45f 100644
+index 34b02cb6..eba4ee1c 100644
 --- a/devices/fossil-hoki/default.nix
 +++ b/devices/fossil-hoki/default.nix
 @@ -49,6 +49,7 @@ in
@@ -33,10 +51,10 @@ index 9019a3a4..9182f45f 100644
    mobile.device.name = "fossil-hoki";
 diff --git a/devices/fossil-hoki/timepiece.nix b/devices/fossil-hoki/timepiece.nix
 new file mode 100644
-index 00000000..e2460f6e
+index 00000000..a247ed16
 --- /dev/null
 +++ b/devices/fossil-hoki/timepiece.nix
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,84 @@
 +# Upstream Hoki timepiece mode hands the panel to the BG MCU and powers Linux
 +# off. It is an explicit action, never an idle/suspend hook.
 +# https://github.com/MagneFire/asteroid-coprocessor/pull/3
@@ -53,10 +71,14 @@ index 00000000..e2460f6e
 +  cfg = desktop.timepiece;
 +in
 +{
-+  options.services.asteroid-desktop.timepiece.enable = mkEnableOption ''
-+    MCU timepiece mode: Sidekick keeps a clock while Linux powers off.
-+    Returning requires a hardware boot; do not use as automatic idle AOD
-+  '';
++  options.services.asteroid-desktop.timepiece.enable =
++    (mkEnableOption ''
++      MCU timepiece mode: Sidekick keeps a clock while Linux powers off.
++      Returning requires a hardware boot; do not use as automatic idle AOD
++    '')
++    // {
++      default = true;
++    };
 +
 +  config = mkIf desktop.enable (mkMerge [
 +    # Kernel timezone is needed by Android HALs regardless of timepiece mode.
@@ -90,9 +112,12 @@ index 00000000..e2460f6e
 +      };
 +    }
 +
-+    # Opt-in: package + user services for explicit --enter-timepiece.
++    # The launcher app requests handoff only after an explicit confirmation.
 +    (mkIf cfg.enable {
-+      environment.systemPackages = [ pkgs.asteroid.asteroid-seconddisplay ];
++      environment.systemPackages = [
++        pkgs.asteroid.asteroid-seconddisplay
++        pkgs.asteroid.extreme-battery-saver
++      ];
 +      services.dbus.packages = [ pkgs.asteroid.asteroid-seconddisplay ];
 +      systemd.packages = [ pkgs.asteroid.asteroid-seconddisplay ];
 +      systemd.user.services.asteroid-seconddisplayd = {
@@ -173,18 +198,402 @@ index 00000000..73e79f24
 +  };
 +}
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 0a93fbb9..98b8eb9c 100644
+index a81920b4..cd4479d5 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
-@@ -23,6 +23,8 @@ rec {
+@@ -23,6 +23,9 @@ rec {
    # Device features shipped by upstream meta-hoki (IMAGE_INSTALL) and asteroid-image.
    udev-droid-system = callPackage ./udev-droid-system { inherit metaAsteroidSrc; };
    swclock-offset = callPackage ./swclock-offset { };
 +  kernel-timezone = callPackage ./kernel-timezone { };
 +  asteroid-seconddisplay = callPackage ./asteroid-seconddisplay { inherit mlite; };
++  extreme-battery-saver = callPackage ./extreme-battery-saver { };
    bluebinder = callPackage ./bluebinder { inherit metaAsteroidSrc; };
    ngfd = callPackage ./ngfd { inherit metaAsteroidSrc mce-dev; };
    libncicore = callPackage ./libncicore { inherit metaAsteroidSrc; };
+diff --git a/overlay/asteroidos/extreme-battery-saver/CMakeLists.txt b/overlay/asteroidos/extreme-battery-saver/CMakeLists.txt
+new file mode 100644
+index 00000000..dabd29e9
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/CMakeLists.txt
+@@ -0,0 +1,20 @@
++cmake_minimum_required(VERSION 3.16)
++project(asteroid-extreme-battery-saver LANGUAGES CXX)
++set(CMAKE_CXX_STANDARD 17)
++set(CMAKE_AUTOMOC ON)
++set(CMAKE_AUTORCC ON)
++find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick DBus)
++include(GNUInstallDirs)
++add_executable(asteroid-extreme-battery-saver main.cpp controller.h resources.qrc)
++target_link_libraries(asteroid-extreme-battery-saver PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus)
++install(TARGETS asteroid-extreme-battery-saver RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
++install(FILES asteroid-extreme-battery-saver.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
++install(FILES asteroid-extreme-battery-saver.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
++option(BUILD_TESTING "Build controller tests against a mock timepiece service" OFF)
++if(BUILD_TESTING)
++    enable_testing()
++    find_package(Qt6 REQUIRED COMPONENTS Test)
++    add_executable(saver-controller-test controller-test.cpp controller.h)
++    target_link_libraries(saver-controller-test PRIVATE Qt6::Core Qt6::DBus Qt6::Test)
++    add_test(NAME saver-controller COMMAND saver-controller-test)
++endif()
+diff --git a/overlay/asteroidos/extreme-battery-saver/Main.qml b/overlay/asteroidos/extreme-battery-saver/Main.qml
+new file mode 100644
+index 00000000..37993892
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/Main.qml
+@@ -0,0 +1,82 @@
++import QtQuick
++import QtQuick.Controls.Basic
++import QtQuick.Window
++
++Window {
++    id: window
++    visible: true
++    width: 416
++    height: 416
++    color: "#101813"
++    title: qsTr("Extreme battery saver")
++    property bool confirming: false
++
++    Flickable {
++        anchors.fill: parent
++        anchors.topMargin: window.height * 0.12
++        anchors.bottomMargin: window.height * 0.12
++        contentHeight: content.height
++        clip: true
++        Column {
++            id: content
++            width: window.width * 0.72
++            x: (window.width - width) / 2
++            spacing: 14
++            Text {
++                width: parent.width
++                text: qsTr("Extreme battery saver")
++                color: "#b9f4ca"
++                font.pixelSize: 25
++                font.bold: true
++                wrapMode: Text.WordWrap
++                horizontalAlignment: Text.AlignHCenter
++            }
++            Text {
++                width: parent.width
++                text: window.confirming
++                    ? qsTr("Start now? Apps, notifications, alarms, Bluetooth and Wi-Fi will stop. Hold the power button to boot back into the normal watch.")
++                    : qsTr("Keep a simple clock running on the low-power chip while the main watch shuts down. Hold the power button to return.")
++                color: "white"
++                font.pixelSize: 19
++                wrapMode: Text.WordWrap
++                horizontalAlignment: Text.AlignHCenter
++            }
++            Text {
++                width: parent.width
++                text: saver.status
++                color: saver.ready ? "#b9f4ca" : "#ffcf99"
++                font.pixelSize: 16
++                wrapMode: Text.WrapAnywhere
++                horizontalAlignment: Text.AlignHCenter
++            }
++            Button {
++                width: parent.width
++                height: 56
++                font.pixelSize: 19
++                text: window.confirming ? qsTr("Start timepiece mode") : qsTr("Continue")
++                enabled: saver.ready && !saver.busy
++                onClicked: {
++                    if (window.confirming) saver.activate()
++                    else window.confirming = true
++                }
++            }
++            Button {
++                width: parent.width
++                height: 56
++                font.pixelSize: 19
++                visible: !saver.ready && !saver.busy
++                text: qsTr("Check again")
++                onClicked: { window.confirming = false; saver.check() }
++            }
++            Button {
++                width: parent.width
++                height: 56
++                font.pixelSize: 19
++                text: qsTr("Cancel")
++                enabled: !saver.busy
++                onClicked: Qt.quit()
++            }
++        }
++        ScrollIndicator.vertical: ScrollIndicator { }
++    }
++}
+diff --git a/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop b/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop
+new file mode 100644
+index 00000000..2293ddaa
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop
+@@ -0,0 +1,8 @@
++[Desktop Entry]
++Type=Application
++Name=Extreme battery saver
++Comment=Keep a simple clock while the main watch shuts down
++Exec=asteroid-extreme-battery-saver
++Icon=asteroid-extreme-battery-saver
++Terminal=false
++Categories=Settings;
+diff --git a/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.svg b/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.svg
+new file mode 100644
+index 00000000..cb477a89
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.svg
+@@ -0,0 +1,5 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="86" height="86" viewBox="0 0 86 86">
++  <rect x="14" y="25" width="54" height="36" rx="7" fill="none" stroke="#b9f4ca" stroke-width="5"/>
++  <path d="M72 36v14" stroke="#b9f4ca" stroke-width="5" stroke-linecap="round"/>
++  <path d="M47 29 32 46h11l-4 13 16-20H44Z" fill="#b9f4ca"/>
++</svg>
+diff --git a/overlay/asteroidos/extreme-battery-saver/controller-test.cpp b/overlay/asteroidos/extreme-battery-saver/controller-test.cpp
+new file mode 100644
+index 00000000..1a740542
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/controller-test.cpp
+@@ -0,0 +1,69 @@
++#include <QtTest>
++#include "controller.h"
++
++class MockDisplay : public QObject {
++    Q_OBJECT
++    Q_CLASSINFO("D-Bus Interface", "org.asteroid.SecondDisplay.Display")
++    Q_PROPERTY(uint Capabilities READ capabilities)
++public:
++    uint caps = 0;
++    int calls = 0;
++    bool powerOff = false;
++    bool result = false;
++    uint capabilities() const { return caps; }
++public slots:
++    bool EnterTimepieceMode(bool requestedPowerOff) {
++        ++calls;
++        powerOff = requestedPowerOff;
++        return result;
++    }
++};
++
++class ControllerTest : public QObject {
++    Q_OBJECT
++private slots:
++    void explicitActivationOnly() {
++        auto bus = QDBusConnection::sessionBus();
++        QVERIFY(bus.isConnected());
++        MockDisplay display;
++        QVERIFY(bus.registerService("org.asteroid.SecondDisplay"));
++        QVERIFY(bus.registerObject("/Display", &display,
++            QDBusConnection::ExportAllProperties | QDBusConnection::ExportAllSlots));
++        SaverController saver;
++        saver.activate();
++        QCOMPARE(display.calls, 0);
++        saver.check();
++        QTRY_VERIFY(!saver.busy());
++        QVERIFY(!saver.ready());
++        saver.activate();
++        QCOMPARE(display.calls, 0);
++        display.caps = 3;
++        saver.check();
++        QTRY_VERIFY(!saver.busy());
++        QVERIFY(saver.ready());
++        QCOMPARE(display.calls, 0);
++        saver.activate();
++        saver.activate(); // A double tap must not issue a second handoff.
++        QTRY_VERIFY(!saver.busy());
++        QCOMPARE(display.calls, 1);
++        QVERIFY(display.powerOff);
++        QVERIFY(saver.status().contains("Could not enter"));
++        QVERIFY(!saver.ready());
++        display.result = true;
++        saver.check();
++        QTRY_VERIFY(!saver.busy());
++        QVERIFY(saver.ready());
++        saver.activate();
++        QTRY_VERIFY(!saver.busy());
++        QCOMPARE(display.calls, 2);
++        QVERIFY(saver.status().contains("Shutting down"));
++        bus.unregisterObject("/Display");
++        bus.unregisterService("org.asteroid.SecondDisplay");
++        saver.check();
++        QTRY_VERIFY(!saver.busy());
++        QVERIFY(!saver.ready());
++        QVERIFY(saver.status().contains("unavailable"));
++    }
++};
++QTEST_GUILESS_MAIN(ControllerTest)
++#include "controller-test.moc"
+diff --git a/overlay/asteroidos/extreme-battery-saver/controller.h b/overlay/asteroidos/extreme-battery-saver/controller.h
+new file mode 100644
+index 00000000..c54fea2a
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/controller.h
+@@ -0,0 +1,70 @@
++#pragma once
++#include <QObject>
++#include <QDBusConnection>
++#include <QDBusMessage>
++#include <QDBusPendingCallWatcher>
++#include <QDBusPendingReply>
++#include <QDBusVariant>
++#include <QDebug>
++
++class SaverController : public QObject {
++    Q_OBJECT
++    Q_PROPERTY(bool ready READ ready NOTIFY changed)
++    Q_PROPERTY(bool busy READ busy NOTIFY changed)
++    Q_PROPERTY(QString status READ status NOTIFY changed)
++public:
++    using QObject::QObject;
++    bool ready() const { return m_ready; }
++    bool busy() const { return m_busy; }
++    QString status() const { return m_status; }
++
++    Q_INVOKABLE void check() {
++        if (m_busy) return;
++        m_ready = false;
++        m_busy = true;
++        m_status = tr("Checking timepiece support…");
++        emit changed();
++        auto message = QDBusMessage::createMethodCall("org.asteroid.SecondDisplay", "/Display",
++            "org.freedesktop.DBus.Properties", "Get");
++        message.setArguments({"org.asteroid.SecondDisplay.Display", "Capabilities"});
++        auto watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 10000), this);
++        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
++            QDBusPendingReply<QDBusVariant> reply = *watcher;
++            // TimepieceMode is bit 1 in the upstream SecondDisplay protocol.
++            m_ready = !reply.isError() && (reply.value().variant().toUInt() & 2u);
++            m_busy = false;
++            m_status = m_ready ? tr("Timepiece ready") : tr("Timepiece unavailable. Try again after the watch has started.");
++            if (reply.isError()) qWarning() << "Timepiece capability check:" << reply.error();
++            watcher->deleteLater();
++            emit changed();
++        });
++    }
++
++    Q_INVOKABLE void activate() {
++        if (!m_ready || m_busy) return;
++        m_busy = true;
++        m_ready = false;
++        m_status = tr("Starting timepiece mode…");
++        emit changed();
++        auto message = QDBusMessage::createMethodCall("org.asteroid.SecondDisplay", "/Display",
++            "org.asteroid.SecondDisplay.Display", "EnterTimepieceMode");
++        message.setArguments({true});
++        auto watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(message, 120000), this);
++        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
++            QDBusPendingReply<bool> reply = *watcher;
++            m_busy = false;
++            m_status = !reply.isError() && reply.value()
++                ? tr("Shutting down into timepiece mode…")
++                : tr("Could not enter timepiece mode. If the display changed, restart the watch with its power button before retrying.");
++            if (reply.isError()) qWarning() << "Timepiece handoff:" << reply.error();
++            watcher->deleteLater();
++            emit changed();
++        });
++    }
++signals:
++    void changed();
++private:
++    bool m_ready = false;
++    bool m_busy = false;
++    QString m_status;
++};
+diff --git a/overlay/asteroidos/extreme-battery-saver/default.nix b/overlay/asteroidos/extreme-battery-saver/default.nix
+new file mode 100644
+index 00000000..f3f25dc7
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/default.nix
+@@ -0,0 +1,56 @@
++{
++  lib,
++  stdenv,
++  cmake,
++  qt6,
++  buildPackages,
++  dbus,
++}:
++
++stdenv.mkDerivation {
++  pname = "asteroid-extreme-battery-saver";
++  version = "1.0";
++  src = ./.;
++  strictDeps = true;
++  nativeBuildInputs = [
++    cmake
++    qt6.wrapQtAppsHook
++  ];
++  buildInputs = [
++    qt6.qtbase
++    qt6.qtdeclarative
++  ];
++  cmakeFlags = [
++    "-DBUILD_TESTING=${if stdenv.buildPlatform.canExecute stdenv.hostPlatform then "ON" else "OFF"}"
++  ]
++  ++ lib.optionals (!stdenv.buildPlatform.canExecute stdenv.hostPlatform) [
++    "-DQt6QmlTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
++    "-DQt6QuickTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QuickTools"
++  ];
++  doCheck = stdenv.buildPlatform.canExecute stdenv.hostPlatform;
++  nativeCheckInputs = [ dbus ];
++  checkPhase = ''
++    runHook preCheck
++    dbus-run-session --config-file=${dbus}/share/dbus-1/session.conf -- ctest --output-on-failure
++    runHook postCheck
++  '';
++  doInstallCheck = stdenv.buildPlatform.canExecute stdenv.hostPlatform;
++  installCheckPhase = ''
++    runHook preInstallCheck
++    set +e
++    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
++      QT_FORCE_STDERR_LOGGING=1 QT_ASSUME_STDERR_HAS_CONSOLE=1 \
++      timeout 3 "$out/bin/asteroid-extreme-battery-saver" > ui-smoke.log 2>&1
++    ui_status=$?
++    set -e
++    cat ui-smoke.log
++    test "$ui_status" = 124
++    runHook postInstallCheck
++  '';
++  meta = {
++    description = "Explicit Hoki MCU timepiece handoff with confirmation";
++    license = lib.licenses.gpl3Only;
++    platforms = lib.platforms.linux;
++    mainProgram = "asteroid-extreme-battery-saver";
++  };
++}
+diff --git a/overlay/asteroidos/extreme-battery-saver/main.cpp b/overlay/asteroidos/extreme-battery-saver/main.cpp
+new file mode 100644
+index 00000000..b2c8b3aa
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/main.cpp
+@@ -0,0 +1,18 @@
++#include <QGuiApplication>
++#include <QQmlApplicationEngine>
++#include <QQmlContext>
++#include "controller.h"
++
++int main(int argc, char **argv) {
++    QGuiApplication app(argc, argv);
++    app.setApplicationName("asteroid-extreme-battery-saver");
++    app.setApplicationDisplayName("Extreme battery saver");
++    app.setDesktopFileName("asteroid-extreme-battery-saver");
++    SaverController saver;
++    QQmlApplicationEngine engine;
++    engine.rootContext()->setContextProperty("saver", &saver);
++    engine.load(QUrl("qrc:/Main.qml"));
++    if (engine.rootObjects().isEmpty()) return 1;
++    saver.check();
++    return app.exec();
++}
+diff --git a/overlay/asteroidos/extreme-battery-saver/resources.qrc b/overlay/asteroidos/extreme-battery-saver/resources.qrc
+new file mode 100644
+index 00000000..829d1982
+--- /dev/null
++++ b/overlay/asteroidos/extreme-battery-saver/resources.qrc
+@@ -0,0 +1,1 @@
++<RCC><qresource prefix="/"><file>Main.qml</file></qresource></RCC>
 diff --git a/overlay/asteroidos/kernel-timezone/default.nix b/overlay/asteroidos/kernel-timezone/default.nix
 new file mode 100644
 index 00000000..99e8b3f7

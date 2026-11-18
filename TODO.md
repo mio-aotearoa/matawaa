@@ -51,17 +51,15 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
   mdss_mdp_display_commit: ctl 0 error displaying frame
   mdss_mdp_display_commit: ctx=0 stopped already
   ```
-* **Technical Context:**
-  * In the Qualcomm Android 4.14 downstream kernel MDSS (Mobile Display SubSystem) driver, command-mode DSI display commit callbacks signal when a frame display kick occurs while a previous commit or transfer is pending, or when frames are pushed faster than the panel refresh rate (~60Hz / 16.6ms).
-  * This is benign in practice and commonly observed during high frame rate UI animations (e.g. Qt Quick scenegraph renderloop bursts) where subsequent frames trigger before the hardware TE-signal / VSYNC interval completes.
-* **Remaining Verification & Resolution Steps:**
-  * Confirm whether tuning VSYNC pacing or buffer wait queues in `qt6-qpa-hwcomposer-plugin` reduces log verbosity.
-  * Adjust MDSS logging level or rate-limit kernel printk if dmesg buffer flooding occurs.
+* **Next check:** Correlate warnings with visible flashes, HWC presents, fences,
+  and display power transitions before classifying them as benign or suppressing
+  the logs.
 
 ---
 
 ### 1.5a Fossil Hoki Ambient ~1 Hz Flash
-* **Cause:** `QPA_HWC2_FORCE_DOZE_UPDATE` briefly brings the panel to full ON for each ambient present; `WallClock.Second` (or sticky `QPA_HWC2_DOZE_UPDATE`) drove presents every second.
+* **Open again, 2026-11-18:** Bright flashes roughly once per second still reported after deploying 4.14.216. See [the investigation record](docs/hoki-display.md#open-issue-periodic-bright-flashes-after-414216-deployment). The new report's cause is not confirmed.
+* **Earlier mechanism:** `QPA_HWC2_FORCE_DOZE_UPDATE` briefly brings the panel to full ON for each ambient present; `WallClock.Second` (or sticky `QPA_HWC2_DOZE_UPDATE`) drove presents every second.
 * **Fix in tree:** default `FORCE_DOZE_UPDATE` + sticky `DOZE_UPDATE` clearer (`0048`); ambient `WallClock.Minute` (`0050`). Lipstick still wakes ambient once per minute.
 * **Verify on device:** compositor env has `FORCE_DOZE_UPDATE=1` and no `DOZE_UPDATE`; ambient face updates on the minute without flashing each second.
 

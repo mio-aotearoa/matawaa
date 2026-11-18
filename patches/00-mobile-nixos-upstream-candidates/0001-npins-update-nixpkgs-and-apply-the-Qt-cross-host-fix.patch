@@ -11,7 +11,7 @@ Subject: [PATCH] npins: update nixpkgs and apply the Qt cross-host fix
  create mode 100644 overlay/nixpkgs-patches/0001-qt6-cross-host-leak.patch
 
 diff --git a/npins/sources.json b/npins/sources.json
-index 8a487595..4cefd2b7 100644
+index 8a487595..7a129682 100644
 --- a/npins/sources.json
 +++ b/npins/sources.json
 @@ -1,11 +1,17 @@
@@ -31,9 +31,9 @@ index 8a487595..4cefd2b7 100644
 +      },
 +      "branch": "nixpkgs-unstable",
 +      "submodules": false,
-+      "revision": "4fe25e12eb9f4c744966dd3de5a05246cf098601",
-+      "url": "https://github.com/NixOS/nixpkgs/archive/4fe25e12eb9f4c744966dd3de5a05246cf098601.tar.gz",
-+      "hash": "sha256-WrSODdZFVIs/Hh2NzC0bY+ROByi0bATg8WfePX8dPj8="
++      "revision": "1c872b8c508bbbfebc1b0b74777ff391ce0a574c",
++      "url": "https://github.com/NixOS/nixpkgs/archive/1c872b8c508bbbfebc1b0b74777ff391ce0a574c.tar.gz",
++      "hash": "sha256-DZ5eNWHA6heAHwkMt1SBtF1p8Lfgi4ivqdqmgxUZkLs="
      }
    },
    "version": 8
