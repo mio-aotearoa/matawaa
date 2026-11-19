@@ -4,16 +4,24 @@ Date: Mon, 9 Nov 2026 10:55:52 +1100
 Subject: [PATCH] asteroid: add WebKit browser for wearables
 
 ---
- overlay/asteroidos/browser/CMakeLists.txt                  |   54 +++++++++++++++
- overlay/asteroidos/browser/asteroid-browser.desktop        |   12 +++++++
- overlay/asteroidos/browser/asteroid-browser.svg            |   22 +++++++++
- overlay/asteroidos/browser/default.nix                     |   60 ++++++++++++++
- overlay/asteroidos/browser/portal.html                     |  237 +++++++++++++++++++++++++++++++
- overlay/asteroidos/browser/src/main.c                      |  491 +++++++++++++++++++++++++++++++++++++++
- overlay/asteroidos/default.nix                             |    8 +++++-
- overlay/asteroidos/wpewebkit-qt/default.nix                |   70 +++++++++++++++++
- overlay/wpewebkit/default.nix                              |  163 ++++++++++++++++++++++++++
-9 files changed, 1116 insertions(+), 1 deletions(-)
+ overlay/asteroidos/browser/CMakeLists.txt     |  54 ++
+ .../browser/asteroid-browser.desktop          |  12 +
+ .../asteroidos/browser/asteroid-browser.svg   |  22 +
+ overlay/asteroidos/browser/default.nix        |  60 +++
+ overlay/asteroidos/browser/portal.html        | 237 +++++++++
+ overlay/asteroidos/browser/src/main.c         | 491 ++++++++++++++++++
+ overlay/asteroidos/default.nix                |   8 +-
+ overlay/asteroidos/wpewebkit-qt/default.nix   |  70 +++
+ overlay/wpewebkit/default.nix                 | 163 ++++++
+ 9 files changed, 1116 insertions(+), 1 deletion(-)
+ create mode 100644 overlay/asteroidos/browser/CMakeLists.txt
+ create mode 100644 overlay/asteroidos/browser/asteroid-browser.desktop
+ create mode 100644 overlay/asteroidos/browser/asteroid-browser.svg
+ create mode 100644 overlay/asteroidos/browser/default.nix
+ create mode 100644 overlay/asteroidos/browser/portal.html
+ create mode 100644 overlay/asteroidos/browser/src/main.c
+ create mode 100644 overlay/asteroidos/wpewebkit-qt/default.nix
+ create mode 100644 overlay/wpewebkit/default.nix
 
 diff --git a/overlay/asteroidos/browser/CMakeLists.txt b/overlay/asteroidos/browser/CMakeLists.txt
 new file mode 100644
@@ -928,7 +936,7 @@ index 00000000..184c4a3f
 +    return status;
 +}
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 88205f61..2277c2ce 100644
+index c170bcec..82377bc3 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -160,12 +160,18 @@ rec {
@@ -953,7 +961,7 @@ index 88205f61..2277c2ce 100644
    assets = (callPackage ./assets { inherit metaAsteroidSrc; }) // {
 diff --git a/overlay/asteroidos/wpewebkit-qt/default.nix b/overlay/asteroidos/wpewebkit-qt/default.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..aa7f6706e394845e38334493d86358770767f0f1
+index 00000000..aa7f6706
 --- /dev/null
 +++ b/overlay/asteroidos/wpewebkit-qt/default.nix
 @@ -0,0 +1,70 @@

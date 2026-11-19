@@ -1,22 +1,34 @@
-From 3e6f83c32698e08f359f92038f56e6134de8811b Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Mon, 9 Nov 2026 10:55:56 +1100
 Subject: [PATCH] oppo-beluga: add vendor kernel and Android initialization
 
 ---
- devices/oppo-beluga/android-init.nix               |  172 ++++++++++++++++++++++++++++++++++++++++
- devices/oppo-beluga/default.nix                    |  222 ++++++++++++++++++++++++++++++++++++++++
- ...0001-arm-cputype-add-missing-CPU-part-IDs.patch |   12 ++++++++++++
- ...ex-carry-the-exit-path-to-the-4.9.255-API.patch |   62 ++++++++++++++++++++++++++++++++++++++++
- ...0003-restart_block-provide-set_restart_fn.patch |   30 ++++++++++++++++++++++++++++++
- ...er-pass-proc-credentials-to-the-LSM-hooks.patch |   83 ++++++++++++++++++++++++++++++++++++++++
- ...inux-add-pending-label-state-and-spinlock.patch |   22 ++++++++++++++++++++++
- ...rename-the-writepages-barrier-for-4.9.215.patch |   17 +++++++++++++++++
- ...nel/0007-net-add-the-peer-credential-lock.patch |   11 +++++++++++
- ...are-the-program-memory-accounting-helpers.patch |   26 ++++++++++++++++++++++++++
- ...kernel/0009-vendor-tree-bends-for-4.9.337.patch |   30 ++++++++++++++++++++++++++++++
- devices/oppo-beluga/kernel/default.nix             |  893 ++++++++++++++++++++++++++++++++++++++++
- 12 files changed, 1580 insertions(+), 0 deletions(-)
+ devices/oppo-beluga/android-init.nix          | 172 ++++
+ devices/oppo-beluga/default.nix               | 222 +++++
+ ...arm-cputype-add-missing-CPU-part-IDs.patch |  12 +
+ ...rry-the-exit-path-to-the-4.9.255-API.patch |  62 ++
+ ...restart_block-provide-set_restart_fn.patch |  30 +
+ ...ss-proc-credentials-to-the-LSM-hooks.patch |  83 ++
+ ...add-pending-label-state-and-spinlock.patch |  22 +
+ ...e-the-writepages-barrier-for-4.9.215.patch |  17 +
+ ...007-net-add-the-peer-credential-lock.patch |  11 +
+ ...he-program-memory-accounting-helpers.patch |  26 +
+ .../0009-vendor-tree-bends-for-4.9.337.patch  |  30 +
+ devices/oppo-beluga/kernel/default.nix        | 893 ++++++++++++++++++
+ 12 files changed, 1580 insertions(+)
+ create mode 100644 devices/oppo-beluga/android-init.nix
+ create mode 100644 devices/oppo-beluga/default.nix
+ create mode 100644 devices/oppo-beluga/kernel/0001-arm-cputype-add-missing-CPU-part-IDs.patch
+ create mode 100644 devices/oppo-beluga/kernel/0002-futex-carry-the-exit-path-to-the-4.9.255-API.patch
+ create mode 100644 devices/oppo-beluga/kernel/0003-restart_block-provide-set_restart_fn.patch
+ create mode 100644 devices/oppo-beluga/kernel/0004-binder-pass-proc-credentials-to-the-LSM-hooks.patch
+ create mode 100644 devices/oppo-beluga/kernel/0005-selinux-add-pending-label-state-and-spinlock.patch
+ create mode 100644 devices/oppo-beluga/kernel/0006-ext4-rename-the-writepages-barrier-for-4.9.215.patch
+ create mode 100644 devices/oppo-beluga/kernel/0007-net-add-the-peer-credential-lock.patch
+ create mode 100644 devices/oppo-beluga/kernel/0008-bpf-declare-the-program-memory-accounting-helpers.patch
+ create mode 100644 devices/oppo-beluga/kernel/0009-vendor-tree-bends-for-4.9.337.patch
+ create mode 100644 devices/oppo-beluga/kernel/default.nix
 
 diff --git a/devices/oppo-beluga/android-init.nix b/devices/oppo-beluga/android-init.nix
 new file mode 100644

@@ -97,7 +97,7 @@ index e38bf0b5..4a4a802d 100644
 -})
 +}
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 24bcf77d..bc60c3b1 100644
+index 48e42224..4fe38b64 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -7,7 +7,8 @@ rec {
@@ -129,7 +129,7 @@ index 24bcf77d..bc60c3b1 100644
    usb-moded-qt6 = callPackage ./usb-moded-qt6 {
      inherit usb-moded-dev;
 diff --git a/overlay/asteroidos/libconnman-qt/default.nix b/overlay/asteroidos/libconnman-qt/default.nix
-index 264328c9..1df885eb 100644
+index 264328c9..c2157cf0 100644
 --- a/overlay/asteroidos/libconnman-qt/default.nix
 +++ b/overlay/asteroidos/libconnman-qt/default.nix
 @@ -5,7 +5,6 @@
@@ -510,6 +510,76 @@ index 00000000..4d19c9f1
 +@@ -394 +394 @@
 +-# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_OFF_TIMEOUT  1
 ++# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_OFF_TIMEOUT  5
+diff --git a/overlay/asteroidos/mce/patches/0009-reject-negative-timeout-intervals.patch b/overlay/asteroidos/mce/patches/0009-reject-negative-timeout-intervals.patch
+new file mode 100644
+index 00000000..0f097254
+--- /dev/null
++++ b/overlay/asteroidos/mce/patches/0009-reject-negative-timeout-intervals.patch
+@@ -0,0 +1,64 @@
++From: Matawaa <noreply@localhost>
++Subject: [PATCH] mce: reject negative timeout intervals
++
++MCE stores configurable timeouts as signed integers, while
++g_timeout_add_seconds() accepts an unsigned interval. A negative setting
++therefore becomes a multi-century timer and can overflow ppoll()'s timeout
++on 32-bit watches. Treat negative values as disabled and log their source.
++
++---
++diff --git a/modules/display.c b/modules/display.c
++index f33ec64..5934fc1 100644
++--- a/modules/display.c
+++++ b/modules/display.c
++@@ -4060,6 +4060,15 @@ static void mdy_blanking_schedule_dim(void)
++ 
++     mce_log(LL_DEBUG, "DIM timer scheduled @ %d secs", dim_timeout);
++ 
+++    /* A negative setting means the timeout is disabled. Do not pass it to
+++     * g_timeout_add_seconds(): its unsigned interval would wrap to a huge
+++     * timeout, which can overflow ppoll() on 32-bit systems. */
+++    if( dim_timeout < 0 ) {
+++        mce_log(LL_WARN, "ignoring negative display dim timeout: %d",
+++                dim_timeout);
+++        goto EXIT;
+++    }
+++
++     /* Setup new timeout */
++     mdy_blanking_dim_cb_id = g_timeout_add_seconds(dim_timeout,
++                                                    mdy_blanking_dim_cb, NULL);
++@@ -4315,6 +4324,14 @@ static void mdy_blanking_schedule_lpm_off(void)
++     if( mdy_disp_never_blank )
++         goto EXIT;
++ 
+++    /* A negative setting means the timeout is disabled. Do not pass it to
+++     * g_timeout_add_seconds(): its unsigned interval would wrap to a huge
+++     * timeout, which can overflow ppoll() on 32-bit systems. */
+++    if( timeout < 0 ) {
+++        mce_log(LL_WARN, "ignoring negative LPM blank timeout: %d", timeout);
+++        goto EXIT;
+++    }
+++
++     /* Setup new timeout */
++     mce_log(LL_DEBUG, "LPM-BLANK timer scheduled @ %d secs", timeout);
++     mdy_blanking_lpm_off_cb_id =
++diff --git a/modules/keypad.c b/modules/keypad.c
++index 930612a..f85cd6c 100644
++--- a/modules/keypad.c
+++++ b/modules/keypad.c
++@@ -583,6 +583,15 @@ static void setup_key_backlight_timeout(void)
++ {
++ 	cancel_key_backlight_timeout();
++ 
+++	/* A negative setting disables automatic backlight shutoff. Passing it
+++	 * to g_timeout_add_seconds() would convert it to a huge unsigned value,
+++	 * which can overflow ppoll() on 32-bit systems. */
+++	if (key_backlight_timeout < 0) {
+++		mce_log(LL_WARN, "ignoring negative key backlight timeout: %d",
+++			key_backlight_timeout);
+++		return;
+++	}
+++
++ 	/* Setup a new timeout */
++ 	key_backlight_timeout_cb_id =
++ 		g_timeout_add_seconds(key_backlight_timeout,
 diff --git a/overlay/asteroidos/mlite/CMakeLists.txt b/overlay/asteroidos/mlite/CMakeLists.txt
 deleted file mode 100644
 index b82207f8..00000000
@@ -656,7 +726,7 @@ index 1206bcae..b70a2495 100644
  }:
  
  stdenv.mkDerivation {
-@@ -23,6 +24,13 @@ stdenv.mkDerivation {
+@@ -23,26 +24,31 @@ stdenv.mkDerivation {
      hash = "sha256-G4m1ein9j5A1/yb1Nc9mXxrbhgD+oWFx5vIKd1n3ZNw=";
    };
  
@@ -670,7 +740,6 @@ index 1206bcae..b70a2495 100644
    strictDeps = true;
  
    postPatch = ''
-@@ -30,20 +38,18 @@ stdenv.mkDerivation {
 +    substituteInPlace src/src.pro \
 +      --replace-fail '$$[QT_INSTALL_LIBS]' '/lib' \
 +      --replace-fail '/usr/include/mlite' '/include/mlite'
@@ -696,7 +765,7 @@ index 1206bcae..b70a2495 100644
    ];
  
    buildInputs = [
-@@ -53,10 +54,30 @@ stdenv.mkDerivation {
+@@ -53,10 +59,30 @@ stdenv.mkDerivation {
  
    dontWrapQtApps = true;
  
@@ -728,6 +797,21 @@ index 1206bcae..b70a2495 100644
      platforms = platforms.linux;
    };
  }
+diff --git a/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix b/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
+index 10b929b7..c82b3079 100644
+--- a/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
++++ b/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
+@@ -34,6 +34,10 @@ stdenv.mkDerivation {
+     mlite
+   ];
+ 
++  preConfigure = ''
++    export PKG_CONFIG_PATH="${mlite}/lib/pkgconfig:$PKG_CONFIG_PATH"
++  '';
++
+   cmakeFlags = [
+     "-DQt6Qml_DIR=${qt6.qtdeclarative}/lib/cmake/Qt6Qml"
+     "-DQt6QmlTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
 diff --git a/overlay/asteroidos/ngf-qt6/default.nix b/overlay/asteroidos/ngf-qt6/default.nix
 index 06bf7395..0726dbe2 100644
 --- a/overlay/asteroidos/ngf-qt6/default.nix
@@ -981,83 +1065,3 @@ index 6aca4bcc..691be304 100644
    postPatch = ''
      cp ${./CMakeLists.txt} CMakeLists.txt
    '';
-diff --git a/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix b/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
-index 214fc9e5..c82b3079 100644
---- a/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
-+++ b/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
-@@ -37,1 +37,5 @@ stdenv.mkDerivation {
-+  preConfigure = ''
-+    export PKG_CONFIG_PATH="${mlite}/lib/pkgconfig:$PKG_CONFIG_PATH"
-+  '';
-+
-   cmakeFlags = [
-diff --git a/overlay/asteroidos/mce/patches/0009-reject-negative-timeout-intervals.patch b/overlay/asteroidos/mce/patches/0009-reject-negative-timeout-intervals.patch
-new file mode 100644
-index 00000000..0f097254
---- /dev/null
-+++ b/overlay/asteroidos/mce/patches/0009-reject-negative-timeout-intervals.patch
-@@ -0,0 +1,64 @@
-+From: Matawaa <noreply@localhost>
-+Subject: [PATCH] mce: reject negative timeout intervals
-+
-+MCE stores configurable timeouts as signed integers, while
-+g_timeout_add_seconds() accepts an unsigned interval. A negative setting
-+therefore becomes a multi-century timer and can overflow ppoll()'s timeout
-+on 32-bit watches. Treat negative values as disabled and log their source.
-+
-+---
-+diff --git a/modules/display.c b/modules/display.c
-+index f33ec64..5934fc1 100644
-+--- a/modules/display.c
-++++ b/modules/display.c
-+@@ -4060,6 +4060,15 @@ static void mdy_blanking_schedule_dim(void)
-+ 
-+     mce_log(LL_DEBUG, "DIM timer scheduled @ %d secs", dim_timeout);
-+ 
-++    /* A negative setting means the timeout is disabled. Do not pass it to
-++     * g_timeout_add_seconds(): its unsigned interval would wrap to a huge
-++     * timeout, which can overflow ppoll() on 32-bit systems. */
-++    if( dim_timeout < 0 ) {
-++        mce_log(LL_WARN, "ignoring negative display dim timeout: %d",
-++                dim_timeout);
-++        goto EXIT;
-++    }
-++
-+     /* Setup new timeout */
-+     mdy_blanking_dim_cb_id = g_timeout_add_seconds(dim_timeout,
-+                                                    mdy_blanking_dim_cb, NULL);
-+@@ -4315,6 +4324,14 @@ static void mdy_blanking_schedule_lpm_off(void)
-+     if( mdy_disp_never_blank )
-+         goto EXIT;
-+ 
-++    /* A negative setting means the timeout is disabled. Do not pass it to
-++     * g_timeout_add_seconds(): its unsigned interval would wrap to a huge
-++     * timeout, which can overflow ppoll() on 32-bit systems. */
-++    if( timeout < 0 ) {
-++        mce_log(LL_WARN, "ignoring negative LPM blank timeout: %d", timeout);
-++        goto EXIT;
-++    }
-++
-+     /* Setup new timeout */
-+     mce_log(LL_DEBUG, "LPM-BLANK timer scheduled @ %d secs", timeout);
-+     mdy_blanking_lpm_off_cb_id =
-+diff --git a/modules/keypad.c b/modules/keypad.c
-+index 930612a..f85cd6c 100644
-+--- a/modules/keypad.c
-++++ b/modules/keypad.c
-+@@ -583,6 +583,15 @@ static void setup_key_backlight_timeout(void)
-+ {
-+ 	cancel_key_backlight_timeout();
-+ 
-++	/* A negative setting disables automatic backlight shutoff. Passing it
-++	 * to g_timeout_add_seconds() would convert it to a huge unsigned value,
-++	 * which can overflow ppoll() on 32-bit systems. */
-++	if (key_backlight_timeout < 0) {
-++		mce_log(LL_WARN, "ignoring negative key backlight timeout: %d",
-++			key_backlight_timeout);
-++		return;
-++	}
-++
-+ 	/* Setup a new timeout */
-+ 	key_backlight_timeout_cb_id =
-+ 		g_timeout_add_seconds(key_backlight_timeout,

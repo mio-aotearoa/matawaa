@@ -4,13 +4,14 @@ Date: Mon, 9 Nov 2026 10:55:46 +1100
 Subject: [PATCH] modules: add smartwatch hardware and debug options
 
 ---
- modules/hardware-watch.nix                                 |  200 ++++++++++++++++++++++++++++
- modules/module-list.nix                                    |    1 ++
-2 files changed, 201 insertions(+)
+ modules/hardware-watch.nix | 200 +++++++++++++++++++++++++++++++++++++
+ modules/module-list.nix    |   1 +
+ 2 files changed, 201 insertions(+)
+ create mode 100644 modules/hardware-watch.nix
 
 diff --git a/modules/hardware-watch.nix b/modules/hardware-watch.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..c6b448f2a0f5789e34470ee7cafaddc26e33dcb9
+index 00000000..d352c600
 --- /dev/null
 +++ b/modules/hardware-watch.nix
 @@ -0,0 +1,200 @@

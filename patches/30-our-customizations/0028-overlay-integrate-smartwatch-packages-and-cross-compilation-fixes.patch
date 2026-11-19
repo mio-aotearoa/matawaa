@@ -5,10 +5,10 @@ Subject: [PATCH] overlay: integrate smartwatch packages and cross-compilation
  fixes
 
 ---
- modules/cross-workarounds.nix |   55 +++-----
- overlay/cross-compile.nix     |  286 +++++++++++++++++++++++++++++++++++++++++
- overlay/default.nix           |    8 +
- overlay/overlay.nix           |   48 ++++++-
+ modules/cross-workarounds.nix |  55 +++----
+ overlay/cross-compile.nix     | 286 ++++++++++++++++++++++++++++++++++
+ overlay/default.nix           |   8 +
+ overlay/overlay.nix           |  48 +++++-
  4 files changed, 357 insertions(+), 40 deletions(-)
  create mode 100644 overlay/cross-compile.nix
  create mode 100644 overlay/default.nix

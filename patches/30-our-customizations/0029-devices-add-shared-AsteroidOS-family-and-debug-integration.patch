@@ -4,7 +4,7 @@ Date: Mon, 9 Nov 2026 10:55:55 +1100
 Subject: [PATCH] devices: add shared AsteroidOS family and debug integration
 
 ---
- devices/families/asteroidos.nix |  371 +++++++++++++++++++++++++++++++++++++++
+ devices/families/asteroidos.nix | 371 ++++++++++++++++++++++++++++++++
  1 file changed, 371 insertions(+)
  create mode 100644 devices/families/asteroidos.nix
 

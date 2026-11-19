@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Thu, 19 Nov 2026 19:01:48 +1100
-Subject: [PATCH 1/1] asteroid: add Xiaomi Vela QuickApp compatibility layer
+Subject: [PATCH] asteroid: add Xiaomi Vela QuickApp compatibility layer
 
 ---
  examples/asteroid/asteroid-desktop.nix        |   13 +
@@ -67,10 +67,10 @@ index ad47f319..cc83d3cc 100644
          # builtin-gconf.values into /var/lib/mce. Use "C" to seed writable defaults.
          "d /run/mce 0755 root root -"
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index cd4479d5..6f7fc658 100644
+index 4fe38b64..23ee6288 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
-@@ -166,6 +166,9 @@ rec {
+@@ -163,6 +163,9 @@ rec {
  
    browser = callPackage ./browser { };
  
@@ -80,7 +80,7 @@ index cd4479d5..6f7fc658 100644
    wpewebkit-qt = callPackage ./wpewebkit-qt {
      inherit (pkgs) wpewebkit;
    };
-@@ -189,7 +192,7 @@ rec {
+@@ -186,7 +189,7 @@ rec {
        inherit mkAsteroidApp mce-dev ngf-qt6;
      })
      // {

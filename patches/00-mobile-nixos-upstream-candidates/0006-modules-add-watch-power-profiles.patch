@@ -4,9 +4,10 @@ Date: Mon, 9 Nov 2026 10:55:46 +1100
 Subject: [PATCH] modules: add watch power profiles
 
 ---
- modules/module-list.nix                                    |    1 ++
- modules/watch-power.nix                                    |   60 +++++++++++++++
-2 files changed, 61 insertions(+)
+ modules/module-list.nix |  1 +
+ modules/watch-power.nix | 60 +++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 61 insertions(+)
+ create mode 100644 modules/watch-power.nix
 
 diff --git a/modules/module-list.nix b/modules/module-list.nix
 index e9d9a143..0a18885d 100644
@@ -21,7 +22,7 @@ index e9d9a143..0a18885d 100644
  ]
 diff --git a/modules/watch-power.nix b/modules/watch-power.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..5cec15a27a5d0d1d12f0b48b8e086a100542cc1f
+index 00000000..5cec15a2
 --- /dev/null
 +++ b/modules/watch-power.nix
 @@ -0,0 +1,60 @@

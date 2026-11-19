@@ -5,31 +5,31 @@ Subject: [PATCH] systemd: package legacy 257 and old-kernel compatibility
  fixes
 
 ---
- ...e-units-for-uninitialised-encrypted-devic.patch |   29 +
- ...002-Don-t-try-to-unmount-nix-or-nix-store.patch |   45 +
- .../systemd-257/0003-Fix-NixOS-containers.patch    |   31 +
- ...-Add-some-NixOS-specific-unit-directories.patch |  129 ++
- ...rid-of-a-useless-message-in-user-sessions.patch |   28 
- ...ocaled-timedated-disable-methods-that-cha.patch |  105 ++
- ...Change-usr-share-zoneinfo-to-etc-zoneinfo.patch |  138 ++
- ...08-localectl-use-etc-X11-xkb-for-list-x11.patch |   24 
- .../0009-add-rootprefix-to-lookup-dir-paths.patch  |   35 +
- ...tdown-execute-scripts-in-etc-systemd-syst.patch |   23 
- ...ep-execute-scripts-in-etc-systemd-system-.patch |   22 
- ...h-add-placeholder-for-DEFAULT_PATH_NORMAL.patch |   28 
- ...stemd-environment-when-calling-generators.patch |   39 +
- .../0014-core-don-t-taint-on-unmerged-usr.patch    |   37 +
- ...pm2_context_init-fix-driver-name-checking.patch |   41 +
- ...dit-suggest-systemdctl-edit-runtime-on-sy.patch |   45 +
- ...meson.build-do-not-create-systemdstatedir.patch |   21 
- .../0018-meson-Don-t-link-ssh-dropins.patch        |   29 +
- ...all-unit_file_exists_full-follow-symlinks.patch |   22 
- ...isable-NSCD-when-DNSSEC-validation-is-dis.patch |   43 +
- overlay/systemd-257/default.nix                    | 1121 ++++++++++++++++++++
- ...dle-missing-STATX_MNT_ID-on-older-kernels.patch |  166 +++
- .../systemd-257/systemd-search-path-revert.patch   |   21 
- overlay/systemd-257/systemd-udevd-varlink.socket   |   26 
- overlay/systemd.nix                                |   31 +
+ ...ts-for-uninitialised-encrypted-devic.patch |   29 +
+ ...on-t-try-to-unmount-nix-or-nix-store.patch |   45 +
+ .../0003-Fix-NixOS-containers.patch           |   31 +
+ ...some-NixOS-specific-unit-directories.patch |  129 ++
+ ...f-a-useless-message-in-user-sessions.patch |   28 +
+ ...d-timedated-disable-methods-that-cha.patch |  105 ++
+ ...e-usr-share-zoneinfo-to-etc-zoneinfo.patch |  138 ++
+ ...calectl-use-etc-X11-xkb-for-list-x11.patch |   24 +
+ ...9-add-rootprefix-to-lookup-dir-paths.patch |   35 +
+ ...-execute-scripts-in-etc-systemd-syst.patch |   23 +
+ ...ecute-scripts-in-etc-systemd-system-.patch |   22 +
+ ...-placeholder-for-DEFAULT_PATH_NORMAL.patch |   28 +
+ ...-environment-when-calling-generators.patch |   39 +
+ ...014-core-don-t-taint-on-unmerged-usr.patch |   37 +
+ ...ontext_init-fix-driver-name-checking.patch |   41 +
+ ...uggest-systemdctl-edit-runtime-on-sy.patch |   45 +
+ ....build-do-not-create-systemdstatedir.patch |   21 +
+ .../0018-meson-Don-t-link-ssh-dropins.patch   |   29 +
+ ...nit_file_exists_full-follow-symlinks.patch |   22 +
+ ...e-NSCD-when-DNSSEC-validation-is-dis.patch |   43 +
+ overlay/systemd-257/default.nix               | 1121 +++++++++++++++++
+ ...issing-STATX_MNT_ID-on-older-kernels.patch |  166 +++
+ .../systemd-search-path-revert.patch          |   21 +
+ .../systemd-257/systemd-udevd-varlink.socket  |   26 +
+ overlay/systemd.nix                           |   31 +
  25 files changed, 2279 insertions(+)
  create mode 100644 overlay/systemd-257/0001-Start-device-units-for-uninitialised-encrypted-devic.patch
  create mode 100644 overlay/systemd-257/0002-Don-t-try-to-unmount-nix-or-nix-store.patch

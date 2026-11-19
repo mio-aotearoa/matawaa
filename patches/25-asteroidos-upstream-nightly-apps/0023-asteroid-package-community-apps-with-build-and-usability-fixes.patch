@@ -5,12 +5,16 @@ Subject: [PATCH] asteroid: package community apps with build and usability
  fixes
 
 ---
- ...eroidos/community-apps/beatfork-tack-improvements.patch |  449 ++++++++++++++++++++++++++++++++++++++++++
- overlay/asteroidos/community-apps/default.nix              |  447 +++++++++++++++++++++++++++++++++++++++
- ...asteroidos/community-apps/map-comaps-improvements.patch |  814 ++++++++++++++++++++++++++++++++++++++++++
- overlay/asteroidos/community-apps/weatherfetch-gcc16.patch |   11 +++++++
- overlay/asteroidos/default.nix                             |    6 +++++
-5 files changed, 1727 insertions(+)
+ .../beatfork-tack-improvements.patch          | 449 ++++++++++
+ overlay/asteroidos/community-apps/default.nix | 447 ++++++++++
+ .../map-comaps-improvements.patch             | 814 ++++++++++++++++++
+ .../community-apps/weatherfetch-gcc16.patch   |  11 +
+ overlay/asteroidos/default.nix                |   6 +
+ 5 files changed, 1727 insertions(+)
+ create mode 100644 overlay/asteroidos/community-apps/beatfork-tack-improvements.patch
+ create mode 100644 overlay/asteroidos/community-apps/default.nix
+ create mode 100644 overlay/asteroidos/community-apps/map-comaps-improvements.patch
+ create mode 100644 overlay/asteroidos/community-apps/weatherfetch-gcc16.patch
 
 diff --git a/overlay/asteroidos/community-apps/beatfork-tack-improvements.patch b/overlay/asteroidos/community-apps/beatfork-tack-improvements.patch
 new file mode 100644
@@ -1758,7 +1762,7 @@ index 00000000..26bb0392
 +         MDConfItem(QString("/org/asteroidos/weather/day%1/id").arg(i)).set(days[i].icon);
 +         MDConfItem(QString("/org/asteroidos/weather/day%1/min-temp").arg(i)).set(days[i].mintemp);
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 6cbaf356..88205f61 100644
+index ac0db069..c170bcec 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -174,4 +174,10 @@ rec {

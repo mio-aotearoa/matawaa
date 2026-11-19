@@ -45,76 +45,6 @@ index 00000000..3c172f7a
 ++        goto EXIT;
 ++    }
 ++
-diff --git a/examples/asteroid/configuration.nix b/examples/asteroid/configuration.nix
-new file mode 100644
-index 00000000..d55911c0
---- /dev/null
-+++ b/examples/asteroid/configuration.nix
-@@ -0,0 +1,43 @@
-+{
-+  config,
-+  lib,
-+  pkgs,
-+  ...
-+}:
-+
-+let
-+  defaultUserName = "ceres";
-+in
-+{
-+  imports = [
-+    ./asteroid-desktop.nix
-+    ../common-configuration.nix
-+  ];
-+
-+  config = {
-+    users.users."${defaultUserName}" = {
-+      isNormalUser = true;
-+      uid = 1000;
-+      linger = true;
-+      password = "1234";
-+      extraGroups = [
-+        "audio"
-+        "bluetooth"
-+        "dialout"
-+        "input"
-+        "networkmanager"
-+        "systemd-journal"
-+        "tty"
-+        "video"
-+        "wheel"
-+      ];
-+    };
-+
-+    services.asteroid-desktop.enable = true;
-+
-+    # dbus-broker refuses the compositor and sync daemon names ("Request to
-+    # own name refused by policy") even though session.conf allows own="*".
-+    # AsteroidOS uses the reference dbus-daemon; match it.
-+    services.dbus.implementation = "dbus";
-+  };
-+}
-diff --git a/examples/asteroid/default.nix b/examples/asteroid/default.nix
-new file mode 100644
-index 00000000..5eca754f
---- /dev/null
-+++ b/examples/asteroid/default.nix
-@@ -0,0 +1,15 @@
-+# Ensure CLI passes down arguments
-+{ ... }@args:
-+
-+import ../../lib/eval-with-configuration.nix (
-+  args
-+  // {
-+    configuration = [ (import ./configuration.nix) ];
-+    additionalHelpInstructions = { device }: ''
-+      You can build the `-A outputs.default` attribute to build the AsteroidOS
-+      smartwatch image for your watch:
-+
-+       $ nix-build examples/asteroid --argstr device ${device} -A outputs.default
-+    '';
-+  }
-+)
 diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
 new file mode 100644
 index 00000000..ad47f319
@@ -1117,3 +1047,73 @@ index 00000000..ad47f319
 +    }
 +  );
 +}
+diff --git a/examples/asteroid/configuration.nix b/examples/asteroid/configuration.nix
+new file mode 100644
+index 00000000..d55911c0
+--- /dev/null
++++ b/examples/asteroid/configuration.nix
+@@ -0,0 +1,43 @@
++{
++  config,
++  lib,
++  pkgs,
++  ...
++}:
++
++let
++  defaultUserName = "ceres";
++in
++{
++  imports = [
++    ./asteroid-desktop.nix
++    ../common-configuration.nix
++  ];
++
++  config = {
++    users.users."${defaultUserName}" = {
++      isNormalUser = true;
++      uid = 1000;
++      linger = true;
++      password = "1234";
++      extraGroups = [
++        "audio"
++        "bluetooth"
++        "dialout"
++        "input"
++        "networkmanager"
++        "systemd-journal"
++        "tty"
++        "video"
++        "wheel"
++      ];
++    };
++
++    services.asteroid-desktop.enable = true;
++
++    # dbus-broker refuses the compositor and sync daemon names ("Request to
++    # own name refused by policy") even though session.conf allows own="*".
++    # AsteroidOS uses the reference dbus-daemon; match it.
++    services.dbus.implementation = "dbus";
++  };
++}
+diff --git a/examples/asteroid/default.nix b/examples/asteroid/default.nix
+new file mode 100644
+index 00000000..5eca754f
+--- /dev/null
++++ b/examples/asteroid/default.nix
+@@ -0,0 +1,15 @@
++# Ensure CLI passes down arguments
++{ ... }@args:
++
++import ../../lib/eval-with-configuration.nix (
++  args
++  // {
++    configuration = [ (import ./configuration.nix) ];
++    additionalHelpInstructions = { device }: ''
++      You can build the `-A outputs.default` attribute to build the AsteroidOS
++      smartwatch image for your watch:
++
++       $ nix-build examples/asteroid --argstr device ${device} -A outputs.default
++    '';
++  }
++)

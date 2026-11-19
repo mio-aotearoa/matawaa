@@ -16,7 +16,7 @@ Subject: [PATCH] fossil-hoki: add Gen 6 hardware firmware audio and family
  devices/fossil-hoki/hybris.nix                |  47 ++
  devices/fossil-hoki/tfa9890.cnt.base64        |  93 +++
  devices/fossil-hoki/wlan-firmware-hoki.sh     |  42 ++
- devices/fossil-hoki/wlan.nix                  | 142 ++++
+ devices/fossil-hoki/wlan.nix                  | 142 +++++
  ...co_profile-fix-use-of-adapter-before.patch |  30 +
  ...C-LD-AR-OBJCOPY-STRIP-in-nested-make.patch |  25 +
  ...man-respect-interface-sae-capability.patch |  16 +
@@ -1610,6 +1610,28 @@ index 00000000..19a90d46
 + 	$(MAKE) INSTALL_MOD_STRIP=1 -C $(KERNEL_SRC) M=$(shell pwd) modules_install
 +-- 
 +2.51.1
+diff --git a/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch b/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch
+new file mode 100644
+index 00000000..12833fc9
+--- /dev/null
++++ b/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch
+@@ -0,0 +1,16 @@
++diff --git a/gsupplicant/supplicant.c b/gsupplicant/supplicant.c
++--- a/gsupplicant/supplicant.c
+++++ b/gsupplicant/supplicant.c
++@@ -5017,6 +5017,12 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
++ 	struct interface_connect_data *data = user_data;
++ 	GSupplicantSSID *ssid = data->ssid;
++ 
+++	/* A transition AP's SAE support does not imply driver SAE support. */
+++	if ((ssid->keymgmt & G_SUPPLICANT_KEYMGMT_WPA_PSK) &&
+++			!(data->interface->keymgmt_capa &
+++				G_SUPPLICANT_KEYMGMT_SAE))
+++		ssid->keymgmt &= ~G_SUPPLICANT_KEYMGMT_SAE;
+++
++ 	supplicant_dbus_dict_open(iter, &dict);
++ 
++ 	if (ssid->scan_ssid)
 diff --git a/devices/fossil-hoki/wlan/wakelock.h b/devices/fossil-hoki/wlan/wakelock.h
 new file mode 100644
 index 00000000..02faafd6
@@ -1743,25 +1765,3 @@ index 00000000..b29f7d73
 +    "vmalloc=300M"
 +  ];
 +}
-diff --git a/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch b/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch
-new file mode 100644
-index 00000000..12833fc9
---- /dev/null
-+++ b/devices/fossil-hoki/wlan/0003-connman-respect-interface-sae-capability.patch
-@@ -0,0 +1,16 @@
-+diff --git a/gsupplicant/supplicant.c b/gsupplicant/supplicant.c
-+--- a/gsupplicant/supplicant.c
-++++ b/gsupplicant/supplicant.c
-+@@ -5017,6 +5017,12 @@ static void interface_add_network_params(DBusMessageIter *iter, void *user_data)
-+ 	struct interface_connect_data *data = user_data;
-+ 	GSupplicantSSID *ssid = data->ssid;
-+ 
-++	/* A transition AP's SAE support does not imply driver SAE support. */
-++	if ((ssid->keymgmt & G_SUPPLICANT_KEYMGMT_WPA_PSK) &&
-++			!(data->interface->keymgmt_capa &
-++				G_SUPPLICANT_KEYMGMT_SAE))
-++		ssid->keymgmt &= ~G_SUPPLICANT_KEYMGMT_SAE;
-++
-+ 	supplicant_dbus_dict_open(iter, &dict);
-+ 
-+ 	if (ssid->scan_ssid)

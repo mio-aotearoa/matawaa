@@ -6,27 +6,27 @@ Subject: [PATCH] asteroid: package core apps camera viewfinder and music
 
 ---
  .../apps/camera/camera-companion.patch        | 566 ++++++++++++++++++
- .../apps/camera/remotecamerabridge.cpp        | 130 ++++
- .../apps/camera/remotecamerabridge.h          |  61 ++
+ .../apps/camera/remotecamerabridge.cpp        | 216 +++++++
+ .../apps/camera/remotecamerabridge.h          |  82 +++
  overlay/asteroidos/apps/default.nix           | 148 +++++
  .../apps/music-ytmusic-streaming.patch        | 306 ++++++++++
+ .../apps/settings-bluetooth-labels.patch      |  28 +
  overlay/asteroidos/apps/settings-input.patch  | 244 ++++++++
  overlay/asteroidos/assets/default.nix         | 195 ++++++
  overlay/asteroidos/default.nix                |  12 +
- overlay/asteroidos/apps/settings-bluetooth-labels.patch | 28 +
- 9 files changed, 1690 insertions(+)
+ 9 files changed, 1797 insertions(+)
  create mode 100644 overlay/asteroidos/apps/camera/camera-companion.patch
  create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.cpp
  create mode 100644 overlay/asteroidos/apps/camera/remotecamerabridge.h
  create mode 100644 overlay/asteroidos/apps/default.nix
  create mode 100644 overlay/asteroidos/apps/music-ytmusic-streaming.patch
+ create mode 100644 overlay/asteroidos/apps/settings-bluetooth-labels.patch
  create mode 100644 overlay/asteroidos/apps/settings-input.patch
  create mode 100644 overlay/asteroidos/assets/default.nix
- create mode 100644 overlay/asteroidos/apps/settings-bluetooth-labels.patch
 
 diff --git a/overlay/asteroidos/apps/camera/camera-companion.patch b/overlay/asteroidos/apps/camera/camera-companion.patch
 new file mode 100644
-index 00000000..5c709868
+index 00000000..de04763b
 --- /dev/null
 +++ b/overlay/asteroidos/apps/camera/camera-companion.patch
 @@ -0,0 +1,566 @@
@@ -598,10 +598,10 @@ index 00000000..5c709868
 + }
 diff --git a/overlay/asteroidos/apps/camera/remotecamerabridge.cpp b/overlay/asteroidos/apps/camera/remotecamerabridge.cpp
 new file mode 100644
-index 00000000..416b066e
+index 00000000..c64f6e46
 --- /dev/null
 +++ b/overlay/asteroidos/apps/camera/remotecamerabridge.cpp
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,216 @@
 +/*
 + * Copyright (C) 2026 AsteroidOS
 + *
@@ -617,8 +617,9 @@ index 00000000..416b066e
 +#include <QDBusInterface>
 +#include <QDBusMessage>
 +#include <QDebug>
++#include <QJsonDocument>
++#include <QJsonObject>
 +#include <QSet>
-+#include <QTimer>
 +#include <QVariantMap>
 +
 +namespace {
@@ -634,6 +635,9 @@ index 00000000..416b066e
 +    QDBusConnection::systemBus().connect(
 +        kService, kPath, kInterface, QStringLiteral("messageReceived"),
 +        this, SLOT(onMessageReceived(QString, QString, QString)));
++    QDBusConnection::systemBus().connect(
++        kService, kPath, kInterface, QStringLiteral("peerCapabilitiesChanged"),
++        this, SLOT(onPeerCapabilitiesChanged(QStringList)));
 +}
 +
 +bool RemoteCameraBridge::isSendAllowed(const QString &action)
@@ -646,6 +650,7 @@ index 00000000..416b066e
 +        QStringLiteral("torch"),
 +        QStringLiteral("mode_photo"),
 +        QStringLiteral("mode_video"),
++        QStringLiteral("timer_cycle"),
 +        QStringLiteral("status_query"),
 +    };
 +    return allowed.contains(action);
@@ -659,6 +664,7 @@ index 00000000..416b066e
 +        QStringLiteral("photo_captured"),
 +        QStringLiteral("video_started"),
 +        QStringLiteral("video_stopped"),
++        QStringLiteral("state_changed"),
 +    };
 +    return allowed.contains(action);
 +}
@@ -677,13 +683,81 @@ index 00000000..416b066e
 +    return true;
 +}
 +
++void RemoteCameraBridge::queryCapabilities()
++{
++    QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kInterface,
++                                                      QStringLiteral("queryCapabilities"));
++    QDBusConnection::systemBus().asyncCall(msg);
++}
++
++void RemoteCameraBridge::onPeerCapabilitiesChanged(const QStringList &capabilities)
++{
++    if (m_peerCapabilities != capabilities) {
++        m_peerCapabilities = capabilities;
++        emit peerCapabilitiesChanged();
++    }
++}
++
++void RemoteCameraBridge::applyStatePayload(const QString &payload)
++{
++    if (payload.isEmpty()) {
++        return;
++    }
++    const QJsonDocument doc = QJsonDocument::fromJson(payload.toUtf8());
++    if (!doc.isObject()) {
++        return;
++    }
++    const QJsonObject obj = doc.object();
++    bool changed = false;
++
++    if (obj.contains(QStringLiteral("mode"))) {
++        const QString mode = obj.value(QStringLiteral("mode")).toString();
++        if (!mode.isEmpty() && mode != m_cameraMode) {
++            m_cameraMode = mode;
++            changed = true;
++        }
++    }
++    if (obj.contains(QStringLiteral("facing"))) {
++        const QString facing = obj.value(QStringLiteral("facing")).toString();
++        if (!facing.isEmpty() && facing != m_cameraFacing) {
++            m_cameraFacing = facing;
++            changed = true;
++        }
++    }
++    if (obj.contains(QStringLiteral("zoom"))) {
++        const double zoom = obj.value(QStringLiteral("zoom")).toDouble(m_zoomRatio);
++        if (zoom > 0.0 && !qFuzzyCompare(zoom, m_zoomRatio)) {
++            m_zoomRatio = zoom;
++            changed = true;
++        }
++    }
++    if (obj.contains(QStringLiteral("torch"))) {
++        const bool torch = obj.value(QStringLiteral("torch")).toBool(m_torchOn);
++        if (torch != m_torchOn) {
++            m_torchOn = torch;
++            changed = true;
++        }
++    }
++    if (obj.contains(QStringLiteral("recording"))) {
++        const bool rec = obj.value(QStringLiteral("recording")).toBool(m_isRecording);
++        if (rec != m_isRecording) {
++            m_isRecording = rec;
++            changed = true;
++        }
++    }
++
++    if (changed) {
++        emit cameraStateChanged();
++    }
++}
++
 +void RemoteCameraBridge::onMessageReceived(const QString &appId, const QString &action, const QString &payload)
 +{
 +    if (appId != kCameraId) {
 +        return;
 +    }
-+    if (!isReceiveAllowed(action) || !payload.isEmpty()) {
-+        qWarning() << "RemoteCameraBridge: ignoring unexpected message from phone";
++    if (!isReceiveAllowed(action)) {
++        qWarning() << "RemoteCameraBridge: ignoring unexpected message from phone:" << action;
 +        return;
 +    }
 +
@@ -692,12 +766,24 @@ index 00000000..416b066e
 +        emit bleConnectedChanged();
 +    }
 +
++    applyStatePayload(payload);
++
 +    if (action == QLatin1String("ready")) {
 +        setPhoneReady(true);
 +    } else if (action == QLatin1String("paused")) {
 +        setPhoneReady(false);
 +    } else if (action == QLatin1String("photo_captured")) {
 +        vibrate(100);
++    } else if (action == QLatin1String("video_started")) {
++        if (!m_isRecording) {
++            m_isRecording = true;
++            emit cameraStateChanged();
++        }
++    } else if (action == QLatin1String("video_stopped")) {
++        if (m_isRecording) {
++            m_isRecording = false;
++            emit cameraStateChanged();
++        }
 +    }
 +
 +    emit commandReceived(action);
@@ -734,10 +820,10 @@ index 00000000..416b066e
 +}
 diff --git a/overlay/asteroidos/apps/camera/remotecamerabridge.h b/overlay/asteroidos/apps/camera/remotecamerabridge.h
 new file mode 100644
-index 00000000..2a57118f
+index 00000000..ca5a1621
 --- /dev/null
 +++ b/overlay/asteroidos/apps/camera/remotecamerabridge.h
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,82 @@
 +/*
 + * Copyright (C) 2026 AsteroidOS
 + *
@@ -752,50 +838,71 @@ index 00000000..2a57118f
 +
 +#include <QObject>
 +#include <QString>
++#include <QStringList>
 +
 +/*
 + * Remote shutter / remote control for the paired phone camera.
 + *
-+ * The only transport is the authenticated BLE AppBridge exposed by
-+ * asteroid-btsyncd on the system bus. There is no network path and no video
-+ * stream; both command directions are checked against fixed allowlists and
-+ * carry no payload.
++ * Transport is the authenticated BLE AppBridge v2 exposed by asteroid-btsyncd
++ * on the system bus. Commands are checked against fixed allowlists; phone
++ * status messages may carry a compact JSON camera-state snapshot
++ * (mode, facing, zoom, torch, recording).
 + */
 +class RemoteCameraBridge : public QObject
 +{
 +    Q_OBJECT
 +    Q_PROPERTY(bool bleConnected READ bleConnected NOTIFY bleConnectedChanged)
 +    Q_PROPERTY(bool phoneReady READ phoneReady NOTIFY phoneReadyChanged)
++    Q_PROPERTY(QString cameraMode READ cameraMode NOTIFY cameraStateChanged)
++    Q_PROPERTY(QString cameraFacing READ cameraFacing NOTIFY cameraStateChanged)
++    Q_PROPERTY(double zoomRatio READ zoomRatio NOTIFY cameraStateChanged)
++    Q_PROPERTY(bool torchOn READ torchOn NOTIFY cameraStateChanged)
++    Q_PROPERTY(bool isRecording READ isRecording NOTIFY cameraStateChanged)
++    Q_PROPERTY(QStringList peerCapabilities READ peerCapabilities NOTIFY peerCapabilitiesChanged)
 +
 +public:
 +    explicit RemoteCameraBridge(QObject *parent = nullptr);
 +
 +    bool bleConnected() const { return m_bleConnected; }
 +    bool phoneReady() const { return m_phoneReady; }
++    QString cameraMode() const { return m_cameraMode; }
++    QString cameraFacing() const { return m_cameraFacing; }
++    double zoomRatio() const { return m_zoomRatio; }
++    bool torchOn() const { return m_torchOn; }
++    bool isRecording() const { return m_isRecording; }
++    QStringList peerCapabilities() const { return m_peerCapabilities; }
 +
-+    // Watch -> phone actions that may be sent.
 +    static bool isSendAllowed(const QString &action);
-+    // Phone -> watch actions that are acted upon.
 +    static bool isReceiveAllowed(const QString &action);
 +
 +public slots:
-+    // Returns false (and sends nothing) if the action is not allowlisted.
 +    bool sendCommand(const QString &action);
++    void queryCapabilities();
 +    void vibrate(int ms = 50);
 +
 +signals:
 +    void bleConnectedChanged();
 +    void phoneReadyChanged();
++    void cameraStateChanged();
++    void peerCapabilitiesChanged();
 +    void commandReceived(const QString &action);
 +
 +private slots:
 +    void onMessageReceived(const QString &appId, const QString &action, const QString &payload);
++    void onPeerCapabilitiesChanged(const QStringList &capabilities);
 +
 +private:
 +    void setPhoneReady(bool ready);
++    void applyStatePayload(const QString &payload);
 +
 +    bool m_bleConnected = false;
 +    bool m_phoneReady = false;
++    QString m_cameraMode = QStringLiteral("photo");
++    QString m_cameraFacing = QStringLiteral("back");
++    double m_zoomRatio = 1.0;
++    bool m_torchOn = false;
++    bool m_isRecording = false;
++    QStringList m_peerCapabilities;
 +};
 +
 +#endif // REMOTECAMERABRIDGE_H
@@ -1265,230 +1372,40 @@ index 00000000..375a101a
 +         }
 +     }
 + }
-diff --git a/overlay/asteroidos/assets/default.nix b/overlay/asteroidos/assets/default.nix
+diff --git a/overlay/asteroidos/apps/settings-bluetooth-labels.patch b/overlay/asteroidos/apps/settings-bluetooth-labels.patch
 new file mode 100644
-index 0000000000000000000000000000000000000000..51b5a4767ab7d80f7e9f1a79ed8fda3c04de4c86
+index 00000000..9a81d5ea
 --- /dev/null
-+++ b/overlay/asteroidos/assets/default.nix
-@@ -0,0 +1,195 @@
-+{
-+  lib,
-+  stdenv,
-+  fetchFromGitHub,
-+  buildPackages,
-+  metaAsteroidSrc,
-+}:
-+
-+rec {
-+  wallpapers = stdenv.mkDerivation {
-+    pname = "asteroid-wallpapers";
-+    version = "2.1";
-+
-+    src = fetchFromGitHub {
-+      owner = "AsteroidOS";
-+      repo = "asteroid-wallpapers";
-+      rev = "7e08260ed96037f3bcae1096bfc834c4755dbe93";
-+      hash = "sha256-KZXv+Morw8diDBCTfHmZXSxKrnw7IuQjq15ZxMMSgyA=";
-+    };
-+
-+    installPhase = ''
-+      runHook preInstall
-+      mkdir -p $out/share/asteroid-launcher/wallpapers
-+      find . -mindepth 1 -maxdepth 1 -type d -not -name ".*" -exec cp -R {} $out/share/asteroid-launcher/wallpapers/ \;
-+      runHook postInstall
-+    '';
-+
-+    meta = with lib; {
-+      description = "Default set of wallpapers for AsteroidOS";
-+      homepage = "https://asteroidos.org/";
-+      license = licenses.cc-by-20;
-+      platforms = platforms.all;
-+    };
-+  };
-+
-+  sounds = stdenv.mkDerivation {
-+    pname = "asteroid-sounds";
-+    version = "2.1";
-+
-+    src = fetchFromGitHub {
-+      owner = "AsteroidOS";
-+      repo = "asteroid-sounds";
-+      rev = "8d582d135b9486e9add714cc44f0f28c7aeaa0e9";
-+      hash = "sha256-Y//Tos7hCME8VDRvL51c9L2La0Kqx8eLNp5G5kq+t1c=";
-+    };
-+
-+    installPhase = ''
-+      runHook preInstall
-+      mkdir -p $out/share/sounds/asteroid
-+      cp -r src/* $out/share/sounds/asteroid/
-+      runHook postInstall
-+    '';
-+
-+    meta = with lib; {
-+      description = "Default set of notification, alarm, and system sounds for AsteroidOS";
-+      homepage = "https://asteroidos.org/";
-+      license = licenses.cc0;
-+      platforms = platforms.all;
-+    };
-+  };
-+
-+  icons = stdenv.mkDerivation {
-+    pname = "asteroid-icons-ion";
-+    version = "2.1";
-+
-+    src = fetchFromGitHub {
-+      owner = "AsteroidOS";
-+      repo = "asteroid-icons-ion";
-+      rev = "7941cd491296b79941cbdad0d4b72bd34810c5dc";
-+      hash = "sha256-uJEOIRvfEUdnhw2JA2AcnaXzblvs9zVSxHNbbTAbflA=";
-+    };
-+
-+    installPhase = ''
-+      runHook preInstall
-+      mkdir -p $out/share/icons/asteroid
-+      cp -r src/* $out/share/icons/asteroid/
-+      runHook postInstall
-+    '';
-+
-+    meta = with lib; {
-+      description = "Ionicons based icon set for AsteroidOS userland";
-+      homepage = "https://asteroidos.org/";
-+      license = licenses.mit;
-+      platforms = platforms.all;
-+    };
-+  };
-+
-+  fonts = stdenv.mkDerivation {
-+    pname = "asteroid-fonts";
-+    version = "2.1";
-+
-+    src = fetchFromGitHub {
-+      owner = "AsteroidOS";
-+      repo = "asteroid-fonts";
-+      rev = "2436c92d90385e33eccf77df22c2e5bad1b6e050";
-+      hash = "sha256-iTzdKC9tuTG5Q1+dvoSJmQAh4d1l7Qk36GdRDS07Ogk=";
-+    };
-+
-+    installPhase = ''
-+      runHook preInstall
-+      mkdir -p $out/share/fonts/truetype/asteroid
-+      find . -name "*.[to]tf" -exec install -m 0644 {} $out/share/fonts/truetype/asteroid/ \;
-+      runHook postInstall
-+    '';
-+
-+    meta = with lib; {
-+      description = "Typography and emoji font suite for AsteroidOS smartwatches";
-+      homepage = "https://asteroidos.org/";
-+      license = licenses.ofl;
-+      platforms = platforms.all;
-+    };
-+  };
-+
-+  supported-languages = stdenv.mkDerivation {
-+    pname = "supported-languages";
-+    version = "2.1";
-+
-+    src = fetchFromGitHub {
-+      owner = "AsteroidOS";
-+      repo = "supported-languages";
-+      rev = "182c3e31a93b157eea3d51f2152d712d16c71f1a";
-+      hash = "sha256-XD2KTAoMxrrRwt9aLcq9Y+Mr50CpooE6mBBQ1Jwse54=";
-+    };
-+
-+    installPhase = ''
-+      runHook preInstall
-+      mkdir -p $out/share/supported-languages
-+      cp *.conf $out/share/supported-languages/
-+      runHook postInstall
-+    '';
-+
-+    meta = with lib; {
-+      description = "Supported locale configuration files for AsteroidOS";
-+      homepage = "https://asteroidos.org/";
-+      license = licenses.gpl3Plus;
-+      platforms = platforms.all;
-+    };
-+  };
-+
-+  keymaps =
-+    let
-+      qtbase = buildPackages.qt6.qtbase;
-+      kmap2qmap = buildPackages.stdenv.mkDerivation {
-+        pname = "kmap2qmap";
-+        inherit (buildPackages.qt6.qttools) version src;
-+        patches = [
-+          "${metaAsteroidSrc}/recipes-qt/qt6/qttools/0001-kmap2qmap-Map-MenuKB-key.patch"
-+          "${metaAsteroidSrc}/recipes-qt/qt6/qttools/0002-kmap2qmap-Map-Sleep-key.patch"
-+        ];
-+        buildPhase = ''
-+          runHook preBuild
-+          $CXX -std=c++17 -fPIC -O2 \
-+            src/kmap2qmap/main.cpp \
-+            -I${qtbase}/include \
-+            -I${qtbase}/include/QtCore \
-+            -I${qtbase}/include/QtCore/${qtbase.version} \
-+            -I${qtbase}/include/QtCore/${qtbase.version}/QtCore \
-+            -I${qtbase}/include/QtGui \
-+            -I${qtbase}/include/QtGui/${qtbase.version} \
-+            -I${qtbase}/include/QtGui/${qtbase.version}/QtGui \
-+            -I${qtbase}/include/QtInputSupport \
-+            -I${qtbase}/include/QtInputSupport/${qtbase.version} \
-+            -I${qtbase}/include/QtInputSupport/${qtbase.version}/QtInputSupport \
-+            -L${qtbase}/lib \
-+            -Wl,-rpath,${qtbase}/lib \
-+            -lQt6InputSupport -lQt6Gui -lQt6Core \
-+            -o kmap2qmap
-+          runHook postBuild
-+        '';
-+        installPhase = ''
-+          runHook preInstall
-+          install -Dm755 kmap2qmap $out/bin/kmap2qmap
-+          runHook postInstall
-+        '';
-+      };
-+    in
-+    stdenv.mkDerivation {
-+      pname = "asteroid-keymaps";
-+      version = "2.1";
-+      dontUnpack = true;
-+      nativeBuildInputs = [ kmap2qmap ];
-+      installPhase = ''
-+        runHook preInstall
-+        mkdir -p $out/share/qt6/keymaps
-+        kmap2qmap ${metaAsteroidSrc}/recipes-asteroid/asteroid-launcher/asteroid-launcher-configs/keys.kmap $out/share/qt6/keymaps/keys.qmap
-+        runHook postInstall
-+      '';
-+      meta = with lib; {
-+        description = "Hardware button keymap for AsteroidOS smartwatches";
-+        homepage = "https://asteroidos.org/";
-+        license = licenses.gpl3Plus;
-+        platforms = platforms.all;
-+      };
-+    };
-+}
-diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index ceed388d..6cbaf356 100644
---- a/overlay/asteroidos/default.nix
-+++ b/overlay/asteroidos/default.nix
-@@ -160,6 +160,18 @@ rec {
-     inherit qml-asteroid amber-mpris mlite;
-   };
- 
-+  apps =
-+    (callPackage ./apps {
-+      inherit mkAsteroidApp mce-dev ngf-qt6;
-+    })
-+    // {
-+
-+    };
-+
-+  assets = (callPackage ./assets { inherit metaAsteroidSrc; }) // {
-+    inherit virtualkeyboard;
-+  };
-+
-   virtualkeyboard = callPackage ./virtualkeyboard { inherit noUsrShareHook; };
- 
- }
++++ b/overlay/asteroidos/apps/settings-bluetooth-labels.patch
+@@ -0,0 +1,28 @@
++diff --git a/src/qml/BluetoothPage.qml b/src/qml/BluetoothPage.qml
++--- a/src/qml/BluetoothPage.qml
+++++ b/src/qml/BluetoothPage.qml
++@@ -26,14 +26,20 @@ Item {
++     BluetoothStatus { id: btStatus }
++ 
++     StatusPage {
+++        // A missing catalog entry must not expose its message ID to the user.
+++        function statusLabel(id, translated, fallback) {
+++            return translated === id || translated.length === 0
+++                    ? fallback : translated
+++        }
+++
++         //% "Bluetooth on"
++-        property string bluetoothOnStr: qsTrId("id-bluetooth-on")
+++        property string bluetoothOnStr: statusLabel("id-bluetooth-on", qsTrId("id-bluetooth-on"), "Bluetooth on")
++         //% "Bluetooth off"
++-        property string bluetoothOffStr: qsTrId("id-bluetooth-off")
+++        property string bluetoothOffStr: statusLabel("id-bluetooth-off", qsTrId("id-bluetooth-off"), "Bluetooth off")
++         //% "Connected"
++-        property string connectedStr: qsTrId("id-connected")
+++        property string connectedStr: statusLabel("id-connected", qsTrId("id-connected"), "Connected")
++         //% "Not connected"
++-        property string notConnectedStr: qsTrId("id-disconnected")
+++        property string notConnectedStr: statusLabel("id-disconnected", qsTrId("id-disconnected"), "Not connected")
++         text: "<h3>" + (btStatus.powered ? bluetoothOnStr : bluetoothOffStr) + "</h3>\n" + (btStatus.connected ? connectedStr : notConnectedStr)
++         icon: btStatus.powered ? "ios-bluetooth-outline" : "ios-bluetooth-off-outline"
++         clickable: true
 diff --git a/overlay/asteroidos/apps/settings-input.patch b/overlay/asteroidos/apps/settings-input.patch
 new file mode 100644
 index 00000000..2804d743
@@ -1739,37 +1656,227 @@ index 00000000..2804d743
 +                 ListItem {
 +                     //% "Language"
 +                     title: qsTrId("id-language-page")
-diff --git a/overlay/asteroidos/apps/settings-bluetooth-labels.patch b/overlay/asteroidos/apps/settings-bluetooth-labels.patch
+diff --git a/overlay/asteroidos/assets/default.nix b/overlay/asteroidos/assets/default.nix
 new file mode 100644
-index 00000000..9a81d5ea
+index 00000000..51b5a476
 --- /dev/null
-+++ b/overlay/asteroidos/apps/settings-bluetooth-labels.patch
-@@ -0,0 +1,28 @@
-+diff --git a/src/qml/BluetoothPage.qml b/src/qml/BluetoothPage.qml
-+--- a/src/qml/BluetoothPage.qml
-++++ b/src/qml/BluetoothPage.qml
-+@@ -26,14 +26,20 @@ Item {
-+     BluetoothStatus { id: btStatus }
-+ 
-+     StatusPage {
-++        // A missing catalog entry must not expose its message ID to the user.
-++        function statusLabel(id, translated, fallback) {
-++            return translated === id || translated.length === 0
-++                    ? fallback : translated
-++        }
-++
-+         //% "Bluetooth on"
-+-        property string bluetoothOnStr: qsTrId("id-bluetooth-on")
-++        property string bluetoothOnStr: statusLabel("id-bluetooth-on", qsTrId("id-bluetooth-on"), "Bluetooth on")
-+         //% "Bluetooth off"
-+-        property string bluetoothOffStr: qsTrId("id-bluetooth-off")
-++        property string bluetoothOffStr: statusLabel("id-bluetooth-off", qsTrId("id-bluetooth-off"), "Bluetooth off")
-+         //% "Connected"
-+-        property string connectedStr: qsTrId("id-connected")
-++        property string connectedStr: statusLabel("id-connected", qsTrId("id-connected"), "Connected")
-+         //% "Not connected"
-+-        property string notConnectedStr: qsTrId("id-disconnected")
-++        property string notConnectedStr: statusLabel("id-disconnected", qsTrId("id-disconnected"), "Not connected")
-+         text: "<h3>" + (btStatus.powered ? bluetoothOnStr : bluetoothOffStr) + "</h3>\n" + (btStatus.connected ? connectedStr : notConnectedStr)
-+         icon: btStatus.powered ? "ios-bluetooth-outline" : "ios-bluetooth-off-outline"
-+         clickable: true
++++ b/overlay/asteroidos/assets/default.nix
+@@ -0,0 +1,195 @@
++{
++  lib,
++  stdenv,
++  fetchFromGitHub,
++  buildPackages,
++  metaAsteroidSrc,
++}:
++
++rec {
++  wallpapers = stdenv.mkDerivation {
++    pname = "asteroid-wallpapers";
++    version = "2.1";
++
++    src = fetchFromGitHub {
++      owner = "AsteroidOS";
++      repo = "asteroid-wallpapers";
++      rev = "7e08260ed96037f3bcae1096bfc834c4755dbe93";
++      hash = "sha256-KZXv+Morw8diDBCTfHmZXSxKrnw7IuQjq15ZxMMSgyA=";
++    };
++
++    installPhase = ''
++      runHook preInstall
++      mkdir -p $out/share/asteroid-launcher/wallpapers
++      find . -mindepth 1 -maxdepth 1 -type d -not -name ".*" -exec cp -R {} $out/share/asteroid-launcher/wallpapers/ \;
++      runHook postInstall
++    '';
++
++    meta = with lib; {
++      description = "Default set of wallpapers for AsteroidOS";
++      homepage = "https://asteroidos.org/";
++      license = licenses.cc-by-20;
++      platforms = platforms.all;
++    };
++  };
++
++  sounds = stdenv.mkDerivation {
++    pname = "asteroid-sounds";
++    version = "2.1";
++
++    src = fetchFromGitHub {
++      owner = "AsteroidOS";
++      repo = "asteroid-sounds";
++      rev = "8d582d135b9486e9add714cc44f0f28c7aeaa0e9";
++      hash = "sha256-Y//Tos7hCME8VDRvL51c9L2La0Kqx8eLNp5G5kq+t1c=";
++    };
++
++    installPhase = ''
++      runHook preInstall
++      mkdir -p $out/share/sounds/asteroid
++      cp -r src/* $out/share/sounds/asteroid/
++      runHook postInstall
++    '';
++
++    meta = with lib; {
++      description = "Default set of notification, alarm, and system sounds for AsteroidOS";
++      homepage = "https://asteroidos.org/";
++      license = licenses.cc0;
++      platforms = platforms.all;
++    };
++  };
++
++  icons = stdenv.mkDerivation {
++    pname = "asteroid-icons-ion";
++    version = "2.1";
++
++    src = fetchFromGitHub {
++      owner = "AsteroidOS";
++      repo = "asteroid-icons-ion";
++      rev = "7941cd491296b79941cbdad0d4b72bd34810c5dc";
++      hash = "sha256-uJEOIRvfEUdnhw2JA2AcnaXzblvs9zVSxHNbbTAbflA=";
++    };
++
++    installPhase = ''
++      runHook preInstall
++      mkdir -p $out/share/icons/asteroid
++      cp -r src/* $out/share/icons/asteroid/
++      runHook postInstall
++    '';
++
++    meta = with lib; {
++      description = "Ionicons based icon set for AsteroidOS userland";
++      homepage = "https://asteroidos.org/";
++      license = licenses.mit;
++      platforms = platforms.all;
++    };
++  };
++
++  fonts = stdenv.mkDerivation {
++    pname = "asteroid-fonts";
++    version = "2.1";
++
++    src = fetchFromGitHub {
++      owner = "AsteroidOS";
++      repo = "asteroid-fonts";
++      rev = "2436c92d90385e33eccf77df22c2e5bad1b6e050";
++      hash = "sha256-iTzdKC9tuTG5Q1+dvoSJmQAh4d1l7Qk36GdRDS07Ogk=";
++    };
++
++    installPhase = ''
++      runHook preInstall
++      mkdir -p $out/share/fonts/truetype/asteroid
++      find . -name "*.[to]tf" -exec install -m 0644 {} $out/share/fonts/truetype/asteroid/ \;
++      runHook postInstall
++    '';
++
++    meta = with lib; {
++      description = "Typography and emoji font suite for AsteroidOS smartwatches";
++      homepage = "https://asteroidos.org/";
++      license = licenses.ofl;
++      platforms = platforms.all;
++    };
++  };
++
++  supported-languages = stdenv.mkDerivation {
++    pname = "supported-languages";
++    version = "2.1";
++
++    src = fetchFromGitHub {
++      owner = "AsteroidOS";
++      repo = "supported-languages";
++      rev = "182c3e31a93b157eea3d51f2152d712d16c71f1a";
++      hash = "sha256-XD2KTAoMxrrRwt9aLcq9Y+Mr50CpooE6mBBQ1Jwse54=";
++    };
++
++    installPhase = ''
++      runHook preInstall
++      mkdir -p $out/share/supported-languages
++      cp *.conf $out/share/supported-languages/
++      runHook postInstall
++    '';
++
++    meta = with lib; {
++      description = "Supported locale configuration files for AsteroidOS";
++      homepage = "https://asteroidos.org/";
++      license = licenses.gpl3Plus;
++      platforms = platforms.all;
++    };
++  };
++
++  keymaps =
++    let
++      qtbase = buildPackages.qt6.qtbase;
++      kmap2qmap = buildPackages.stdenv.mkDerivation {
++        pname = "kmap2qmap";
++        inherit (buildPackages.qt6.qttools) version src;
++        patches = [
++          "${metaAsteroidSrc}/recipes-qt/qt6/qttools/0001-kmap2qmap-Map-MenuKB-key.patch"
++          "${metaAsteroidSrc}/recipes-qt/qt6/qttools/0002-kmap2qmap-Map-Sleep-key.patch"
++        ];
++        buildPhase = ''
++          runHook preBuild
++          $CXX -std=c++17 -fPIC -O2 \
++            src/kmap2qmap/main.cpp \
++            -I${qtbase}/include \
++            -I${qtbase}/include/QtCore \
++            -I${qtbase}/include/QtCore/${qtbase.version} \
++            -I${qtbase}/include/QtCore/${qtbase.version}/QtCore \
++            -I${qtbase}/include/QtGui \
++            -I${qtbase}/include/QtGui/${qtbase.version} \
++            -I${qtbase}/include/QtGui/${qtbase.version}/QtGui \
++            -I${qtbase}/include/QtInputSupport \
++            -I${qtbase}/include/QtInputSupport/${qtbase.version} \
++            -I${qtbase}/include/QtInputSupport/${qtbase.version}/QtInputSupport \
++            -L${qtbase}/lib \
++            -Wl,-rpath,${qtbase}/lib \
++            -lQt6InputSupport -lQt6Gui -lQt6Core \
++            -o kmap2qmap
++          runHook postBuild
++        '';
++        installPhase = ''
++          runHook preInstall
++          install -Dm755 kmap2qmap $out/bin/kmap2qmap
++          runHook postInstall
++        '';
++      };
++    in
++    stdenv.mkDerivation {
++      pname = "asteroid-keymaps";
++      version = "2.1";
++      dontUnpack = true;
++      nativeBuildInputs = [ kmap2qmap ];
++      installPhase = ''
++        runHook preInstall
++        mkdir -p $out/share/qt6/keymaps
++        kmap2qmap ${metaAsteroidSrc}/recipes-asteroid/asteroid-launcher/asteroid-launcher-configs/keys.kmap $out/share/qt6/keymaps/keys.qmap
++        runHook postInstall
++      '';
++      meta = with lib; {
++        description = "Hardware button keymap for AsteroidOS smartwatches";
++        homepage = "https://asteroidos.org/";
++        license = licenses.gpl3Plus;
++        platforms = platforms.all;
++      };
++    };
++}
+diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
+index e4125341..ac0db069 100644
+--- a/overlay/asteroidos/default.nix
++++ b/overlay/asteroidos/default.nix
+@@ -160,6 +160,18 @@ rec {
+     inherit qml-asteroid amber-mpris mlite;
+   };
+ 
++  apps =
++    (callPackage ./apps {
++      inherit mkAsteroidApp mce-dev ngf-qt6;
++    })
++    // {
++
++    };
++
++  assets = (callPackage ./assets { inherit metaAsteroidSrc; }) // {
++    inherit virtualkeyboard;
++  };
++
+   virtualkeyboard = callPackage ./virtualkeyboard { inherit noUsrShareHook; };
+ 
+ }

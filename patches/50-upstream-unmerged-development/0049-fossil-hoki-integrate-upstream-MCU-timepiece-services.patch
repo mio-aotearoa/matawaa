@@ -9,20 +9,20 @@ shutdown requires confirmation and failed handoffs show an error. The feature
 can be disabled with services.asteroid-desktop.timepiece.enable. Kernel
 timezone stays enabled for Android HALs. No idle action enters timepiece mode.
 ---
- devices/fossil-hoki/default.nix                    |    1 
- devices/fossil-hoki/timepiece.nix                  |   84 ++++++++++++++++++++
- .../asteroidos/asteroid-seconddisplay/default.nix  |   52 ++++++++++++
- overlay/asteroidos/default.nix                     |    3 +
- .../extreme-battery-saver/CMakeLists.txt           |   20 +++++
- overlay/asteroidos/extreme-battery-saver/Main.qml  |   82 ++++++++++++++++++++
- .../asteroid-extreme-battery-saver.desktop         |    8 ++
- .../asteroid-extreme-battery-saver.svg             |    5 +
- .../extreme-battery-saver/controller-test.cpp      |   69 ++++++++++++++++
- .../asteroidos/extreme-battery-saver/controller.h  |   70 +++++++++++++++++
- .../asteroidos/extreme-battery-saver/default.nix   |   56 +++++++++++++
- overlay/asteroidos/extreme-battery-saver/main.cpp  |   18 ++++
- .../asteroidos/extreme-battery-saver/resources.qrc |    1 
- overlay/asteroidos/kernel-timezone/default.nix     |   38 +++++++++
+ devices/fossil-hoki/default.nix               |  1 +
+ devices/fossil-hoki/timepiece.nix             | 84 +++++++++++++++++++
+ .../asteroid-seconddisplay/default.nix        | 52 ++++++++++++
+ overlay/asteroidos/default.nix                |  3 +
+ .../extreme-battery-saver/CMakeLists.txt      | 20 +++++
+ .../asteroidos/extreme-battery-saver/Main.qml | 82 ++++++++++++++++++
+ .../asteroid-extreme-battery-saver.desktop    |  8 ++
+ .../asteroid-extreme-battery-saver.svg        |  5 ++
+ .../extreme-battery-saver/controller-test.cpp | 69 +++++++++++++++
+ .../extreme-battery-saver/controller.h        | 70 ++++++++++++++++
+ .../extreme-battery-saver/default.nix         | 56 +++++++++++++
+ .../asteroidos/extreme-battery-saver/main.cpp | 18 ++++
+ .../extreme-battery-saver/resources.qrc       |  1 +
+ .../asteroidos/kernel-timezone/default.nix    | 38 +++++++++
  14 files changed, 507 insertions(+)
  create mode 100644 devices/fossil-hoki/timepiece.nix
  create mode 100644 overlay/asteroidos/asteroid-seconddisplay/default.nix
@@ -198,7 +198,7 @@ index 00000000..73e79f24
 +  };
 +}
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index a81920b4..cd4479d5 100644
+index 23ee6288..e3b2f74f 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -23,6 +23,9 @@ rec {
@@ -592,7 +592,7 @@ new file mode 100644
 index 00000000..829d1982
 --- /dev/null
 +++ b/overlay/asteroidos/extreme-battery-saver/resources.qrc
-@@ -0,0 +1,1 @@
+@@ -0,0 +1 @@
 +<RCC><qresource prefix="/"><file>Main.qml</file></qresource></RCC>
 diff --git a/overlay/asteroidos/kernel-timezone/default.nix b/overlay/asteroidos/kernel-timezone/default.nix
 new file mode 100644

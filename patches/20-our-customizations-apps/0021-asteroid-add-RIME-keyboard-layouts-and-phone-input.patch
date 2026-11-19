@@ -38,7 +38,7 @@ Subject: [PATCH] asteroid: add RIME keyboard layouts and phone input
  create mode 100644 overlay/asteroidos/virtualkeyboard/rimeinputmethod.h
 
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 262d4cf2..ceed388d 100644
+index c4733028..e4125341 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -160,4 +160,6 @@ rec {
@@ -108,7 +108,7 @@ index 00000000..8bb79c6b
 ++install(DIRECTORY images/ DESTINATION "${CMAKE_INSTALL_LIBDIR}/qml/QtQuick/VirtualKeyboard/Styles/watch/images")
 diff --git a/overlay/asteroidos/virtualkeyboard/default.nix b/overlay/asteroidos/virtualkeyboard/default.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..9ad1a161a816d346c7346f4b6b7927817e43a520
+index 00000000..53536ce6
 --- /dev/null
 +++ b/overlay/asteroidos/virtualkeyboard/default.nix
 @@ -0,0 +1,93 @@

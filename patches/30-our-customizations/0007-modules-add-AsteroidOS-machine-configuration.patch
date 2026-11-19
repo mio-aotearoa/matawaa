@@ -4,13 +4,14 @@ Date: Mon, 9 Nov 2026 10:55:46 +1100
 Subject: [PATCH] modules: add AsteroidOS machine configuration
 
 ---
- modules/asteroid-config.nix                                |   41 +++++++++++++
- modules/module-list.nix                                    |    1 ++
-2 files changed, 42 insertions(+)
+ modules/asteroid-config.nix | 41 +++++++++++++++++++++++++++++++++++++
+ modules/module-list.nix     |  1 +
+ 2 files changed, 42 insertions(+)
+ create mode 100644 modules/asteroid-config.nix
 
 diff --git a/modules/asteroid-config.nix b/modules/asteroid-config.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..422aec0f7298912217258f89eed6f3ba7427aae7
+index 00000000..422aec0f
 --- /dev/null
 +++ b/modules/asteroid-config.nix
 @@ -0,0 +1,41 @@
@@ -56,7 +57,7 @@ index 0000000000000000000000000000000000000000..422aec0f7298912217258f89eed6f3ba
 +  };
 +}
 diff --git a/modules/module-list.nix b/modules/module-list.nix
-index 0a18885d..fe4ce596 100644
+index 166294a7..4006ce88 100644
 --- a/modules/module-list.nix
 +++ b/modules/module-list.nix
 @@ -2,6 +2,7 @@

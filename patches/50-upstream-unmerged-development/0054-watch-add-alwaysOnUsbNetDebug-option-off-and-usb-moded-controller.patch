@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Fri, 20 Nov 2026 07:20:15 +1100
-Subject: [PATCH 2/2] watch: add alwaysOnUsbNetDebug option (off) and usb-moded
+Subject: [PATCH] watch: add alwaysOnUsbNetDebug option (off) and usb-moded
  controller
 
 ---
@@ -231,7 +231,7 @@ index d352c600..a720a813 100644
  
    config = mkIf (config.mobile.enable && watchCfg.enable) {
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 6f7fc658..0b767739 100644
+index e3b2f74f..419e8e12 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -81,6 +81,7 @@ rec {
