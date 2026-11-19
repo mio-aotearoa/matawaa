@@ -25,15 +25,15 @@ its supported unit set while preserving declared application services and timers
 ## Checks
 
 - All 45 patches replay without three-way fallback to source tree
-  `97f55b33e2435b513d2d9aee09d02548c7a70736`.
+  `0d5079b15d4ffc2763fdf9c1c7e4e61571fdcd15`.
 - Flake source output matches the reviewed files, excluding `.orig` patch backups.
 - Flake and direct `nix-build` evaluate to the same Hoki system derivation.
 - Extreme battery saver passes mock D-Bus tests and an installed offscreen UI
   startup check with Qt 6.11.3. Those tests never invoke a real MCU handoff.
 - Rotation/setup QML has no syntax diagnostics; complete runtime import and
   touch behavior still need on-watch testing.
-- Full Hoki system build passed with the refreshed pin and reuses the same output:
-  `/nix/store/w72rqzz7lays15vxz1l5vywykdy1pjg4-nixos-system-hoki-26.11pre-git`.
+- Full Hoki system build passed:
+  `/nix/store/wdbl1814vnh98qbbx2imfd004087jxsr-nixos-system-hoki-26.11pre-git`.
   The new features are not deployed.
 
 Build the image with:
@@ -42,6 +42,12 @@ Build the image with:
 nix-build work/mobile-nixos/examples/asteroid --argstr device fossil-hoki \
   -A config.system.build.toplevel --no-out-link
 ```
+
+The moWerk watch apps are included. Wanze is packaged with an inactive timer;
+`sudo systemctl start wanze.timer` starts sampling without waking the watch.
+Samples remain in `/var/log/wanze.csv`; uploads require explicit configuration.
+Its native offline sampling check and ARM build pass. Heliograph uses Qt Sensors
+for banner rotation.
 
 ## Open limitations
 

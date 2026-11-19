@@ -6,11 +6,11 @@ Subject: [PATCH] asteroid: package community apps with build and usability
 
 ---
  ...eroidos/community-apps/beatfork-tack-improvements.patch |  449 ++++++++++++++++++++++++++++++++++++++++++
- overlay/asteroidos/community-apps/default.nix              |  384 +++++++++++++++++++++++++++++++++++++++
+ overlay/asteroidos/community-apps/default.nix              |  447 +++++++++++++++++++++++++++++++++++++++
  ...asteroidos/community-apps/map-comaps-improvements.patch |  814 ++++++++++++++++++++++++++++++++++++++++++
  overlay/asteroidos/community-apps/weatherfetch-gcc16.patch |   11 +++++++
  overlay/asteroidos/default.nix                             |    6 +++++
-5 files changed, 1664 insertions(+)
+5 files changed, 1727 insertions(+)
 
 diff --git a/overlay/asteroidos/community-apps/beatfork-tack-improvements.patch b/overlay/asteroidos/community-apps/beatfork-tack-improvements.patch
 new file mode 100644
@@ -469,13 +469,21 @@ index 00000000..3887693a
 +         function onCurrentIndexChanged() {
 diff --git a/overlay/asteroidos/community-apps/default.nix b/overlay/asteroidos/community-apps/default.nix
 new file mode 100644
-index 0000000000000000000000000000000000000000..27c88d9c269f48816842d95b56299f064c301b1b
+index 00000000..835aa49f
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/default.nix
-@@ -0,0 +1,384 @@
+@@ -0,0 +1,447 @@
 +{
 +  lib,
 +  stdenv,
++  stdenvNoCC,
++  makeWrapper,
++  coreutils,
++  gawk,
++  gnugrep,
++  iproute2,
++  curl,
++  openssh,
 +  fetchFromGitHub,
 +  qt6,
 +  mkAsteroidApp,
@@ -701,15 +709,70 @@ index 0000000000000000000000000000000000000000..27c88d9c269f48816842d95b56299f06
 +    };
 +  };
 +
-+  # Solar elevation and daylight tracker: https://github.com/moWerk/asteroid-heliograph
++  wanze = stdenvNoCC.mkDerivation {
++    pname = "a-d-b-wanze";
++    version = "unstable-2026-10-31";
++
++    src = fetchFromGitHub {
++      owner = "moWerk";
++      repo = "a-d-b-wanze";
++      rev = "56a8b0113f355adfa139898455df70e57a17fbce";
++      hash = "sha256-zUez/ET820wC6Lg72V8bDVJPGhdcgTUKHBApVk/CUz0=";
++    };
++
++    nativeBuildInputs = [ makeWrapper ];
++    dontBuild = true;
++
++    installPhase = ''
++      runHook preInstall
++      install -Dm755 src/wanze-sample $out/bin/wanze-sample
++      patchShebangs $out/bin/wanze-sample
++      wrapProgram $out/bin/wanze-sample \
++        --prefix PATH : ${
++          lib.makeBinPath [
++            coreutils
++            gawk
++            gnugrep
++            iproute2
++            curl
++            openssh
++          ]
++        }
++      install -Dm644 src/wanze.service $out/lib/systemd/system/wanze.service
++      install -Dm644 src/wanze.timer $out/lib/systemd/system/wanze.timer
++      substituteInPlace $out/lib/systemd/system/wanze.service \
++        --replace-fail /usr/bin/wanze-sample $out/bin/wanze-sample
++      runHook postInstall
++    '';
++
++    doInstallCheck = stdenv.buildPlatform.canExecute stdenv.hostPlatform;
++    installCheckPhase = ''
++      runHook preInstallCheck
++      export WANZE_LOG="$TMPDIR/wanze-check.csv"
++      export WANZE_UPLOAD_TO=""
++      $out/bin/wanze-sample
++      awk -F, 'NF != 19 { exit 1 } END { if (NR != 2) exit 1 }' "$WANZE_LOG"
++      runHook postInstallCheck
++    '';
++
++    meta = with lib; {
++      description = "Battery and sleep telemetry sampler for AsteroidOS watches";
++      homepage = "https://github.com/moWerk/a-d-b-wanze";
++      license = licenses.gpl3Plus;
++      mainProgram = "wanze-sample";
++      platforms = platforms.linux;
++    };
++  };
++
++  # Scrolling text banner: https://github.com/moWerk/asteroid-heliograph
 +  heliograph = mkAsteroidApp {
 +    name = "heliograph";
 +    owner = "moWerk";
-+    desc = "Solar elevation, daylight tracker, and sundial calculator for smartwatches";
++    desc = "Scrolling text messages and light banners for smartwatches";
 +    rev = "612fd6b1e9229cbacb5f724bc21e239cd034f632";
 +    hash = "sha256-iBjuE2A8i/CK6wf0EOFNwB2mRrAl1cPyfltIJ5xwcIY=";
 +    extraBuildInputs = [
-+      qt6.qtpositioning
++      qt6.qtsensors
 +    ];
 +  };
 +

@@ -5,10 +5,10 @@ Subject: [PATCH] examples: add AsteroidOS desktop and smartwatch system
 
 ---
  devices/fossil-hoki/mce-keep-aod.patch |  25 +
- examples/asteroid/asteroid-desktop.nix | 992 +++++++++++++++++++++++++
+ examples/asteroid/asteroid-desktop.nix | 996 +++++++++++++++++++++++++
  examples/asteroid/configuration.nix    |  43 ++
  examples/asteroid/default.nix          |  15 +
- 4 files changed, 1075 insertions(+)
+ 4 files changed, 1079 insertions(+)
  create mode 100644 devices/fossil-hoki/mce-keep-aod.patch
  create mode 100644 examples/asteroid/asteroid-desktop.nix
  create mode 100644 examples/asteroid/configuration.nix
@@ -117,10 +117,10 @@ index 00000000..5eca754f
 +)
 diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
 new file mode 100644
-index 00000000..169cc214
+index 00000000..ad47f319
 --- /dev/null
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -0,0 +1,992 @@
+@@ -0,0 +1,996 @@
 +{
 +  config,
 +  lib,
@@ -310,6 +310,7 @@ index 00000000..169cc214
 +          asteroid.community-apps.beatfork
 +          asteroid.community-apps.benchymark
 +          asteroid.community-apps.docking-bay
++          asteroid.community-apps.wanze
 +          asteroid.community-apps.heliograph
 +          asteroid.community-apps.horizon
 +          asteroid.community-apps.meteormatch
@@ -322,6 +323,9 @@ index 00000000..169cc214
 +          asteroid.community-apps.neofetch
 +          tree
 +        ]);
++
++      # Install the probe units without scheduling telemetry automatically.
++      systemd.packages = [ pkgs.asteroid.community-apps.wanze ];
 +
 +      # systemd 257 defaults DefaultIPAccounting=yes, which tries to set up BPF
 +      # firewall maps. Linux 4.14 (vendor watch kernels) rejects that and floods
