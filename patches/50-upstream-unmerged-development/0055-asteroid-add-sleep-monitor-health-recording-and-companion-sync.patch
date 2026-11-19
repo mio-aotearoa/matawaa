@@ -1,0 +1,1261 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Fri, 20 Nov 2026 10:36:04 +1100
+Subject: [PATCH 1/1] asteroid: add sleep monitor, health recording, and
+ companion sync
+
+---
+ examples/asteroid/asteroid-desktop.nix        |  14 +
+ overlay/asteroidos/community-apps/default.nix |   6 +
+ .../community-apps/health-sleep-monitor.patch | 402 +++++++++
+ .../sensorlogd-sleep-monitor.patch            | 783 ++++++++++++++++++
+ 4 files changed, 1205 insertions(+)
+ create mode 100644 overlay/asteroidos/community-apps/health-sleep-monitor.patch
+ create mode 100644 overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
+
+diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
+index 61225458..6defac30 100644
+--- a/examples/asteroid/asteroid-desktop.nix
++++ b/examples/asteroid/asteroid-desktop.nix
+@@ -708,6 +708,20 @@ in
+         LD_LIBRARY_PATH = "${pkgs.libhybris}/lib:${pkgs.asteroid.libconnman-qt}/lib";
+       };
+ 
++      # Background health/sleep/steps/HR sensor logger user daemon.
++      systemd.user.services.asteroid-sensorlogd = {
++        description = "AsteroidOS sensor logger (HR, steps, sleep)";
++        wantedBy = [ "default.target" ];
++        requires = [ "dbus.socket" ];
++        after = [ "dbus.socket" ];
++        unitConfig.ConditionUser = "!root";
++        serviceConfig = {
++          ExecStart = "${pkgs.asteroid.community-apps.sensorlogd}/bin/sensorlogd";
++          Restart = "on-failure";
++          RestartSec = 5;
++        };
++      };
++
+       # Upstream asteroid-alarmclock installs share/systemd/user/alarmpresenter.service
+       # plus the com.nokia.voland D-Bus activation file; expose the same user
+       # service so Nemo.Alarms can present firing alarms on demand when the
+diff --git a/overlay/asteroidos/community-apps/default.nix b/overlay/asteroidos/community-apps/default.nix
+index 835aa49f..4f895595 100644
+--- a/overlay/asteroidos/community-apps/default.nix
++++ b/overlay/asteroidos/community-apps/default.nix
+@@ -75,6 +75,9 @@ rec {
+     desc = "Background sensor logging daemon and QML plugin for health metrics on AsteroidOS";
+     rev = "bdc9f0bb0fd6ef39f08fb01697d95cb2b98c86b6";
+     hash = "sha256-MQclAo5GOxRDbieuz21GCRvpfnWuWj+TTFijSR6qZdE=";
++    patches = [
++      ./sensorlogd-sleep-monitor.patch
++    ];
+     # The wearable sensor types (QHrmSensor, QStepCounterSensor, …) come from
+     # Qt Sensors itself: the upstream AsteroidOS patches are applied to
+     # qt6.qtsensors in overlay/cross-compile.nix. No in-tree mock headers here.
+@@ -90,6 +93,9 @@ rec {
+     desc = "Step counter, heart rate monitor, and wellness tracker for AsteroidOS";
+     rev = "c85390fb9dd643f9b58e73bf698833ed7727b89f";
+     hash = "sha256-eI7d2+Mu+ayh2TQvO7Gzl6lIw8yLAm7h8EZtTRLwaM4=";
++    patches = [
++      ./health-sleep-monitor.patch
++    ];
+     extraBuildInputs = [
+       qt6.qtsensors
+       mlite
+diff --git a/overlay/asteroidos/community-apps/health-sleep-monitor.patch b/overlay/asteroidos/community-apps/health-sleep-monitor.patch
+new file mode 100644
+index 00000000..f40ad51f
+--- /dev/null
++++ b/overlay/asteroidos/community-apps/health-sleep-monitor.patch
+@@ -0,0 +1,402 @@
++diff --git a/src/main.qml b/src/main.qml
++index 5d53eb8..89df7d4 100644
++--- a/src/main.qml
+++++ b/src/main.qml
++@@ -26,6 +26,7 @@ import "graphs"
++ import "settings"
++ import "stepCounter"
++ import "heartrate"
+++import "sleep"
++ import "weight"
++ 
++ Application {
++@@ -71,6 +72,13 @@ Application {
++                             visible: hrPreviewVisible.value
++                         }
++ 
+++                        Item { width: parent.width; height: parent.width*0.1; visible: sleepPreviewVisible.value}
+++
+++                        SleepPreview {
+++                            width: parent.width
+++                            visible: sleepPreviewVisible.value
+++                        }
+++
++                         Item { width: parent.width; height: parent.width*0.1; visible: weightPreviewVisible.value}
++ 
++                         WeightPreview {
++@@ -101,6 +109,11 @@ Application {
++         key: "/org/asteroidos/health/ui/heartrate/showpreview"
++         defaultValue: true
++     }
+++    ConfigurationValue {
+++        id: sleepPreviewVisible
+++        key: "/org/asteroidos/health/ui/sleep/showpreview"
+++        defaultValue: true
+++    }
++     ConfigurationValue {
++         id: weightPreviewVisible
++         key: "/org/asteroidos/health/ui/weight/showpreview"
++diff --git a/src/resources.qrc b/src/resources.qrc
++index 6bdcff7..32d140c 100644
++--- a/src/resources.qrc
+++++ b/src/resources.qrc
++@@ -7,6 +7,8 @@
++         <file>heartrate/HeartratePreview.qml</file>
++         <file>heartrate/HeartrateDetailPage.qml</file>
++         <file>heartrate/HrGraph.qml</file>
+++        <file>sleep/SleepPreview.qml</file>
+++        <file>sleep/SleepDetailPage.qml</file>
++         <file>weight/WeightPreview.qml</file>
++         <file>weight/WeightDetailPage.qml</file>
++         <file>weight/WeightGraph.qml</file>
++diff --git a/src/settings/LoggerSettingsPage.qml b/src/settings/LoggerSettingsPage.qml
++index aa05d44..3af75e1 100644
++--- a/src/settings/LoggerSettingsPage.qml
+++++ b/src/settings/LoggerSettingsPage.qml
++@@ -90,6 +90,23 @@ Item {
++                 stepSize: 1
++                 unitMarker: "m"
++             }
+++            LabeledSwitch {
+++                id: sleepEnableSwitch
+++                width: parent.width
+++                height: width*0.25
+++                text: "Monitor sleep"
+++                Component.onCompleted: checked = loggerSettings.sleepMonitorEnabled
+++            }
+++            IntSelector {
+++                id: sleepGoalSelector
+++                width: parent.width
+++                height: width*0.25
+++                value: Math.round(loggerSettings.sleepGoalMinutes / 60)
+++                min: 4
+++                max: 12
+++                stepSize: 1
+++                unitMarker: "h"
+++            }
++             IconButton {
++                 iconName: "ios-checkmark-circle-outline"
++                 height: parent.width*0.2
++@@ -102,6 +119,8 @@ Item {
++                     loggerSettings.stepGoalTarget = stepsGoalSelector.value
++                     loggerSettings.heartrateSensorEnabled = hrEnableSwitch.checked
++                     loggerSettings.heartrateSensorInterval = hrIntervalSelector.value*60000
+++                    loggerSettings.sleepMonitorEnabled = sleepEnableSwitch.checked
+++                    loggerSettings.sleepGoalMinutes = sleepGoalSelector.value*60
++                     loggerSettings.reInitLogger()
++                     pageStack.pop(pageStack.currentLayer)
++                 }
++diff --git a/src/settings/UiSettingsPage.qml b/src/settings/UiSettingsPage.qml
++index 55dbb3d..1a51c09 100644
++--- a/src/settings/UiSettingsPage.qml
+++++ b/src/settings/UiSettingsPage.qml
++@@ -52,6 +52,13 @@ Item {
++                 checked: hrPreviewVisible.value
++                 onCheckedChanged: hrPreviewVisible.value = checked
++             }
+++            LabeledSwitch {
+++                width: parent.width
+++                height: width*0.25
+++                text: "Show sleep preview"
+++                checked: sleepPreviewVisible.value
+++                onCheckedChanged: sleepPreviewVisible.value = checked
+++            }
++             LabeledSwitch {
++                 width: parent.width
++                 height: width*0.25
++@@ -74,6 +81,11 @@ Item {
++         key: "/org/asteroidos/health/ui/heartrate/showpreview"
++         defaultValue: true
++     }
+++    ConfigurationValue {
+++        id: sleepPreviewVisible
+++        key: "/org/asteroidos/health/ui/sleep/showpreview"
+++        defaultValue: true
+++    }
++     ConfigurationValue {
++         id: weightPreviewVisible
++         key: "/org/asteroidos/health/ui/weight/showpreview"
++diff --git a/src/sleep/SleepDetailPage.qml b/src/sleep/SleepDetailPage.qml
++new file mode 100644
++index 0000000..248fe11
++--- /dev/null
+++++ b/src/sleep/SleepDetailPage.qml
++@@ -0,0 +1,161 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++import QtQuick
+++import org.asteroid.controls
+++import org.asteroid.sensorlogd
+++
+++Item {
+++    id: root
+++    property date currentDate: new Date()
+++    property var summary: ({ hasData: false, totalMinutes: 0, deepMinutes: 0, lightMinutes: 0, remMinutes: 0, awakeMinutes: 0, sleepScore: 0, bedtime: "--:--", wakeTime: "--:--", timeline: [] })
+++
+++    SleepDataLoader {
+++        id: sleepDataLoader
+++        onDataChanged: root.refresh()
+++    }
+++
+++    function refresh() {
+++        summary = sleepDataLoader.getSleepSummary(currentDate)
+++    }
+++
+++    function formatDuration(mins) {
+++        var h = Math.floor(mins / 60)
+++        var m = mins % 60
+++        return h + "h " + m + "m"
+++    }
+++
+++    function stageColor(stage) {
+++        if (stage === 2) return "#2E6BFF" // Deep
+++        if (stage === 1) return "#33B5E5" // Light
+++        if (stage === 3) return "#AA66CC" // REM
+++        return "#FF8800"                  // Awake
+++    }
+++
+++    function stageHeightRatio(stage) {
+++        if (stage === 2) return 1.0
+++        if (stage === 1) return 0.68
+++        if (stage === 3) return 0.45
+++        return 0.22
+++    }
+++
+++    Component.onCompleted: refresh()
+++
+++    PageHeader {
+++        text: "Sleep"
+++        z: 5
+++    }
+++
+++    Flickable {
+++        anchors.fill: parent
+++        contentHeight: contentColumn.implicitHeight
+++
+++        Column {
+++            id: contentColumn
+++            width: parent.width
+++            spacing: app.height * 0.03
+++
+++            Item { width: parent.width; height: parent.width * 0.22 }
+++
+++            Label {
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                text: Qt.formatDate(currentDate, "ddd, MMM d")
+++                font.pixelSize: app.height * 0.05
+++                opacity: 0.75
+++            }
+++
+++            Label {
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                text: summary.hasData ? formatDuration(summary.totalMinutes) : "No sleep recorded"
+++                font.pixelSize: app.height * 0.1
+++                font.bold: true
+++            }
+++
+++            Label {
+++                visible: summary.hasData
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                text: "Score " + summary.sleepScore + "  \u2022  " + summary.bedtime + " \u2192 " + summary.wakeTime
+++                font.pixelSize: app.height * 0.048
+++                color: "#66E0FF"
+++            }
+++
+++            // Sleep hypnogram timeline
+++            Rectangle {
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                width: parent.width * 0.84
+++                height: app.height * 0.24
+++                radius: 12
+++                color: "#111A22"
+++                clip: true
+++
+++                Row {
+++                    anchors.fill: parent
+++                    anchors.margins: 6
+++                    spacing: 2
+++                    Repeater {
+++                        model: summary.timeline ? summary.timeline.length : 0
+++                        delegate: Item {
+++                            width: Math.max(2, (parent.width - (summary.timeline.length - 1) * 2) / summary.timeline.length)
+++                            height: parent.height
+++                            Rectangle {
+++                                width: parent.width
+++                                height: parent.height * stageHeightRatio(summary.timeline[index].stage)
+++                                anchors.bottom: parent.bottom
+++                                radius: 2
+++                                color: stageColor(summary.timeline[index].stage)
+++                            }
+++                        }
+++                    }
+++                }
+++            }
+++
+++            // Stage breakdown
+++            Column {
+++                visible: summary.hasData
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                width: parent.width * 0.82
+++                spacing: app.height * 0.015
+++
+++                Label { text: "Deep: " + formatDuration(summary.deepMinutes); color: "#6699FF"; font.pixelSize: app.height * 0.045 }
+++                Label { text: "Light: " + formatDuration(summary.lightMinutes); color: "#33B5E5"; font.pixelSize: app.height * 0.045 }
+++                Label { text: "REM: " + formatDuration(summary.remMinutes); color: "#CC88EE"; font.pixelSize: app.height * 0.045 }
+++                Label { text: "Awake: " + formatDuration(summary.awakeMinutes); color: "#FFAA44"; font.pixelSize: app.height * 0.045 }
+++            }
+++
+++            Row {
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                spacing: app.width * 0.08
+++                IconButton {
+++                    iconName: "ios-arrow-back"
+++                    onClicked: {
+++                        var d = new Date(currentDate.getTime())
+++                        d.setDate(d.getDate() - 1)
+++                        currentDate = d
+++                        refresh()
+++                    }
+++                }
+++                IconButton {
+++                    iconName: "ios-refresh"
+++                    onClicked: sleepDataLoader.triggerDaemonRecording()
+++                }
+++                IconButton {
+++                    iconName: "ios-arrow-forward"
+++                    onClicked: {
+++                        var d = new Date(currentDate.getTime())
+++                        d.setDate(d.getDate() + 1)
+++                        currentDate = d
+++                        refresh()
+++                    }
+++                }
+++            }
+++
+++            Item { width: parent.width; height: parent.width * 0.18 }
+++        }
+++    }
+++}
++diff --git a/src/sleep/SleepPreview.qml b/src/sleep/SleepPreview.qml
++new file mode 100644
++index 0000000..513a7e3
++--- /dev/null
+++++ b/src/sleep/SleepPreview.qml
++@@ -0,0 +1,111 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++import QtQuick
+++import org.asteroid.controls
+++import org.asteroid.sensorlogd
+++
+++MouseArea {
+++    id: root
+++    implicitHeight: contentColumn.implicitHeight
+++
+++    property var summary: ({ hasData: false, totalMinutes: 0, deepMinutes: 0, lightMinutes: 0, remMinutes: 0, awakeMinutes: 0, sleepScore: 0, bedtime: "--:--", wakeTime: "--:--" })
+++
+++    SleepDataLoader {
+++        id: sleepDataLoader
+++        onDataChanged: root.refresh()
+++    }
+++
+++    function refresh() {
+++        summary = sleepDataLoader.getLastNightSummary()
+++    }
+++
+++    function formatDuration(mins) {
+++        var h = Math.floor(mins / 60)
+++        var m = mins % 60
+++        return h + "h " + m + "m"
+++    }
+++
+++    Component.onCompleted: refresh()
+++
+++    Column {
+++        id: contentColumn
+++        width: parent.width
+++        spacing: app.width * 0.03
+++
+++        Label {
+++            anchors {
+++                left: parent.left
+++                margins: app.width * 0.1
+++            }
+++            text: "Sleep"
+++        }
+++
+++        Row {
+++            anchors {
+++                left: parent.left
+++                right: parent.right
+++                margins: app.width * 0.1
+++            }
+++            spacing: app.width * 0.05
+++
+++            Label {
+++                text: summary.hasData ? formatDuration(summary.totalMinutes) : "No data"
+++                font.pixelSize: app.height * 0.09
+++                font.bold: true
+++            }
+++
+++            Label {
+++                visible: summary.hasData
+++                anchors.verticalCenter: parent.verticalCenter
+++                text: "Score " + summary.sleepScore
+++                font.pixelSize: app.height * 0.055
+++                color: "#66E0FF"
+++            }
+++        }
+++
+++        Rectangle {
+++            visible: summary.hasData && summary.totalMinutes > 0
+++            anchors {
+++                left: parent.left
+++                right: parent.right
+++                margins: app.width * 0.1
+++            }
+++            height: app.height * 0.045
+++            radius: height / 2
+++            color: "#1A2A33"
+++            clip: true
+++
+++            Row {
+++                anchors.fill: parent
+++                Rectangle {
+++                    height: parent.height
+++                    width: summary.totalMinutes > 0 ? parent.width * (summary.deepMinutes / summary.totalMinutes) : 0
+++                    color: "#2E6BFF"
+++                }
+++                Rectangle {
+++                    height: parent.height
+++                    width: summary.totalMinutes > 0 ? parent.width * (summary.lightMinutes / summary.totalMinutes) : 0
+++                    color: "#33B5E5"
+++                }
+++                Rectangle {
+++                    height: parent.height
+++                    width: summary.totalMinutes > 0 ? parent.width * (summary.remMinutes / summary.totalMinutes) : 0
+++                    color: "#AA66CC"
+++                }
+++            }
+++        }
+++    }
+++
+++    onClicked: pageStack.push(detailPage)
+++    Component {
+++        id: detailPage
+++        SleepDetailPage {}
+++    }
+++}
+diff --git a/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
+new file mode 100644
+index 00000000..c79f318b
+--- /dev/null
++++ b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
+@@ -0,0 +1,783 @@
++diff --git a/daemon/CMakeLists.txt b/daemon/CMakeLists.txt
++index 432122b..fe45e2f 100644
++--- a/daemon/CMakeLists.txt
+++++ b/daemon/CMakeLists.txt
++@@ -9,6 +9,8 @@ add_executable(
++     sensorPlugins/heartrateSensor.h
++     sensorPlugins/barometerSensor.cpp
++     sensorPlugins/barometerSensor.h
+++    sensorPlugins/sleepMonitor.cpp
+++    sensorPlugins/sleepMonitor.h
++     ../common.cpp
++     ../common.h
++ )
++diff --git a/daemon/logger.cpp b/daemon/logger.cpp
++index e9fefdb..8c284d5 100644
++--- a/daemon/logger.cpp
+++++ b/daemon/logger.cpp
++@@ -18,6 +18,9 @@
++ #include <QTimer>
++ #include <QDebug>
++ #include <QStandardPaths>
+++#include <QDBusMessage>
+++#include <QJsonDocument>
+++#include <QJsonObject>
++ 
++ #include "logger.h"
++ #include "../common.h"
++@@ -25,6 +28,7 @@
++ #include "sensorPlugins/stepCounter.h"
++ #include "sensorPlugins/heartrateSensor.h"
++ #include "sensorPlugins/barometerSensor.h"
+++#include "sensorPlugins/sleepMonitor.h"
++ 
++ Logger::Logger(QObject *parent)  :
++     QObject(parent){
++@@ -41,10 +45,12 @@ void Logger::setup() {
++     heartrateSensorEnabled = this->settings->value("heartrateSensor/enabled",true).toBool();
++     stepCounterEnabled = this->settings->value("stepCounter/enabled",true).toBool();
++     barometerEnabled = this->settings->value("barometer/enabled",true).toBool();
+++    sleepMonitorEnabled = this->settings->value("sleepMonitor/enabled",true).toBool();
++ 
++ //intialise HRM
++     if (heartrateSensorEnabled) {
++         m_heartrateSensor = new HeartrateSensorPlugin(this,settings->value("heartrateSensor/interval",600000).toInt());
+++        connect(m_heartrateSensor, &HeartrateSensorPlugin::recordWritten, this, &Logger::syncHealthSummary);
++     }
++ 
++ //initialise step counter
++@@ -57,6 +63,12 @@ void Logger::setup() {
++         m_barometerSensor = new BarometerSensorPlugin(this,settings->value("barometer/interval",600000).toInt());
++     }
++ 
+++//initialise sleep monitor
+++    if (sleepMonitorEnabled) {
+++        m_sleepMonitor = new SleepMonitorPlugin(this,settings->value("sleepMonitor/interval",300000).toInt());
+++        connect(m_sleepMonitor, &SleepMonitorPlugin::recordWritten, this, &Logger::syncHealthSummary);
+++    }
+++
++     if(!m_iface->isValid()) {
++ 	    qDebug() << "interface is not valid";
++ 	    qDebug() << m_iface->lastError();
++@@ -89,6 +101,10 @@ void Logger::displayOn(QString displayState) {
++     if (barometerEnabled) {
++         m_barometerSensor->timeUpdate();
++     }
+++
+++    if (sleepMonitorEnabled && m_sleepMonitor) {
+++        m_sleepMonitor->timeUpdate();
+++    }
++ }
++ 
++ void Logger::triggerRecording() {
++@@ -103,6 +119,44 @@ void Logger::triggerRecording() {
++     if (barometerEnabled) {
++         m_barometerSensor->triggerRecording();
++     }
+++
+++    if (sleepMonitorEnabled && m_sleepMonitor) {
+++        m_sleepMonitor->triggerRecording();
+++    }
+++}
+++
+++void Logger::syncHealthSummary() {
+++    auto lastVal = [](const QString &prefix) -> QString {
+++        QFile f(fileNameForDate(QDate::currentDate(), prefix));
+++        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+++        QString last;
+++        QTextStream in(&f);
+++        while (!in.atEnd()) {
+++            const QString line = in.readLine().trimmed();
+++            if (!line.isEmpty()) last = line;
+++        }
+++        return last;
+++    };
+++
+++    QJsonObject obj;
+++    obj.insert(QStringLiteral("date"), QDate::currentDate().toString(Qt::ISODate));
+++    obj.insert(QStringLiteral("updated"), QDateTime::currentSecsSinceEpoch());
+++    const QString hr = lastVal(QStringLiteral("heartrateMonitor"));
+++    if (!hr.isEmpty()) obj.insert(QStringLiteral("latestHr"), hr);
+++    const QString steps = lastVal(QStringLiteral("stepCounter"));
+++    if (!steps.isEmpty()) obj.insert(QStringLiteral("latestSteps"), steps);
+++    const QString sleep = lastVal(QStringLiteral("sleepMonitor"));
+++    if (!sleep.isEmpty()) obj.insert(QStringLiteral("latestSleep"), sleep);
+++
+++    QDBusMessage msg = QDBusMessage::createMethodCall(
+++        QStringLiteral("org.asteroidos.btsyncd"),
+++        QStringLiteral("/org/asteroidos/btsyncd/appbridge"),
+++        QStringLiteral("org.asteroidos.btsyncd.AppBridge"),
+++        QStringLiteral("putDataItem"));
+++    msg << QStringLiteral("org.asteroidos.health")
+++        << QStringLiteral("/summary/today")
+++        << QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+++    QDBusConnection::systemBus().asyncCall(msg);
++ }
++ 
++ bool Logger::getDaemonFresh() {
++diff --git a/daemon/logger.h b/daemon/logger.h
++index 69affda..38afe21 100644
++--- a/daemon/logger.h
+++++ b/daemon/logger.h
++@@ -23,6 +23,7 @@
++ #include "sensorPlugins/stepCounter.h"
++ #include "sensorPlugins/heartrateSensor.h"
++ #include "sensorPlugins/barometerSensor.h"
+++#include "sensorPlugins/sleepMonitor.h"
++ 
++ class Logger : public QObject
++ {
++@@ -36,15 +37,18 @@ public slots:
++     void triggerRecording();
++ private slots:
++     void displayOn(QString displayState);
+++    void syncHealthSummary();
++ 
++ private:
++     QDBusInterface *m_iface;
++     bool heartrateSensorEnabled = false;
++-    HeartrateSensorPlugin *m_heartrateSensor;
+++    HeartrateSensorPlugin *m_heartrateSensor = nullptr;
++     bool stepCounterEnabled = false;
++-    StepCounterPlugin *m_stepCounter;
+++    StepCounterPlugin *m_stepCounter = nullptr;
++     bool barometerEnabled = false;
++-    BarometerSensorPlugin *m_barometerSensor;
+++    BarometerSensorPlugin *m_barometerSensor = nullptr;
+++    bool sleepMonitorEnabled = false;
+++    SleepMonitorPlugin *m_sleepMonitor = nullptr;
++     bool daemonFresh;
++     QSettings *settings;
++     bool getDaemonFresh();
++diff --git a/daemon/sensorPlugins/heartrateSensor.cpp b/daemon/sensorPlugins/heartrateSensor.cpp
++index d03703c..bf53370 100644
++--- a/daemon/sensorPlugins/heartrateSensor.cpp
+++++ b/daemon/sensorPlugins/heartrateSensor.cpp
++@@ -34,6 +34,11 @@ HeartrateSensorPlugin::HeartrateSensorPlugin(QObject *parent, int initInterval)
++     connect(recordIntervalTimer,SIGNAL(timeout()),this,SLOT(triggerRecording()));
++     recordIntervalTimer->setSingleShot(true);
++     recordIntervalTimer->start(interval);
+++
+++    acquireTimeoutTimer = new QTimer(this);
+++    acquireTimeoutTimer->setSingleShot(true);
+++    connect(acquireTimeoutTimer, &QTimer::timeout, this, &HeartrateSensorPlugin::onTimeout);
+++
++     lastRecordTime = QDateTime::currentDateTime();
++ }
++ 
++@@ -51,9 +56,17 @@ void HeartrateSensorPlugin::timeUpdate() {
++ void HeartrateSensorPlugin::triggerRecording() {
++     qDebug() << "heartrate interval recording";
++     recordIntervalTimer->start(interval);
+++    acquireTimeoutTimer->start(30000);
++     hrmSensor->start();
++ }
++ 
+++void HeartrateSensorPlugin::onTimeout() {
+++    if (hrmSensor->isActive()) {
+++        qDebug() << "hrm sensor acquisition timed out (off-wrist?)";
+++        hrmSensor->stop();
+++    }
+++}
+++
++ void HeartrateSensorPlugin::finishRecording() {
++     qDebug() << "bpm update received";
++     int bpm = hrmSensor->reading()->bpm();
++@@ -62,6 +75,8 @@ void HeartrateSensorPlugin::finishRecording() {
++         qDebug() << "hrm sensor accuracy insufficient. waiting.";
++         return;
++     }
+++    acquireTimeoutTimer->stop();
++     fileAddRecord(sensorPathPrefix,QString::number(bpm));
++     hrmSensor->stop();
+++    emit recordWritten();
++ }
++diff --git a/daemon/sensorPlugins/heartrateSensor.h b/daemon/sensorPlugins/heartrateSensor.h
++index 7788d7e..1770faa 100644
++--- a/daemon/sensorPlugins/heartrateSensor.h
+++++ b/daemon/sensorPlugins/heartrateSensor.h
++@@ -30,13 +30,18 @@ public:
++ public slots:
++     void triggerRecording();
++ 
+++signals:
+++    void recordWritten();
+++
++ private slots:
++     void finishRecording();
+++    void onTimeout();
++ 
++ private:
++     QDateTime lastRecordTime;
++     int interval;
++     QTimer *recordIntervalTimer;
+++    QTimer *acquireTimeoutTimer;
++     QHrmSensor *hrmSensor;
++ 
++     const QString sensorPathPrefix = "heartrateMonitor";
++diff --git a/daemon/sensorPlugins/sleepMonitor.cpp b/daemon/sensorPlugins/sleepMonitor.cpp
++new file mode 100644
++index 0000000..a51c9ad
++--- /dev/null
+++++ b/daemon/sensorPlugins/sleepMonitor.cpp
++@@ -0,0 +1,156 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++#include "sleepMonitor.h"
+++#include "../../common.h"
+++
+++#include <QDebug>
+++#include <QtMath>
+++
+++SleepMonitorPlugin::SleepMonitorPlugin(QObject *parent, int initInterval)
+++    : QObject(parent)
+++    , interval(qMax(60000, initInterval))
+++{
+++    accelSensor = new QAccelerometer(this);
+++    stepSensor = new QStepCounterSensor(this);
+++    hrmSensor = new QHrmSensor(this);
+++    connect(hrmSensor, &QHrmSensor::readingChanged, this, &SleepMonitorPlugin::onHrmChanged);
+++
+++    setupFilePath(sensorPathPrefix);
+++
+++    recordIntervalTimer = new QTimer(this);
+++    recordIntervalTimer->setSingleShot(true);
+++    connect(recordIntervalTimer, &QTimer::timeout, this, &SleepMonitorPlugin::triggerRecording);
+++    recordIntervalTimer->start(interval);
+++
+++    sampleWindowTimer = new QTimer(this);
+++    sampleWindowTimer->setSingleShot(true);
+++    connect(sampleWindowTimer, &QTimer::timeout, this, &SleepMonitorPlugin::finalizeEpoch);
+++
+++    accelSampleTimer = new QTimer(this);
+++    accelSampleTimer->setInterval(150);
+++    connect(accelSampleTimer, &QTimer::timeout, this, &SleepMonitorPlugin::sampleAccel);
+++
+++    lastRecordTime = QDateTime::currentDateTime();
+++    qDebug() << "sleep monitor is enabled. interval (ms):" << interval;
+++}
+++
+++void SleepMonitorPlugin::timeUpdate()
+++{
+++    const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - lastRecordTime.toMSecsSinceEpoch();
+++    if (elapsed >= interval) {
+++        triggerRecording();
+++    } else {
+++        recordIntervalTimer->start(static_cast<int>(interval - elapsed));
+++    }
+++}
+++
+++void SleepMonitorPlugin::triggerRecording()
+++{
+++    recordIntervalTimer->start(interval);
+++    if (samplingActive) {
+++        return;
+++    }
+++
+++    samplingActive = true;
+++    magSamples.clear();
+++    latestBpm = 0;
+++
+++    if (stepSensor->start()) {
+++        if (auto *sr = stepSensor->reading()) {
+++            epochStartSteps = sr->steps();
+++        }
+++    }
+++    accelSensor->start();
+++    hrmSensor->start();
+++
+++    accelSampleTimer->start();
+++    // 4-second actigraphy + HR sampling window
+++    sampleWindowTimer->start(4000);
+++}
+++
+++void SleepMonitorPlugin::sampleAccel()
+++{
+++    if (!accelSensor->isActive()) {
+++        return;
+++    }
+++    if (auto *r = accelSensor->reading()) {
+++        const double mag = qSqrt(r->x() * r->x() + r->y() * r->y() + r->z() * r->z());
+++        magSamples.append(mag);
+++    }
+++}
+++
+++void SleepMonitorPlugin::onHrmChanged()
+++{
+++    if (auto *r = hrmSensor->reading()) {
+++        if (r->bpm() > 25 && hrmSensor->status() >= 3) {
+++            latestBpm = r->bpm();
+++        }
+++    }
+++}
+++
+++void SleepMonitorPlugin::finalizeEpoch()
+++{
+++    accelSampleTimer->stop();
+++    accelSensor->stop();
+++    hrmSensor->stop();
+++
+++    int stepsDelta = 0;
+++    if (stepSensor->isActive()) {
+++        if (auto *sr = stepSensor->reading()) {
+++            const int curSteps = sr->steps();
+++            if (lastStepCount >= 0 && curSteps >= lastStepCount) {
+++                stepsDelta = curSteps - lastStepCount;
+++            }
+++            lastStepCount = curSteps;
+++        }
+++        stepSensor->stop();
+++    }
+++
+++    // Compute mean absolute deviation of acceleration magnitude (m/s^2)
+++    double motionVar = 0.0;
+++    if (magSamples.size() >= 2) {
+++        double mean = 0.0;
+++        for (double v : magSamples) {
+++            mean += v;
+++        }
+++        mean /= magSamples.size();
+++        double mad = 0.0;
+++        for (double v : magSamples) {
+++            mad += qAbs(v - mean);
+++        }
+++        motionVar = mad / magSamples.size();
+++    }
+++
+++    // Update resting HR baseline during low-motion epochs
+++    if (latestBpm > 25 && motionVar < 0.25 && stepsDelta == 0) {
+++        restingBpmEma = restingBpmEma * 0.9 + static_cast<double>(latestBpm) * 0.1;
+++    }
+++
+++    SleepStage stage = Awake;
+++    if (stepsDelta > 0 || motionVar >= 0.45) {
+++        stage = Awake;
+++    } else if (motionVar >= 0.08) {
+++        stage = LightSleep;
+++    } else if (latestBpm > 0 && static_cast<double>(latestBpm) > restingBpmEma + 6.0) {
+++        stage = RemSleep;
+++    } else {
+++        stage = DeepSleep;
+++    }
+++
+++    const int motionMilli = qRound(motionVar * 1000.0);
+++    const QString record = QStringLiteral("%1:%2:%3")
+++                               .arg(static_cast<int>(stage))
+++                               .arg(motionMilli)
+++                               .arg(latestBpm);
+++    fileAddRecord(sensorPathPrefix, record);
+++    lastRecordTime = QDateTime::currentDateTime();
+++    samplingActive = false;
+++    emit recordWritten();
+++}
++diff --git a/daemon/sensorPlugins/sleepMonitor.h b/daemon/sensorPlugins/sleepMonitor.h
++new file mode 100644
++index 0000000..c93bdd4
++--- /dev/null
+++++ b/daemon/sensorPlugins/sleepMonitor.h
++@@ -0,0 +1,69 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++#ifndef SLEEPMONITOR_H
+++#define SLEEPMONITOR_H
+++
+++#include <QDateTime>
+++#include <QObject>
+++#include <QTimer>
+++#include <QVector>
+++#include <QtSensors/QAccelerometer>
+++#include <QtSensors/QHrmSensor>
+++#include <QtSensors/QStepCounterSensor>
+++
+++class SleepMonitorPlugin : public QObject
+++{
+++    Q_OBJECT
+++public:
+++    enum SleepStage {
+++        Awake = 0,
+++        LightSleep = 1,
+++        DeepSleep = 2,
+++        RemSleep = 3
+++    };
+++
+++    explicit SleepMonitorPlugin(QObject *parent = nullptr, int initInterval = 300000);
+++    virtual ~SleepMonitorPlugin() = default;
+++
+++    void timeUpdate();
+++
+++public slots:
+++    void triggerRecording();
+++
+++signals:
+++    void recordWritten();
+++
+++private slots:
+++    void sampleAccel();
+++    void onHrmChanged();
+++    void finalizeEpoch();
+++
+++private:
+++    int interval = 300000;
+++    QDateTime lastRecordTime;
+++    QTimer *recordIntervalTimer = nullptr;
+++    QTimer *sampleWindowTimer = nullptr;
+++    QTimer *accelSampleTimer = nullptr;
+++
+++    QAccelerometer *accelSensor = nullptr;
+++    QStepCounterSensor *stepSensor = nullptr;
+++    QHrmSensor *hrmSensor = nullptr;
+++
+++    bool samplingActive = false;
+++    int lastStepCount = -1;
+++    int epochStartSteps = -1;
+++    int latestBpm = 0;
+++    double restingBpmEma = 62.0;
+++    QVector<double> magSamples;
+++
+++    const QString sensorPathPrefix = QStringLiteral("sleepMonitor");
+++};
+++
+++#endif // SLEEPMONITOR_H
++diff --git a/qmlplugin/CMakeLists.txt b/qmlplugin/CMakeLists.txt
++index bc2cac9..16ab5e7 100644
++--- a/qmlplugin/CMakeLists.txt
+++++ b/qmlplugin/CMakeLists.txt
++@@ -4,6 +4,7 @@ set(SRC
++     hrDataLoader.cpp
++     weightDataLoader.cpp
++     barometerDataLoader.cpp
+++    sleepDataLoader.cpp
++     loggerSettings.cpp
++     ../common.cpp
++ )
++@@ -14,6 +15,7 @@ SET(HEADERS
++     hrDataLoader.h
++     weightDataLoader.h
++     barometerDataLoader.h
+++    sleepDataLoader.h
++     loggerSettings.h
++     ../common.h
++ )
++diff --git a/qmlplugin/loggerSettings.cpp b/qmlplugin/loggerSettings.cpp
++index d7849c5..9b4abe4 100644
++--- a/qmlplugin/loggerSettings.cpp
+++++ b/qmlplugin/loggerSettings.cpp
++@@ -86,3 +86,33 @@ void LoggerSettings::setStepGoalTarget(int value)
++ {
++     this->m_settings->setValue("stepCounter/goal0/target", value);
++ }
+++
+++bool LoggerSettings::getSleepMonitorEnabled()
+++{
+++    return this->m_settings->value("sleepMonitor/enabled", true).toBool();
+++}
+++
+++void LoggerSettings::setSleepMonitorEnabled(bool value)
+++{
+++    this->m_settings->setValue("sleepMonitor/enabled", value);
+++}
+++
+++int LoggerSettings::getSleepMonitorInterval()
+++{
+++    return this->m_settings->value("sleepMonitor/interval", 300000).toInt();
+++}
+++
+++void LoggerSettings::setSleepMonitorInterval(int value)
+++{
+++    this->m_settings->setValue("sleepMonitor/interval", value);
+++}
+++
+++int LoggerSettings::getSleepGoalMinutes()
+++{
+++    return this->m_settings->value("sleepMonitor/goalMinutes", 480).toInt();
+++}
+++
+++void LoggerSettings::setSleepGoalMinutes(int value)
+++{
+++    this->m_settings->setValue("sleepMonitor/goalMinutes", value);
+++}
++diff --git a/qmlplugin/loggerSettings.h b/qmlplugin/loggerSettings.h
++index 6649756..52949aa 100644
++--- a/qmlplugin/loggerSettings.h
+++++ b/qmlplugin/loggerSettings.h
++@@ -26,6 +26,10 @@ class LoggerSettings : public QObject {
++     Q_PROPERTY(bool stepGoalEnabled READ getStepGoalEnabled WRITE setStepGoalEnabled)
++     Q_PROPERTY(int stepGoalTarget READ getStepGoalTarget WRITE setStepGoalTarget)
++ 
+++    Q_PROPERTY(bool sleepMonitorEnabled READ getSleepMonitorEnabled WRITE setSleepMonitorEnabled)
+++    Q_PROPERTY(int sleepMonitorInterval READ getSleepMonitorInterval WRITE setSleepMonitorInterval)
+++    Q_PROPERTY(int sleepGoalMinutes READ getSleepGoalMinutes WRITE setSleepGoalMinutes)
+++
++ public:
++     explicit LoggerSettings();
++ 
++@@ -46,6 +50,13 @@ public slots:
++     int getStepGoalTarget();
++     void setStepGoalTarget(int value);
++ 
+++    bool getSleepMonitorEnabled();
+++    void setSleepMonitorEnabled(bool value);
+++    int getSleepMonitorInterval();
+++    void setSleepMonitorInterval(int value);
+++    int getSleepGoalMinutes();
+++    void setSleepGoalMinutes(int value);
+++
++ private:
++     QSettings* m_settings;
++     QDBusInterface* m_iface;
++diff --git a/qmlplugin/sensorlogdqmlplugin.cpp b/qmlplugin/sensorlogdqmlplugin.cpp
++index 87147b0..d17e446 100644
++--- a/qmlplugin/sensorlogdqmlplugin.cpp
+++++ b/qmlplugin/sensorlogdqmlplugin.cpp
++@@ -14,6 +14,7 @@
++ #include "hrDataLoader.h"
++ #include "weightDataLoader.h"
++ #include "barometerDataLoader.h"
+++#include "sleepDataLoader.h"
++ #include <QtQml>
++ 
++ LogdPlugin::LogdPlugin(QObject* parent)
++@@ -28,5 +29,6 @@ void LogdPlugin::registerTypes(const char* uri)
++     qmlRegisterType<HrDataLoader>(uri, 1, 0, "HrDataLoader");
++     qmlRegisterType<WeightDataLoader>(uri, 1, 0, "WeightDataLoader");
++     qmlRegisterType<BarometerDataLoader>(uri, 1, 0, "BarometerDataLoader");
+++    qmlRegisterType<SleepDataLoader>(uri, 1, 0, "SleepDataLoader");
++     qmlRegisterType<LoggerSettings>(uri, 1, 0, "LoggerSettings");
++ }
++diff --git a/qmlplugin/sleepDataLoader.cpp b/qmlplugin/sleepDataLoader.cpp
++new file mode 100644
++index 0000000..0170d88
++--- /dev/null
+++++ b/qmlplugin/sleepDataLoader.cpp
++@@ -0,0 +1,173 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++#include "sleepDataLoader.h"
+++#include "../common.h"
+++
+++#include <QDateTime>
+++#include <QFile>
+++#include <QSettings>
+++#include <QTextStream>
+++#include <QVariantList>
+++#include <QVariantMap>
+++
+++namespace {
+++const QString kSleepPrefix = QStringLiteral("sleepMonitor");
+++
+++struct SleepEpoch {
+++    qint64 timestamp = 0;
+++    int stage = 0;
+++    int motionMilli = 0;
+++    int bpm = 0;
+++};
+++
+++QVector<SleepEpoch> readEpochsForDate(const QDate &date)
+++{
+++    QVector<SleepEpoch> out;
+++    QFile file(fileNameForDate(date, kSleepPrefix));
+++    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+++        return out;
+++    }
+++    QTextStream in(&file);
+++    while (!in.atEnd()) {
+++        const QString line = in.readLine().trimmed();
+++        if (line.isEmpty()) {
+++            continue;
+++        }
+++        const QStringList parts = line.split(QLatin1Char(':'));
+++        if (parts.size() < 2) {
+++            continue;
+++        }
+++        SleepEpoch ep;
+++        ep.timestamp = parts[0].toLongLong();
+++        ep.stage = parts[1].toInt();
+++        if (parts.size() >= 3) ep.motionMilli = parts[2].toInt();
+++        if (parts.size() >= 4) ep.bpm = parts[3].toInt();
+++        out.append(ep);
+++    }
+++    return out;
+++}
+++} // namespace
+++
+++SleepDataLoader::SleepDataLoader()
+++    : QObject()
+++{
+++    m_iface = new QDBusInterface(QStringLiteral("org.asteroid.sensorlogd.logger"),
+++                                  QStringLiteral("/org/asteroid/sensorlogd/logger"),
+++                                  QString(),
+++                                  QDBusConnection::sessionBus(),
+++                                  this);
+++    m_fileWatcher = new QFileSystemWatcher(this);
+++    setupFilePath(kSleepPrefix);
+++    m_fileWatcher->addPath(sensorDirPath(kSleepPrefix));
+++    connect(m_fileWatcher, &QFileSystemWatcher::directoryChanged, this, &SleepDataLoader::dataChanged);
+++    connect(m_fileWatcher, &QFileSystemWatcher::fileChanged, this, &SleepDataLoader::dataChanged);
+++}
+++
+++QVariant SleepDataLoader::getDataForDate(QDate date)
+++{
+++    QVariantList list;
+++    const auto epochs = readEpochsForDate(date);
+++    for (const auto &ep : epochs) {
+++        QVariantMap m;
+++        m.insert(QStringLiteral("timestamp"), ep.timestamp);
+++        m.insert(QStringLiteral("stage"), ep.stage);
+++        m.insert(QStringLiteral("motion"), ep.motionMilli);
+++        m.insert(QStringLiteral("bpm"), ep.bpm);
+++        list.append(m);
+++    }
+++    return list;
+++}
+++
+++QVariant SleepDataLoader::getTodayData()
+++{
+++    return getDataForDate(QDate::currentDate());
+++}
+++
+++QVariant SleepDataLoader::getSleepSummary(QDate date)
+++{
+++    QSettings settings(QStringLiteral("asteroid"), QStringLiteral("sensorlogd"));
+++    const int epochMinutes = qMax(1, settings.value(QStringLiteral("sleepMonitor/interval"), 300000).toInt() / 60000);
+++    const int goalMinutes = qMax(60, settings.value(QStringLiteral("sleepMonitor/goalMinutes"), 480).toInt());
+++
+++    // Overnight window: yesterday 20:00 -> date 12:00
+++    const qint64 winStart = QDateTime(date.addDays(-1), QTime(20, 0)).toSecsSinceEpoch();
+++    const qint64 winEnd = QDateTime(date, QTime(12, 0)).toSecsSinceEpoch();
+++
+++    QVector<SleepEpoch> overnight;
+++    for (const auto &ep : readEpochsForDate(date.addDays(-1))) {
+++        if (ep.timestamp >= winStart && ep.timestamp <= winEnd) {
+++            overnight.append(ep);
+++        }
+++    }
+++    for (const auto &ep : readEpochsForDate(date)) {
+++        if (ep.timestamp >= winStart && ep.timestamp <= winEnd) {
+++            overnight.append(ep);
+++        }
+++    }
+++
+++    int awakeMin = 0, lightMin = 0, deepMin = 0, remMin = 0;
+++    qint64 firstSleepTs = 0, lastSleepTs = 0;
+++    QVariantList timeline;
+++
+++    for (const auto &ep : overnight) {
+++        QVariantMap item;
+++        item.insert(QStringLiteral("timestamp"), ep.timestamp);
+++        item.insert(QStringLiteral("stage"), ep.stage);
+++        item.insert(QStringLiteral("bpm"), ep.bpm);
+++        timeline.append(item);
+++
+++        if (ep.stage == 0) {
+++            awakeMin += epochMinutes;
+++        } else {
+++            if (firstSleepTs == 0) firstSleepTs = ep.timestamp;
+++            lastSleepTs = ep.timestamp;
+++            if (ep.stage == 1) lightMin += epochMinutes;
+++            else if (ep.stage == 2) deepMin += epochMinutes;
+++            else if (ep.stage == 3) remMin += epochMinutes;
+++        }
+++    }
+++
+++    const int totalSleepMin = lightMin + deepMin + remMin;
+++    int score = 0;
+++    if (totalSleepMin > 0) {
+++        const double durScore = qMin(1.0, static_cast<double>(totalSleepMin) / goalMinutes) * 65.0;
+++        const double deepRatio = static_cast<double>(deepMin + remMin) / totalSleepMin;
+++        const double qualityScore = qMin(1.0, deepRatio / 0.35) * 35.0;
+++        score = qBound(1, qRound(durScore + qualityScore), 100);
+++    }
+++
+++    QVariantMap res;
+++    res.insert(QStringLiteral("hasData"), !overnight.isEmpty());
+++    res.insert(QStringLiteral("totalMinutes"), totalSleepMin);
+++    res.insert(QStringLiteral("deepMinutes"), deepMin);
+++    res.insert(QStringLiteral("lightMinutes"), lightMin);
+++    res.insert(QStringLiteral("remMinutes"), remMin);
+++    res.insert(QStringLiteral("awakeMinutes"), awakeMin);
+++    res.insert(QStringLiteral("sleepScore"), score);
+++    res.insert(QStringLiteral("goalMinutes"), goalMinutes);
+++    res.insert(QStringLiteral("bedtime"), firstSleepTs > 0
+++               ? QDateTime::fromSecsSinceEpoch(firstSleepTs).toString(QStringLiteral("HH:mm"))
+++               : QStringLiteral("--:--"));
+++    res.insert(QStringLiteral("wakeTime"), lastSleepTs > 0
+++               ? QDateTime::fromSecsSinceEpoch(lastSleepTs).toString(QStringLiteral("HH:mm"))
+++               : QStringLiteral("--:--"));
+++    res.insert(QStringLiteral("timeline"), timeline);
+++    return res;
+++}
+++
+++QVariant SleepDataLoader::getLastNightSummary()
+++{
+++    return getSleepSummary(QDate::currentDate());
+++}
+++
+++void SleepDataLoader::triggerDaemonRecording()
+++{
+++    m_iface->call(QStringLiteral("triggerRecording"));
+++}
++diff --git a/qmlplugin/sleepDataLoader.h b/qmlplugin/sleepDataLoader.h
++new file mode 100644
++index 0000000..3ab7d00
++--- /dev/null
+++++ b/qmlplugin/sleepDataLoader.h
++@@ -0,0 +1,38 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++#ifndef SLEEPDATALOADER_H
+++#define SLEEPDATALOADER_H
+++
+++#include <QDate>
+++#include <QDBusInterface>
+++#include <QFileSystemWatcher>
+++#include <QObject>
+++#include <QVariant>
+++
+++class SleepDataLoader : public QObject
+++{
+++    Q_OBJECT
+++public:
+++    explicit SleepDataLoader();
+++    Q_INVOKABLE QVariant getDataForDate(QDate date);
+++    Q_INVOKABLE QVariant getTodayData();
+++    Q_INVOKABLE QVariant getSleepSummary(QDate date);
+++    Q_INVOKABLE QVariant getLastNightSummary();
+++    Q_INVOKABLE void triggerDaemonRecording();
+++
+++signals:
+++    void dataChanged();
+++
+++private:
+++    QDBusInterface *m_iface;
+++    QFileSystemWatcher *m_fileWatcher;
+++};
+++
+++#endif // SLEEPDATALOADER_H
