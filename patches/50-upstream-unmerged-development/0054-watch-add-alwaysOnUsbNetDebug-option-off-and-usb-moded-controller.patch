@@ -1,0 +1,792 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Fri, 20 Nov 2026 07:20:15 +1100
+Subject: [PATCH 2/2] watch: add alwaysOnUsbNetDebug option (off) and usb-moded
+ controller
+
+---
+ devices/families/asteroidos.nix               |  27 ++-
+ devices/fossil-hoki-mainline/default.nix      |   3 +-
+ devices/fossil-hoki/default.nix               |   3 +-
+ devices/oppo-beluga-mainline/default.nix      |   3 +-
+ examples/asteroid/asteroid-desktop.nix        |  37 ++-
+ modules/hardware-watch.nix                    |  10 +
+ overlay/asteroidos/default.nix                |   1 +
+ overlay/asteroidos/usb-moded/CMakeLists.txt   |  21 ++
+ .../usb-moded/com.meego.usb_moded.conf        |  17 ++
+ overlay/asteroidos/usb-moded/default.nix      |  66 ++++++
+ .../asteroidos/usb-moded/usb-moded-switch.sh  | 126 ++++++++++
+ .../asteroidos/usb-moded/usbmodedservice.cpp  | 218 ++++++++++++++++++
+ .../asteroidos/usb-moded/usbmodedservice.h    |  64 +++++
+ 13 files changed, 576 insertions(+), 20 deletions(-)
+ create mode 100644 overlay/asteroidos/usb-moded/CMakeLists.txt
+ create mode 100644 overlay/asteroidos/usb-moded/com.meego.usb_moded.conf
+ create mode 100644 overlay/asteroidos/usb-moded/default.nix
+ create mode 100644 overlay/asteroidos/usb-moded/usb-moded-switch.sh
+ create mode 100644 overlay/asteroidos/usb-moded/usbmodedservice.cpp
+ create mode 100644 overlay/asteroidos/usb-moded/usbmodedservice.h
+
+diff --git a/devices/families/asteroidos.nix b/devices/families/asteroidos.nix
+index 35afae13..68998881 100644
+--- a/devices/families/asteroidos.nix
++++ b/devices/families/asteroidos.nix
+@@ -15,7 +15,8 @@ let
+   cfg = config.mobile.hardware.watch.stage1-pause-debug;
+   journalCfg = config.mobile.hardware.watch.stage2-save-logs;
+   stage2SshCfg = config.mobile.hardware.watch.stage2-ssh;
+-  debugNetwork = cfg.enable || stage2SshCfg.enable;
++  alwaysOnUsbCfg = config.mobile.hardware.watch.alwaysOnUsbNetDebug;
++  debugNetwork = cfg.enable || stage2SshCfg.enable || alwaysOnUsbCfg.enable;
+   kernelMode = config.mobile.hardware.watch.kernel;
+ in
+ {
+@@ -281,7 +282,7 @@ in
+   mobile.boot.stage-1.networking.enable = mkIf debugNetwork (mkDefault true);
+   mobile.boot.stage-1.ssh.enable = mkIf cfg.enable (mkDefault true);
+ 
+-  services.openssh = mkIf debugNetwork {
++  services.openssh = {
+     enable = mkDefault true;
+     settings = {
+       PermitRootLogin = "yes";
+@@ -293,22 +294,20 @@ in
+     };
+   };
+ 
+-  # A pending stage-2 sshd holds back multi-user.target on first boot; stage-1
+-  # telnet/SSH remains available for debugging.
+-  systemd.services.sshd.wantedBy = mkIf (cfg.enable && !stage2SshCfg.enable) (lib.mkForce [ ]);
++  # When always-on USB net debug is off, sshd is started on-demand by usb-moded
++  # when the user switches to SSH Mode (developer_mode).
++  systemd.services.sshd.wantedBy = mkIf (!stage2SshCfg.enable && !alwaysOnUsbCfg.enable) (lib.mkForce [ ]);
+ 
+   networking.firewall.enable = mkIf debugNetwork (mkDefault false);
+ 
+   # ConnMan otherwise claims the gadget as a tethering device and brings it
+   # down after the static debug addresses have been configured.
+-  services.connman.networkInterfaceBlacklist = mkIf debugNetwork (
+-    lib.mkAfter (
+-      options.services.connman.networkInterfaceBlacklist.default
+-      ++ [
+-        "usb"
+-        "rndis"
+-      ]
+-    )
++  services.connman.networkInterfaceBlacklist = lib.mkAfter (
++    options.services.connman.networkInterfaceBlacklist.default
++    ++ [
++      "usb"
++      "rndis"
++    ]
+   );
+ 
+   networking.interfaces.usb0.ipv4.addresses = mkIf debugNetwork [
+@@ -322,7 +321,7 @@ in
+     }
+   ];
+ 
+-  users.users.root.password = mkIf debugNetwork "root";
++  users.users.root.password = mkDefault "root";
+ 
+   systemd.services.usb-gadget-network = mkIf debugNetwork {
+     description = "USB Gadget Ethernet (NCM) Setup";
+diff --git a/devices/fossil-hoki-mainline/default.nix b/devices/fossil-hoki-mainline/default.nix
+index 69593422..1a66c677 100644
+--- a/devices/fossil-hoki-mainline/default.nix
++++ b/devices/fossil-hoki-mainline/default.nix
+@@ -55,7 +55,8 @@
+       hasHaptics = true;
+       aodSupport = true;
+       stage1-pause-debug.enable = false;
+-      stage2-ssh.enable = true;
++      stage2-ssh.enable = lib.mkDefault false;
++      alwaysOnUsbNetDebug.enable = lib.mkDefault false;
+       stage2-save-logs.enable = true;
+     };
+   };
+diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
+index eba4ee1c..a470e332 100644
+--- a/devices/fossil-hoki/default.nix
++++ b/devices/fossil-hoki/default.nix
+@@ -94,7 +94,8 @@ in
+       hasHaptics = true;
+       aodSupport = true;
+       stage1-pause-debug.enable = false;
+-      stage2-ssh.enable = true;
++      stage2-ssh.enable = lib.mkDefault false;
++      alwaysOnUsbNetDebug.enable = lib.mkDefault false;
+       stage2-save-logs.enable = true;
+     };
+   };
+diff --git a/devices/oppo-beluga-mainline/default.nix b/devices/oppo-beluga-mainline/default.nix
+index 3f12cc13..34739108 100644
+--- a/devices/oppo-beluga-mainline/default.nix
++++ b/devices/oppo-beluga-mainline/default.nix
+@@ -40,7 +40,8 @@
+       hasHaptics = true;
+       aodSupport = true;
+       stage1-pause-debug.enable = false;
+-      stage2-ssh.enable = true;
++      stage2-ssh.enable = lib.mkDefault false;
++      alwaysOnUsbNetDebug.enable = lib.mkDefault false;
+       stage2-save-logs.enable = true;
+     };
+   };
+diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
+index cc83d3cc..61225458 100644
+--- a/examples/asteroid/asteroid-desktop.nix
++++ b/examples/asteroid/asteroid-desktop.nix
+@@ -11,10 +11,14 @@ let
+ 
+   # Debug builds: the stage-2 journal is volatile and a hard reset loses it,
+   # so keep the launcher's Qt/EGL output in the user's home instead.
+-  debugBuild =
++  alwaysOnUsbDebug =
+     config.mobile.hardware.watch.stage1-pause-debug.enable
+-    || config.mobile.hardware.watch.stage2-save-logs.enable
+-    || config.mobile.hardware.watch.stage2-ssh.enable;
++    || config.mobile.hardware.watch.stage2-ssh.enable
++    || config.mobile.hardware.watch.alwaysOnUsbNetDebug.enable;
++
++  debugBuild =
++    alwaysOnUsbDebug
++    || config.mobile.hardware.watch.stage2-save-logs.enable;
+ 
+   isLegacy = config.mobile.hardware.watch.kernel != "modern";
+ 
+@@ -185,6 +189,9 @@ in
+         ++ lib.optionals cfg.vela.enable [
+           asteroid.apps.vela
+         ]
++        ++ lib.optionals (!alwaysOnUsbDebug) [
++          asteroid.usb-moded
++        ]
+         ++ (with pkgs; [
+           asteroid.community-apps.unofficial-watchfaces
+           asteroid.community-apps.blaster
+@@ -226,6 +233,7 @@ in
+         "d /var/lib/kiwix 0775 ceres users -"
+         "d /var/lib/vela 0775 ceres users -"
+         "d /var/lib/vela/apps 0775 ceres users -"
++        "d /var/lib/usb-moded 0755 root root -"
+         # MCE runtime/config directories; upstream mce_git.bb installs
+         # builtin-gconf.values into /var/lib/mce. Use "C" to seed writable defaults.
+         "d /run/mce 0755 root root -"
+@@ -421,6 +429,26 @@ in
+         };
+       };
+ 
++      # USB gadget mode controller (charging_only, developer_mode/SSH, adb_mode)
++      # active whenever always-on USB net debug is turned off.
++      systemd.services.usb-moded = mkIf (!alwaysOnUsbDebug) {
++        description = "AsteroidOS USB mode controller (com.meego.usb_moded)";
++        wantedBy = [ "multi-user.target" ];
++        requires = [ "dbus.service" ];
++        after = [
++          "local-fs.target"
++          "dbus.service"
++        ];
++        conflicts = [ "shutdown.target" ];
++        serviceConfig = {
++          Type = "dbus";
++          BusName = "com.meego.usb_moded";
++          ExecStart = "${pkgs.asteroid.usb-moded}/bin/usb_moded";
++          Restart = "always";
++          RestartSec = 1;
++        };
++      };
++
+       # DSME device state machine — MCE's counterpart.
+       # Upstream unit: https://github.com/AsteroidOS/meta-asteroid/blob/master/recipes-nemomobile/dsme/dsme/dsme.service
+       systemd.services.dsme = {
+@@ -632,6 +660,9 @@ in
+       ++ lib.optionals isLegacy [
+         pkgs.asteroid.ngfd
+         pkgs.asteroid.nfcd
++      ]
++      ++ lib.optionals (!alwaysOnUsbDebug) [
++        pkgs.asteroid.usb-moded
+       ];
+ 
+       # Upstream timed_git.bb installs timed.rc into /etc.
+diff --git a/modules/hardware-watch.nix b/modules/hardware-watch.nix
+index d352c600..a720a813 100644
+--- a/modules/hardware-watch.nix
++++ b/modules/hardware-watch.nix
+@@ -171,6 +171,16 @@ in
+       default = false;
+       description = "Enable the stage-2 SSH server and USB networking without the stage-1 pause/console.";
+     };
++
++    alwaysOnUsbNetDebug.enable = mkOption {
++      type = types.bool;
++      default = false;
++      description = ''
++        Keep USB networking (CDC NCM) and SSH always on from boot instead of
++        letting AsteroidOS's usb-moded controller manage charging-only, SSH
++        (usbnet), and ADB modes dynamically.
++      '';
++    };
+   };
+ 
+   config = mkIf (config.mobile.enable && watchCfg.enable) {
+diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
+index 6f7fc658..0b767739 100644
+--- a/overlay/asteroidos/default.nix
++++ b/overlay/asteroidos/default.nix
+@@ -81,6 +81,7 @@ rec {
+     inherit mce-dev;
+   };
+   ngf-qt6 = callPackage ./ngf-qt6 { inherit metaAsteroidSrc; };
++  usb-moded = callPackage ./usb-moded { };
+   usb-moded-dev = callPackage ./usb-moded-dev { };
+   usb-moded-qt6 = callPackage ./usb-moded-qt6 {
+     inherit usb-moded-dev;
+diff --git a/overlay/asteroidos/usb-moded/CMakeLists.txt b/overlay/asteroidos/usb-moded/CMakeLists.txt
+new file mode 100644
+index 00000000..ec3e4b06
+--- /dev/null
++++ b/overlay/asteroidos/usb-moded/CMakeLists.txt
+@@ -0,0 +1,21 @@
++cmake_minimum_required(VERSION 3.16)
++project(usb-moded VERSION 1.0.0 LANGUAGES CXX)
++
++set(CMAKE_CXX_STANDARD 17)
++set(CMAKE_CXX_STANDARD_REQUIRED ON)
++set(CMAKE_AUTOMOC ON)
++
++find_package(Qt6 REQUIRED COMPONENTS Core DBus)
++
++include(GNUInstallDirs)
++
++add_executable(usb_moded usbmodedservice.cpp)
++
++target_compile_definitions(usb_moded PRIVATE
++    USB_MODED_SWITCH_BIN="${CMAKE_INSTALL_FULL_LIBEXECDIR}/usb-moded-switch"
++)
++
++target_link_libraries(usb_moded PRIVATE Qt6::Core Qt6::DBus)
++
++install(TARGETS usb_moded RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
++install(FILES com.meego.usb_moded.conf DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/system.d)
+diff --git a/overlay/asteroidos/usb-moded/com.meego.usb_moded.conf b/overlay/asteroidos/usb-moded/com.meego.usb_moded.conf
+new file mode 100644
+index 00000000..02f5ed37
+--- /dev/null
++++ b/overlay/asteroidos/usb-moded/com.meego.usb_moded.conf
+@@ -0,0 +1,17 @@
++<!DOCTYPE busconfig PUBLIC
++ "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
++ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
++<busconfig>
++  <policy user="root">
++    <allow own="com.meego.usb_moded"/>
++    <allow send_destination="com.meego.usb_moded"/>
++    <allow receive_sender="com.meego.usb_moded"/>
++  </policy>
++  <policy user="ceres">
++    <allow send_destination="com.meego.usb_moded"/>
++    <allow receive_sender="com.meego.usb_moded"/>
++  </policy>
++  <policy context="default">
++    <allow send_destination="com.meego.usb_moded" send_interface="org.freedesktop.DBus.Introspectable"/>
++  </policy>
++</busconfig>
+diff --git a/overlay/asteroidos/usb-moded/default.nix b/overlay/asteroidos/usb-moded/default.nix
+new file mode 100644
+index 00000000..57a279e4
+--- /dev/null
++++ b/overlay/asteroidos/usb-moded/default.nix
+@@ -0,0 +1,66 @@
++# AsteroidOS USB mode controller daemon (com.meego.usb_moded)
++# Drives Linux configfs USB gadgets for charging_only, developer_mode (SSH/usbnet), and adb_mode.
++{
++  lib,
++  stdenv,
++  cmake,
++  qt6,
++  coreutils,
++  util-linux,
++  iproute2,
++  procps,
++  systemd,
++}:
++
++stdenv.mkDerivation {
++  pname = "usb-moded";
++  version = "1.0.0";
++
++  src = ./.;
++
++  strictDeps = true;
++
++  nativeBuildInputs = [
++    cmake
++    qt6.wrapQtAppsHook
++  ];
++
++  buildInputs = [
++    qt6.qtbase
++  ];
++
++  dontWrapQtApps = true;
++
++  installPhase = ''
++    runHook preInstall
++    cmake --install .
++    install -Dm755 ${./usb-moded-switch.sh} $out/libexec/usb-moded-switch
++    substituteInPlace $out/libexec/usb-moded-switch \
++      --replace-fail "@mountpoint@" "${util-linux}/bin/mountpoint" \
++      --replace-fail "@mount@" "${util-linux}/bin/mount" \
++      --replace-fail "@umount@" "${util-linux}/bin/umount" \
++      --replace-fail "@mkdir@" "${coreutils}/bin/mkdir" \
++      --replace-fail "@ls@" "${coreutils}/bin/ls" \
++      --replace-fail "@head@" "${coreutils}/bin/head" \
++      --replace-fail "@cat@" "${coreutils}/bin/cat" \
++      --replace-fail "@rm@" "${coreutils}/bin/rm" \
++      --replace-fail "@ln@" "${coreutils}/bin/ln" \
++      --replace-fail "@seq@" "${coreutils}/bin/seq" \
++      --replace-fail "@sleep@" "${coreutils}/bin/sleep" \
++      --replace-fail "@sed@" "${coreutils}/bin/sed" \
++      --replace-fail "@hostname@" "${coreutils}/bin/hostname" \
++      --replace-fail "@ip@" "${iproute2}/bin/ip" \
++      --replace-fail "@pkill@" "${procps}/bin/pkill" \
++      --replace-fail "@pgrep@" "${procps}/bin/pgrep" \
++      --replace-fail "@systemctl@" "${systemd}/bin/systemctl"
++    runHook postInstall
++  '';
++
++  meta = with lib; {
++    description = "ConfigFS USB mode controller daemon (com.meego.usb_moded) for AsteroidOS";
++    homepage = "https://asteroidos.org";
++    license = licenses.gpl3Plus;
++    platforms = platforms.linux;
++    mainProgram = "usb_moded";
++  };
++}
+diff --git a/overlay/asteroidos/usb-moded/usb-moded-switch.sh b/overlay/asteroidos/usb-moded/usb-moded-switch.sh
+new file mode 100644
+index 00000000..e523889e
+--- /dev/null
++++ b/overlay/asteroidos/usb-moded/usb-moded-switch.sh
+@@ -0,0 +1,126 @@
++#!/bin/sh
++set -eu
++
++MODE="${1:-charging_only}"
++G="/sys/kernel/config/usb_gadget/g1"
++
++@mountpoint@ -q /sys/kernel/config || {
++  @mkdir@ -p /sys/kernel/config
++  @mount@ -t configfs none /sys/kernel/config
++}
++
++UDC="$(@ls@ /sys/class/udc 2>/dev/null | @head@ -n1 || true)"
++
++# Unbind active gadget and clean previous config links before switching
++if [ -d "$G" ]; then
++  if [ -n "$(@cat@ "$G/UDC" 2>/dev/null || true)" ]; then
++    echo "" > "$G/UDC" 2>/dev/null || true
++  fi
++  @rm@ -f "$G/configs/c.1/ncm.usb0" "$G/configs/c.1/rndis.usb0" "$G/configs/c.1/ffs.adb" 2>/dev/null || true
++fi
++
++# Tear down previous mode daemons / interfaces
++if [ "$MODE" != "adb_mode" ]; then
++  @pkill@ -x adbd 2>/dev/null || true
++  if @mountpoint@ -q /dev/usb-ffs/adb; then
++    @umount@ /dev/usb-ffs/adb 2>/dev/null || true
++  fi
++fi
++
++if [ "$MODE" != "developer_mode" ]; then
++  for iface in usb0 rndis0; do
++    if [ -e "/sys/class/net/$iface" ]; then
++      @ip@ link set "$iface" down 2>/dev/null || true
++    fi
++  done
++fi
++
++# Charging only: leave UDC unbound (hardware charging stays active)
++if [ "$MODE" = "charging_only" ]; then
++  exit 0
++fi
++
++[ -n "$UDC" ] || {
++  echo "No USB device controller found" >&2
++  exit 1
++}
++
++# Initialize base configfs gadget
++@mkdir@ -p "$G/strings/0x409" "$G/configs/c.1/strings/0x409"
++SERIAL="$(@sed@ -n 's/.*androidboot\.serialno=\([^ ]*\).*/\1/p' /proc/cmdline | @head@ -n1)"
++[ -n "$SERIAL" ] || SERIAL="$(@cat@ /etc/machine-id 2>/dev/null || echo 0123456789)"
++HOST="$(@hostname@ 2>/dev/null || echo AsteroidOS)"
++
++echo "0x18d1" > "$G/idVendor"
++echo "$SERIAL" > "$G/strings/0x409/serialnumber"
++echo "AsteroidOS" > "$G/strings/0x409/manufacturer"
++echo "$HOST" > "$G/strings/0x409/product"
++
++case "$MODE" in
++  developer_mode)
++    echo "0xd002" > "$G/idProduct"
++    echo "CDC NCM" > "$G/configs/c.1/strings/0x409/configuration"
++
++    FUNC="ncm.usb0"
++    if ! @mkdir@ -p "$G/functions/$FUNC" 2>/dev/null; then
++      FUNC="rndis.usb0"
++      @mkdir@ -p "$G/functions/$FUNC"
++    fi
++    @ln@ -sf "$G/functions/$FUNC" "$G/configs/c.1/$FUNC"
++    echo "$UDC" > "$G/UDC"
++
++    NET_IF=""
++    for _ in $(@seq@ 1 20); do
++      for cand in usb0 rndis0; do
++        if [ -e "/sys/class/net/$cand" ]; then
++          NET_IF="$cand"
++          break 2
++        fi
++      done
++      @sleep@ 0.25
++    done
++
++    if [ -n "$NET_IF" ]; then
++      @ip@ addr replace 192.168.2.15/24 dev "$NET_IF"
++      @ip@ addr replace 172.16.42.1/24 dev "$NET_IF"
++      @ip@ link set "$NET_IF" up
++    fi
++
++    @systemctl@ start --no-block sshd.service 2>/dev/null || true
++    ;;
++
++  adb_mode)
++    echo "0xd001" > "$G/idProduct"
++    echo "ADB" > "$G/configs/c.1/strings/0x409/configuration"
++
++    @mkdir@ -p "$G/functions/ffs.adb"
++    @ln@ -sf "$G/functions/ffs.adb" "$G/configs/c.1/ffs.adb"
++
++    @mkdir@ -p /dev/usb-ffs/adb
++    if ! @mountpoint@ -q /dev/usb-ffs/adb; then
++      @mount@ -t functionfs adb /dev/usb-ffs/adb
++    fi
++
++    ADBD_BIN="$(command -v adbd 2>/dev/null || echo /run/current-system/sw/bin/adbd)"
++    [ -x "$ADBD_BIN" ] || {
++      echo "adbd binary not found" >&2
++      exit 1
++    }
++
++    if ! @pgrep@ -x adbd >/dev/null 2>&1; then
++      "$ADBD_BIN" </dev/null >/dev/null 2>&1 &
++    fi
++
++    for _ in $(@seq@ 1 20); do
++      [ -e /dev/usb-ffs/adb/ep0 ] && break
++      @sleep@ 0.15
++    done
++
++    echo "$UDC" > "$G/UDC"
++    ;;
++
++  *)
++    echo "Unsupported USB mode: $MODE" >&2
++    exit 1
++    ;;
++esac
+diff --git a/overlay/asteroidos/usb-moded/usbmodedservice.cpp b/overlay/asteroidos/usb-moded/usbmodedservice.cpp
+new file mode 100644
+index 00000000..9a5b60fc
+--- /dev/null
++++ b/overlay/asteroidos/usb-moded/usbmodedservice.cpp
+@@ -0,0 +1,218 @@
++#include "usbmodedservice.h"
++
++#include <QCoreApplication>
++#include <QDBusConnection>
++#include <QDBusError>
++#include <QDebug>
++#include <QDir>
++#include <QFile>
++#include <QSettings>
++
++namespace {
++const QString kSupportedModes = QStringLiteral("charging_only,developer_mode,adb_mode");
++const QString kConfigDir = QStringLiteral("/var/lib/usb-moded");
++const QString kConfigPath = QStringLiteral("/var/lib/usb-moded/usb-moded.ini");
++} // namespace
++
++UsbModedService::UsbModedService(const QString &switchHelper, QObject *parent)
++    : QObject(parent)
++    , m_switchHelper(switchHelper)
++    , m_currentMode(QStringLiteral("charging_only"))
++    , m_targetMode(QStringLiteral("charging_only"))
++    , m_whitelistedModes(kSupportedModes)
++{
++}
++
++bool UsbModedService::isSupportedMode(const QString &mode)
++{
++    return mode == QLatin1String("charging_only")
++           || mode == QLatin1String("developer_mode")
++           || mode == QLatin1String("adb_mode");
++}
++
++QString UsbModedService::readPersistedMode() const
++{
++    if (!QFile::exists(kConfigPath)) {
++        return QStringLiteral("charging_only");
++    }
++    QSettings settings(kConfigPath, QSettings::IniFormat);
++    const QString mode = settings.value(QStringLiteral("usbmode/mode"), QStringLiteral("charging_only")).toString().trimmed();
++    return isSupportedMode(mode) ? mode : QStringLiteral("charging_only");
++}
++
++bool UsbModedService::writePersistedMode(const QString &mode) const
++{
++    QDir().mkpath(kConfigDir);
++    QSettings settings(kConfigPath, QSettings::IniFormat);
++    settings.setValue(QStringLiteral("usbmode/mode"), mode);
++    settings.sync();
++    return settings.status() == QSettings::NoError;
++}
++
++bool UsbModedService::applyMode(const QString &mode)
++{
++    if (!isSupportedMode(mode)) {
++        emit sig_usb_state_error_ind(QStringLiteral("unsupported_mode"));
++        return false;
++    }
++
++    m_targetMode = mode;
++    emit sig_usb_target_state_ind(mode);
++    emit sig_usb_state_ind(QStringLiteral("busy"));
++
++    QProcess proc;
++    proc.start(m_switchHelper, {mode});
++    if (!proc.waitForFinished(15000) || proc.exitCode() != 0) {
++        const QString err = QString::fromUtf8(proc.readAllStandardError()).trimmed();
++        qWarning() << "usb-moded: switch helper failed for" << mode << ":" << err;
++        emit sig_usb_state_error_ind(err.isEmpty() ? QStringLiteral("switch_failed") : err);
++        return false;
++    }
++
++    m_currentMode = mode;
++    emit sig_usb_current_state_ind(mode);
++    emit sig_usb_state_ind(mode);
++    emit sig_usb_taget_mode_config_ind(get_target_mode_config());
++    return true;
++}
++
++void UsbModedService::applyInitialMode()
++{
++    const QString mode = readPersistedMode();
++    applyMode(mode);
++}
++
++QString UsbModedService::mode_request()
++{
++    return m_currentMode;
++}
++
++QString UsbModedService::get_target_state()
++{
++    return m_targetMode;
++}
++
++QVariantMap UsbModedService::get_target_mode_config()
++{
++    QVariantMap map;
++    map.insert(QStringLiteral("mode"), m_targetMode);
++    return map;
++}
++
++QString UsbModedService::set_mode(const QString &mode)
++{
++    if (!isSupportedMode(mode)) {
++        emit sig_usb_state_error_ind(QStringLiteral("unsupported_mode"));
++        return m_currentMode;
++    }
++    applyMode(mode);
++    return m_currentMode;
++}
++
++QString UsbModedService::set_config(const QString &config)
++{
++    if (!isSupportedMode(config)) {
++        return readPersistedMode();
++    }
++    writePersistedMode(config);
++    emit sig_usb_config_ind(QStringLiteral("usbmode"), QStringLiteral("mode"), config);
++    return config;
++}
++
++QString UsbModedService::get_config()
++{
++    return readPersistedMode();
++}
++
++QString UsbModedService::get_modes()
++{
++    return kSupportedModes;
++}
++
++QString UsbModedService::get_available_modes()
++{
++    return kSupportedModes;
++}
++
++QString UsbModedService::get_available_modes_for_user()
++{
++    return kSupportedModes;
++}
++
++QString UsbModedService::hide_mode(const QString &)
++{
++    return m_hiddenModes;
++}
++
++QString UsbModedService::unhide_mode(const QString &)
++{
++    return m_hiddenModes;
++}
++
++QString UsbModedService::get_hidden()
++{
++    return m_hiddenModes;
++}
++
++QString UsbModedService::get_whitelisted_modes()
++{
++    return m_whitelistedModes;
++}
++
++void UsbModedService::set_whitelisted_modes(const QString &modes)
++{
++    m_whitelistedModes = modes;
++    emit sig_usb_whitelisted_modes_ind(m_whitelistedModes);
++}
++
++void UsbModedService::set_whitelisted(const QString &, bool)
++{
++}
++
++QString UsbModedService::net_config(const QString &, const QString &value)
++{
++    return value;
++}
++
++QString UsbModedService::get_net_config(const QString &)
++{
++    return QString();
++}
++
++void UsbModedService::rescue_off()
++{
++}
++
++void UsbModedService::clear_config(uint)
++{
++    QFile::remove(kConfigPath);
++    emit sig_usb_config_ind(QStringLiteral("usbmode"), QStringLiteral("mode"), QStringLiteral("charging_only"));
++}
++
++int main(int argc, char *argv[])
++{
++    QCoreApplication app(argc, argv);
++
++    const QString helper = qEnvironmentVariable("USB_MODED_SWITCH_BIN", QStringLiteral(USB_MODED_SWITCH_BIN));
++    UsbModedService service(helper);
++
++    QDBusConnection bus = QDBusConnection::systemBus();
++    if (!bus.isConnected()) {
++        qCritical() << "usb-moded: cannot connect to system D-Bus";
++        return 1;
++    }
++
++    if (!bus.registerObject(QStringLiteral("/com/meego/usb_moded"), &service,
++                            QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals)) {
++        qCritical() << "usb-moded: failed to register object:" << bus.lastError().message();
++        return 1;
++    }
++
++    if (!bus.registerService(QStringLiteral("com.meego.usb_moded"))) {
++        qCritical() << "usb-moded: failed to register service:" << bus.lastError().message();
++        return 1;
++    }
++
++    service.applyInitialMode();
++    return app.exec();
++}
+diff --git a/overlay/asteroidos/usb-moded/usbmodedservice.h b/overlay/asteroidos/usb-moded/usbmodedservice.h
+new file mode 100644
+index 00000000..bea19d14
+--- /dev/null
++++ b/overlay/asteroidos/usb-moded/usbmodedservice.h
+@@ -0,0 +1,64 @@
++#pragma once
++
++#include <QDBusContext>
++#include <QObject>
++#include <QProcess>
++#include <QString>
++#include <QVariantMap>
++
++class UsbModedService : public QObject, protected QDBusContext
++{
++    Q_OBJECT
++    Q_CLASSINFO("D-Bus Interface", "com.meego.usb_moded")
++
++public:
++    explicit UsbModedService(const QString &switchHelper, QObject *parent = nullptr);
++
++    void applyInitialMode();
++
++public slots:
++    QString mode_request();
++    QString get_target_state();
++    QVariantMap get_target_mode_config();
++    QString set_mode(const QString &mode);
++    QString set_config(const QString &config);
++    QString get_config();
++    QString get_modes();
++    QString get_available_modes();
++    QString get_available_modes_for_user();
++    QString hide_mode(const QString &mode);
++    QString unhide_mode(const QString &mode);
++    QString get_hidden();
++    QString get_whitelisted_modes();
++    void set_whitelisted_modes(const QString &modes);
++    void set_whitelisted(const QString &mode, bool whitelisted);
++    QString net_config(const QString &key, const QString &value);
++    QString get_net_config(const QString &key);
++    void rescue_off();
++    void clear_config(uint uid);
++
++signals:
++    void sig_usb_state_ind(const QString &mode_or_event);
++    void sig_usb_current_state_ind(const QString &mode);
++    void sig_usb_target_state_ind(const QString &mode);
++    void sig_usb_taget_mode_config_ind(const QVariantMap &config);
++    void sig_usb_event_ind(const QString &event);
++    void sig_usb_config_ind(const QString &section, const QString &key, const QString &value);
++    void sig_usb_supported_modes_ind(const QString &modes);
++    void sig_usb_available_modes_ind(const QString &modes);
++    void sig_usb_hidden_modes_ind(const QString &modes);
++    void sig_usb_whitelisted_modes_ind(const QString &modes);
++    void sig_usb_state_error_ind(const QString &error);
++
++private:
++    static bool isSupportedMode(const QString &mode);
++    QString readPersistedMode() const;
++    bool writePersistedMode(const QString &mode) const;
++    bool applyMode(const QString &mode);
++
++    QString m_switchHelper;
++    QString m_currentMode;
++    QString m_targetMode;
++    QString m_whitelistedModes;
++    QString m_hiddenModes;
++};
