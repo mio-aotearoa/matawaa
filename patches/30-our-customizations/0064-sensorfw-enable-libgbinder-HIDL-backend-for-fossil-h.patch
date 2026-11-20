@@ -1,0 +1,188 @@
+From 5157e3e6332e6d7c8b76da842e6deca4238c6290 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Fri, 20 Nov 2026 17:44:40 +1100
+Subject: [PATCH] sensorfw: enable libgbinder HIDL backend for fossil-hoki
+
+---
+ examples/asteroid/asteroid-desktop.nix     | 17 ++++--
+ overlay/asteroidos/sensorfw/CMakeLists.txt | 60 ++++++++++++++--------
+ overlay/asteroidos/sensorfw/default.nix    | 12 +++++
+ 3 files changed, 62 insertions(+), 27 deletions(-)
+
+diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
+index d6963f1e..54507e20 100644
+--- a/examples/asteroid/asteroid-desktop.nix
++++ b/examples/asteroid/asteroid-desktop.nix
+@@ -38,6 +38,14 @@ let
+     else
+       pkgs.asteroid.mce;
+ 
++  # Upstream meta-hoki uses sensorfw-hybris-binder-plugins (libgbinder over
++  # Android 9 Treble ISensors@1.0 HIDL) rather than HAL1 hw_get_module().
++  sensorfwPackage =
++    if config.mobile.device.name == "fossil-hoki" then
++      pkgs.asteroid.sensorfw.override { enableBinder = true; }
++    else
++      pkgs.asteroid.sensorfw;
++
+   # Upstream asteroid-launcher_git.bb installs a seeded notification database
+   # into the ceres user's privileged data directory.
+   # https://github.com/AsteroidOS/meta-asteroid/tree/master/recipes-asteroid/asteroid-launcher/asteroid-launcher/Notifications
+@@ -520,7 +528,7 @@ in
+           Type = "notify";
+           # Give SLPI / sensors.ssc a moment after android-init starts.
+           ExecStartPre = "${pkgs.coreutils}/bin/sleep 2";
+-          ExecStart = "${pkgs.asteroid.sensorfw}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=${
++          ExecStart = "${sensorfwPackage}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=${
+             if debugBuild then "debug" else "warning"
+           } --no-magnetometer-bg-calibration";
+           ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
+@@ -540,9 +548,8 @@ in
+       # Upstream sensorfw installs its configs into /etc/sensorfw and the Qt
+       # Sensors type map into /etc/xdg/QtProject.
+       environment.etc."sensorfw/primaryuse.conf".source =
+-        "${pkgs.asteroid.sensorfw}/etc/sensorfw/primaryuse.conf";
+-      environment.etc."sensorfw/sensord.conf.d".source =
+-        "${pkgs.asteroid.sensorfw}/etc/sensorfw/sensord.conf.d";
++        "${sensorfwPackage}/etc/sensorfw/primaryuse.conf";
++      environment.etc."sensorfw/sensord.conf.d".source = "${sensorfwPackage}/etc/sensorfw/sensord.conf.d";
+       environment.etc."xdg/QtProject/Sensors.conf".source =
+         "${pkgs.qt6.qtsensors}/etc/xdg/QtProject/Sensors.conf";
+ 
+@@ -679,7 +686,7 @@ in
+         pkgs.dconf
+         mcePackage
+         pkgs.asteroid.dsme
+-        pkgs.asteroid.sensorfw
++        sensorfwPackage
+         pkgs.asteroid.timed-qt6
+         connmanDbusPolicy
+       ]
+diff --git a/overlay/asteroidos/sensorfw/CMakeLists.txt b/overlay/asteroidos/sensorfw/CMakeLists.txt
+index 47bb6a51..7d520c7e 100644
+--- a/overlay/asteroidos/sensorfw/CMakeLists.txt
++++ b/overlay/asteroidos/sensorfw/CMakeLists.txt
+@@ -17,6 +17,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+ set(CMAKE_AUTOMOC ON)
+ 
+ option(ENABLE_HYBRIS "Build the libhybris sensor adaptors" OFF)
++option(ENABLE_BINDER "Use libgbinder HIDL sensors backend instead of HAL1 hw_get_module" OFF)
+ 
+ find_package(Qt6 REQUIRED COMPONENTS Core DBus Network)
+ find_package(PkgConfig REQUIRED)
+@@ -204,25 +205,36 @@ endforeach()
+ 
+ # --- hybris adaptors ------------------------------------------------------
+ if(ENABLE_HYBRIS)
+-  if(NOT HYBRIS_LIB)
+-    message(FATAL_ERROR "HYBRIS_LIB must point at the libhybris prefix")
+-  endif()
+-  if(NOT ANDROID_INCLUDE)
+-    message(FATAL_ERROR "ANDROID_INCLUDE must point at the Android headers")
+-  endif()
+-  find_library(HARDWARE_LIB hardware PATHS ${HYBRIS_LIB}/lib REQUIRED)
+-  find_library(HYBRIS_COMMON_LIB hybris-common PATHS ${HYBRIS_LIB}/lib REQUIRED)
++  add_library(hybrissensorfw-qt6 SHARED core/hybrisadaptor.cpp core/hybrisadaptor.h)
++  if(ENABLE_BINDER)
++    pkg_check_modules(GBINDER REQUIRED IMPORTED_TARGET libgbinder libglibutil gobject-2.0 glib-2.0)
++    target_compile_definitions(hybrissensorfw-qt6 PUBLIC USE_BINDER=1)
++    target_link_libraries(hybrissensorfw-qt6 PUBLIC
++      sensorfw-qt6
++      sensordatatypes-qt6
++      Qt6::Core
++      PkgConfig::GBINDER
++    )
++  else()
++    if(NOT HYBRIS_LIB)
++      message(FATAL_ERROR "HYBRIS_LIB must point at the libhybris prefix")
++    endif()
++    if(NOT ANDROID_INCLUDE)
++      message(FATAL_ERROR "ANDROID_INCLUDE must point at the Android headers")
++    endif()
++    find_library(HARDWARE_LIB hardware PATHS ${HYBRIS_LIB}/lib REQUIRED)
++    find_library(HYBRIS_COMMON_LIB hybris-common PATHS ${HYBRIS_LIB}/lib REQUIRED)
+ 
+-  include_directories(${ANDROID_INCLUDE} ${HYBRIS_LIB}/include/hybris/common)
++    include_directories(${ANDROID_INCLUDE} ${HYBRIS_LIB}/include/hybris/common)
+ 
+-  add_library(hybrissensorfw-qt6 SHARED core/hybrisadaptor.cpp core/hybrisadaptor.h)
+-  target_link_libraries(hybrissensorfw-qt6 PUBLIC
+-    sensorfw-qt6
+-    sensordatatypes-qt6
+-    Qt6::Core
+-    ${HARDWARE_LIB}
+-    ${HYBRIS_COMMON_LIB}
+-  )
++    target_link_libraries(hybrissensorfw-qt6 PUBLIC
++      sensorfw-qt6
++      sensordatatypes-qt6
++      Qt6::Core
++      ${HARDWARE_LIB}
++      ${HYBRIS_COMMON_LIB}
++    )
++  endif()
+   set_target_properties(hybrissensorfw-qt6 PROPERTIES VERSION 0.9.0 SOVERSION 0)
+   install(TARGETS hybrissensorfw-qt6 LIBRARY DESTINATION lib)
+ 
+@@ -230,11 +242,15 @@ if(ENABLE_HYBRIS)
+     get_filename_component(name ${d} NAME)
+     if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${d} AND name MATCHES "^hybris")
+       sfw_plugin(${name} ${CMAKE_CURRENT_SOURCE_DIR}/${d})
+-      target_link_libraries(${name} PRIVATE
+-        hybrissensorfw-qt6
+-        ${HARDWARE_LIB}
+-        ${HYBRIS_COMMON_LIB}
+-      )
++      if(ENABLE_BINDER)
++        target_link_libraries(${name} PRIVATE hybrissensorfw-qt6)
++      else()
++        target_link_libraries(${name} PRIVATE
++          hybrissensorfw-qt6
++          ${HARDWARE_LIB}
++          ${HYBRIS_COMMON_LIB}
++        )
++      endif()
+     endif()
+   endforeach()
+ endif()
+diff --git a/overlay/asteroidos/sensorfw/default.nix b/overlay/asteroidos/sensorfw/default.nix
+index 691be304..0c1a9765 100644
+--- a/overlay/asteroidos/sensorfw/default.nix
++++ b/overlay/asteroidos/sensorfw/default.nix
+@@ -11,7 +11,11 @@
+   systemd,
+   libhybris,
+   udev,
++  libgbinder,
++  libglibutil,
++  glib,
+   metaAsteroidSrc,
++  enableBinder ? false,
+ }:
+ 
+ stdenv.mkDerivation {
+@@ -49,6 +53,11 @@ stdenv.mkDerivation {
+     libhybris
+     libhybris.androidHeaders
+     udev
++  ]
++  ++ lib.optionals enableBinder [
++    libgbinder
++    libglibutil
++    glib
+   ];
+ 
+   # Upstream only ships qmake project files; CMakeLists.txt mirrors them.
+@@ -62,6 +71,9 @@ stdenv.mkDerivation {
+     "-DENABLE_HYBRIS=ON"
+     "-DHYBRIS_LIB=${libhybris}"
+     "-DANDROID_INCLUDE=${libhybris.androidHeadersInclude}"
++  ]
++  ++ lib.optionals enableBinder [
++    "-DENABLE_BINDER=ON"
+   ];
+ 
+   meta = with lib; {
+-- 
+2.56.0
+

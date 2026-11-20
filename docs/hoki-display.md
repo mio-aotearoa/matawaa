@@ -21,8 +21,39 @@ verified fix for this report.
 Last SSH address: `root@192.168.8.183` over Wi-Fi.
 Logs: `/tmp/hoki-216-debug` on the development host (temporary). Previous boot
 image: `/var/lib/hoki-kernel-debug/pre-216-boot.img` on the watch.
-Next: capture timestamped HWC transitions and panel brightness during visible
-flashing; compare awake/ambient mode, then isolate suspend/resume.
+
+Updated 2026-11-20 (on `/nix/store/d5dy0gcr3dxgp67scy0m6d2zzn7ahfm4-nixos-system-hoki-26.11pre-git`):
+- **Where & when it happens**:
+  - **Charger plugged in**: **no flashing**.
+  - **On battery (`Discharging`)**: active Main UI (`ON` mode, watchface and
+    Settings) and late `bootanimation` (`~37s+`) flash bright ~1 Hz.
+  - **Always-On Display (`LPM_ON`, `DOZE_SUSPEND`)** and early `bootanimation`
+    (`0–37s`): **no flashing**.
+- **Ruled out**:
+  - `asteroid-launcher` / `WallClock` / QML / `qt6-qpa-hwcomposer-plugin` and
+    `composer@2.1-service` active commits (`SIGSTOP` on `asteroid-launcher` and
+    both `composer@2.1-service` instances did not stop flashing).
+  - `bg-wear` / Blackghost co-processor and `asteroid-seconddisplayd` (flashed
+    with `asteroid-seconddisplayd` masked and with `sidekickgraphics-hal-1-2`
+    disabled so `subsys4` stayed `OFFLINING`).
+  - `QPA_HWC_SYNC_BEFORE_SET=1`, `esd_check_enabled=N`,
+    `msm_cmd_autorefresh_en=1`, `te_tear_check_en=0`, and brightness level
+    (flashed at both 10% and 100%; `lcd-backlight/brightness` stayed steady).
+  - AP-side display/clock/bus activity while paused: `ftrace` (`mdss:*`,
+    `clk:*`, `regulator:*`, `i2c:*`, `spi:*`, `workqueue:*`) showed zero MDP
+    commits, `dsi0` clocks off, and zero display regulator/I2C/SPI events.
+- **Root-cause conclusion**: With zero AP display/clock/bus activity during
+  `SIGSTOP`, and flashing disappearing immediately when external USB charger
+  power is connected and returning immediately when unplugged, this is a
+  **hardware / PMIC `VSYS` / battery-rail / AMOLED panel** sensitivity on battery
+  in active `ON` mode (possibly aggravated by `sensorlogd` spinning ~60–70% CPU
+  and `wcnss` load, or `pm-adc5` 1 Hz battery polling).
+- **Side note**: `logcat` also showed two `android.hardware.graphics.composer@2.1-service`
+  instances racing at boot (`android-hwcomposer.service` and Android `init`'s
+  `vendor.hwcomposer-2-1`).
+- **Next**: Fix `sensorfwd`/`sensorlogd` ~60–70% CPU spin and test if reducing
+  battery current draw/spikes helps, and clean up the duplicate
+  `android-hwcomposer` launch.
 
 ## Normal ambient mode
 
