@@ -1,0 +1,70 @@
+From 7e7d2b5ffd835fc799541f1e8a14aaedccf386f1 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Fri, 20 Nov 2026 13:46:00 +1100
+Subject: [PATCH] asteroid: seamless stage-1/2 bootsplash handoff and
+ id-connected i18n
+
+---
+ boot/init/tasks/switch_root.rb         | 2 +-
+ examples/asteroid/asteroid-desktop.nix | 4 +++-
+ overlay/asteroidos/apps/default.nix    | 9 +++++++++
+ 3 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/boot/init/tasks/switch_root.rb b/boot/init/tasks/switch_root.rb
+index 0644044c..b50209df 100644
+--- a/boot/init/tasks/switch_root.rb
++++ b/boot/init/tasks/switch_root.rb
+@@ -363,7 +363,7 @@ class Tasks::SwitchRoot < SingletonTask
+       if will_kexec?()
+         Tasks::Splash.instance.quit("Rebooting in generation kernel", sticky: true)
+       else
+-        Tasks::Splash.instance.quit("Continuing to stage-2")
++        Tasks::Splash.instance.quit("Continuing to stage-2", sticky: true)
+       end
+     end
+     @selected_generation
+diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
+index fd07181f..d6963f1e 100644
+--- a/examples/asteroid/asteroid-desktop.nix
++++ b/examples/asteroid/asteroid-desktop.nix
+@@ -897,7 +897,6 @@ in
+                 i=$((i + 1))
+               done
+             ''}"
+-            "-${pkgs.bash}/bin/bash -c '(echo QUIT > /run/psplash_fifo) 2>/dev/null || true'"
+             "${pkgs.writeShellScript "asteroid-launcher-sanitize-dconf" ''
+               # Reset dconf keys if they point to an invalid / non-existent path
+               for key in /desktop/asteroid/watchface /desktop/asteroid/nightstand/watchface /desktop/asteroid/applauncher /desktop/asteroid/background-filename; do
+@@ -909,6 +908,9 @@ in
+               done
+             ''}"
+           ];
++          ExecStartPost = [
++            "-${pkgs.bash}/bin/bash -c '(echo QUIT > /run/psplash_fifo) 2>/dev/null || true'"
++          ];
+           # Upstream asteroid-launcher.service runs the launcher directly. The
+           # capabilities upstream attaches with setcap are provided as ambient
+           # capabilities on the user manager and explicitly declared on this service,
+diff --git a/overlay/asteroidos/apps/default.nix b/overlay/asteroidos/apps/default.nix
+index 5704a223..805bbfcc 100644
+--- a/overlay/asteroidos/apps/default.nix
++++ b/overlay/asteroidos/apps/default.nix
+@@ -58,6 +58,15 @@
+           s|<source></source>|<source>Connection failed</source>|
+           s|<translation type="unfinished"></translation>|<translation>Connection failed</translation>|
+         }' "$f"
++        if ! grep -q 'id="id-connected"' "$f"; then
++          conn_tr="Connected"
++          disc_tr="Not connected"
++          case "$f" in
++            *zh_Hant*) conn_tr="已連線"; disc_tr="未連線" ;;
++            *zh_Hans*) conn_tr="已连接"; disc_tr="未连接" ;;
++          esac
++          sed -i "s|</context>|    <message id=\"id-connected\"><source>Connected</source><translation>$conn_tr</translation></message>\n    <message id=\"id-disconnected\"><source>Not connected</source><translation>$disc_tr</translation></message>\n</context>|" "$f"
++        fi
+       done
+     '';
+     extraBuildInputs = [
+-- 
+2.56.0
+
