@@ -1,0 +1,1741 @@
+From 49989a6f5141f1f7bdc4c4dad51fbe2f81589142 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Fri, 20 Nov 2026 12:47:32 +1100
+Subject: [PATCH 54/54] asteroid: add bootsplash animation, zh_Hant support,
+ Boost sleep/period tracking
+
+---
+ examples/asteroid/asteroid-desktop.nix        |  32 +-
+ .../asteroid-bootsplash/asteroid-bootsplash.c | 282 ++++++++
+ .../asteroid-bootsplash/default.nix           |  29 +
+ overlay/asteroidos/community-apps/default.nix |   4 +
+ .../health-period-zh-hant.patch               | 604 ++++++++++++++++
+ .../sensorlogd-boost-period.patch             | 674 ++++++++++++++++++
+ overlay/asteroidos/default.nix                |   1 +
+ 7 files changed, 1623 insertions(+), 3 deletions(-)
+ create mode 100644 overlay/asteroidos/asteroid-bootsplash/asteroid-bootsplash.c
+ create mode 100644 overlay/asteroidos/asteroid-bootsplash/default.nix
+ create mode 100644 overlay/asteroidos/community-apps/health-period-zh-hant.patch
+ create mode 100644 overlay/asteroidos/community-apps/sensorlogd-boost-period.patch
+
+diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
+index 6defac30..fd07181f 100644
+--- a/examples/asteroid/asteroid-desktop.nix
++++ b/examples/asteroid/asteroid-desktop.nix
+@@ -111,10 +111,32 @@ in
+     in
+     {
+ 
+-      # Watch system beautification and boot visibility
++      # Watch system beautification and stage-2 framebuffer boot animation
+       mobile.beautification = {
+-        silentBoot = mkDefault false;
+-        splash = mkDefault true;
++        silentBoot = mkDefault true;
++        splash = mkDefault false;
++      };
++
++      boot.postBootCommands = lib.mkAfter ''
++        ${pkgs.asteroid.asteroid-bootsplash}/bin/asteroid-bootsplash --once >/dev/null 2>&1 || true
++      '';
++
++      systemd.services.asteroid-bootsplash = {
++        description = "AsteroidOS Stage-2 Framebuffer Boot Animation";
++        wantedBy = [ "sysinit.target" ];
++        before = [
++          "sysinit.target"
++          "android-init.service"
++        ];
++        unitConfig = {
++          DefaultDependencies = false;
++        };
++        serviceConfig = {
++          Type = "simple";
++          ExecStart = "${pkgs.asteroid.asteroid-bootsplash}/bin/asteroid-bootsplash";
++          StandardOutput = "null";
++          StandardError = "null";
++        };
+       };
+ 
+       # Enable Bluetooth and low-energy profiles for companion phone syncing
+@@ -302,12 +324,16 @@ in
+       # Expose smartwatch typography suite to fontconfig
+       fonts.packages = [
+         pkgs.asteroid.assets.fonts
++        pkgs.wqy_zenhei
+       ];
+ 
+       i18n.defaultLocale = "en_GB.UTF-8";
+       i18n.supportedLocales = [
+         "en_US.UTF-8/UTF-8"
+         "en_GB.UTF-8/UTF-8"
++        "zh_TW.UTF-8/UTF-8"
++        "zh_HK.UTF-8/UTF-8"
++        "zh_CN.UTF-8/UTF-8"
+       ];
+ 
+       # BlueZ dual-mode controller configuration (simultaneous BLE sync and Classic BT profiles)
+diff --git a/overlay/asteroidos/asteroid-bootsplash/asteroid-bootsplash.c b/overlay/asteroidos/asteroid-bootsplash/asteroid-bootsplash.c
+new file mode 100644
+index 00000000..5d5cfef3
+--- /dev/null
++++ b/overlay/asteroidos/asteroid-bootsplash/asteroid-bootsplash.c
+@@ -0,0 +1,282 @@
++/*
++ * asteroid-bootsplash: Lightweight Linux framebuffer boot animation for AsteroidOS.
++ * Listens on /run/psplash_fifo for "QUIT" (sent by asteroid-launcher.service).
++ * Supports --once to draw the initial frame immediately during early stage-2 boot.
++ */
++
++#define _GNU_SOURCE
++#include <errno.h>
++#include <fcntl.h>
++#include <linux/fb.h>
++#include <math.h>
++#include <signal.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <time.h>
++#include <unistd.h>
++
++#ifndef M_PI
++#define M_PI 3.14159265358979323846
++#endif
++
++static volatile sig_atomic_t g_running = 1;
++
++static void handle_signal(int sig) {
++    (void)sig;
++    g_running = 0;
++}
++
++static uint64_t now_ms(void) {
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)(ts.tv_nsec / 1000000ULL);
++}
++
++static void unblank_fb(void) {
++    int fd = open("/sys/class/graphics/fb0/blank", O_WRONLY);
++    if (fd >= 0) {
++        (void)write(fd, "0\n", 2);
++        close(fd);
++    }
++}
++
++static inline uint8_t clamp_u8(float v) {
++    if (v <= 0.0f) return 0;
++    if (v >= 255.0f) return 255;
++    return (uint8_t)(v + 0.5f);
++}
++
++static inline float smoothstep(float edge0, float edge1, float x) {
++    float t = (x - edge0) / (edge1 - edge0);
++    if (t < 0.0f) t = 0.0f;
++    if (t > 1.0f) t = 1.0f;
++    return t * t * (3.0f - 2.0f * t);
++}
++
++static inline float wrap_angle_pos(float a) {
++    const float two_pi = (float)(2.0 * M_PI);
++    a = fmodf(a, two_pi);
++    if (a < 0.0f) a += two_pi;
++    return a;
++}
++
++static void render_frame(
++    uint8_t *fbmem,
++    const struct fb_var_screeninfo *vinfo,
++    const struct fb_fix_screeninfo *finfo,
++    float t_sec
++) {
++    const int w = (int)vinfo->xres;
++    const int h = (int)vinfo->yres;
++    const int min_dim = w < h ? w : h;
++    const float cx = (float)w * 0.5f;
++    const float cy = (float)h * 0.5f;
++
++    const float ring_r = (float)min_dim * 0.25f;
++    const float ring_thick = (float)min_dim * 0.018f;
++    const float head_angle = wrap_angle_pos(t_sec * 3.1f);
++    const float pulse = 0.5f + 0.5f * sinf(t_sec * 2.8f);
++    const float core_r = (float)min_dim * (0.042f + 0.010f * pulse);
++    const float orbit_dot_r = (float)min_dim * 0.015f;
++    const float tail_len = 2.4f; /* radians */
++
++    const int bytes_pp = (int)vinfo->bits_per_pixel / 8;
++    const uint32_t xoff = vinfo->xoffset;
++    const uint32_t yoff = vinfo->yoffset;
++
++    for (int y = 0; y < h; ++y) {
++        uint8_t *row = fbmem + ((size_t)(y + (int)yoff) * finfo->line_length) + ((size_t)xoff * (size_t)bytes_pp);
++        const float dy = ((float)y + 0.5f) - cy;
++        const float dy2 = dy * dy;
++
++        for (int x = 0; x < w; ++x) {
++            const float dx = ((float)x + 0.5f) - cx;
++            const float dist = sqrtf(dx * dx + dy2);
++
++            /* Deep space background (#05070B) */
++            float r = 5.0f;
++            float g = 7.0f;
++            float b = 11.0f;
++
++            /* Subtle ambient radial glow */
++            float glow = expf(-dist / ((float)min_dim * 0.28f));
++            r += 4.0f * glow;
++            g += 18.0f * glow;
++            b += 26.0f * glow;
++
++            /* Faint track ring */
++            float d_ring = fabsf(dist - ring_r);
++            float track_a = 1.0f - smoothstep(ring_thick * 0.4f, ring_thick * 0.9f, d_ring);
++            if (track_a > 0.0f) {
++                r += track_a * 18.0f;
++                g += track_a * 32.0f;
++                b += track_a * 42.0f;
++            }
++
++            /* Rotating AsteroidOS comet arc */
++            if (d_ring < ring_thick * 2.2f) {
++                float ang = wrap_angle_pos(atan2f(dy, dx));
++                float behind = wrap_angle_pos(head_angle - ang);
++                if (behind < tail_len) {
++                    float arc_fade = 1.0f - (behind / tail_len);
++                    arc_fade = arc_fade * arc_fade;
++                    float radial = 1.0f - smoothstep(ring_thick * 0.45f, ring_thick * 1.15f, d_ring);
++                    float intensity = arc_fade * radial;
++                    r += intensity * 40.0f;
++                    g += intensity * 210.0f;
++                    b += intensity * 235.0f;
++                }
++            }
++
++            /* Pulsing central diamond/star core */
++            float diamond = (fabsf(dx) + fabsf(dy)) * 0.72f;
++            float core_a = 1.0f - smoothstep(core_r * 0.75f, core_r * 1.15f, diamond);
++            if (core_a > 0.0f) {
++                r += core_a * (50.0f + 35.0f * pulse);
++                g += core_a * (220.0f + 25.0f * pulse);
++                b += core_a * 245.0f;
++            }
++
++            /* Small orbiting satellite dot on outer track */
++            float sat_ang = -t_sec * 1.6f;
++            float sx = cosf(sat_ang) * (ring_r * 1.24f);
++            float sy = sinf(sat_ang) * (ring_r * 1.24f);
++            float sat_dist = hypotf(dx - sx, dy - sy);
++            float sat_a = 1.0f - smoothstep(orbit_dot_r * 0.6f, orbit_dot_r * 1.3f, sat_dist);
++            if (sat_a > 0.0f) {
++                r += sat_a * 120.0f;
++                g += sat_a * 235.0f;
++                b += sat_a * 250.0f;
++            }
++
++            uint8_t ur = clamp_u8(r);
++            uint8_t ug = clamp_u8(g);
++            uint8_t ub = clamp_u8(b);
++
++            if (vinfo->bits_per_pixel == 32) {
++                uint32_t pix = 0;
++                pix |= ((uint32_t)(ur >> (8 - vinfo->red.length))) << vinfo->red.offset;
++                pix |= ((uint32_t)(ug >> (8 - vinfo->green.length))) << vinfo->green.offset;
++                pix |= ((uint32_t)(ub >> (8 - vinfo->blue.length))) << vinfo->blue.offset;
++                if (vinfo->transp.length > 0) {
++                    pix |= ((uint32_t)((1U << vinfo->transp.length) - 1U)) << vinfo->transp.offset;
++                }
++                ((uint32_t *)row)[x] = pix;
++            } else if (vinfo->bits_per_pixel == 16) {
++                uint16_t pix = 0;
++                pix |= (uint16_t)(((ur >> (8 - vinfo->red.length)) << vinfo->red.offset));
++                pix |= (uint16_t)(((ug >> (8 - vinfo->green.length)) << vinfo->green.offset));
++                pix |= (uint16_t)(((ub >> (8 - vinfo->blue.length)) << vinfo->blue.offset));
++                ((uint16_t *)row)[x] = pix;
++            } else if (vinfo->bits_per_pixel == 24) {
++                uint8_t *p = row + x * 3;
++                if (vinfo->red.offset == 16) {
++                    p[0] = ub; p[1] = ug; p[2] = ur;
++                } else {
++                    p[0] = ur; p[1] = ug; p[2] = ub;
++                }
++            }
++        }
++    }
++}
++
++int main(int argc, char **argv) {
++    int once = 0;
++    for (int i = 1; i < argc; ++i) {
++        if (strcmp(argv[i], "--once") == 0) {
++            once = 1;
++        }
++    }
++
++    signal(SIGTERM, handle_signal);
++    signal(SIGINT, handle_signal);
++
++    unblank_fb();
++
++    int fbfd = open("/dev/fb0", O_RDWR);
++    if (fbfd < 0) {
++        fbfd = open("/dev/graphics/fb0", O_RDWR);
++    }
++    if (fbfd < 0) {
++        return 1;
++    }
++
++    struct fb_var_screeninfo vinfo;
++    struct fb_fix_screeninfo finfo;
++    if (ioctl(fbfd, FBIOGET_VSCREENINFO, &vinfo) < 0 ||
++        ioctl(fbfd, FBIOGET_FSCREENINFO, &finfo) < 0) {
++        close(fbfd);
++        return 1;
++    }
++
++    size_t screensize = (size_t)finfo.line_length * (size_t)(vinfo.yres + vinfo.yoffset);
++    if (screensize == 0 || finfo.smem_len == 0) {
++        close(fbfd);
++        return 1;
++    }
++    if (screensize > finfo.smem_len) {
++        screensize = finfo.smem_len;
++    }
++
++    uint8_t *fbmem = mmap(NULL, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
++    if (fbmem == MAP_FAILED) {
++        close(fbfd);
++        return 1;
++    }
++
++    if (once) {
++        render_frame(fbmem, &vinfo, &finfo, 0.0f);
++        msync(fbmem, screensize, MS_SYNC);
++        munmap(fbmem, screensize);
++        close(fbfd);
++        return 0;
++    }
++
++    const char *fifo_path = "/run/psplash_fifo";
++    if (mkfifo(fifo_path, 0666) < 0 && errno != EEXIST) {
++        /* ignore if already exists or /run not writable yet */
++    }
++    chmod(fifo_path, 0666);
++    int fifofd = open(fifo_path, O_RDWR | O_NONBLOCK);
++
++    const uint64_t start_ms = now_ms();
++    const uint64_t max_runtime_ms = 120000ULL;
++    char buf[128];
++
++    while (g_running) {
++        uint64_t elapsed = now_ms() - start_ms;
++        if (elapsed >= max_runtime_ms) {
++            break;
++        }
++
++        if (fifofd >= 0) {
++            ssize_t n = read(fifofd, buf, sizeof(buf) - 1);
++            if (n > 0) {
++                buf[n] = '\0';
++                if (strstr(buf, "QUIT") != NULL) {
++                    break;
++                }
++            }
++        } else {
++            fifofd = open(fifo_path, O_RDWR | O_NONBLOCK);
++        }
++
++        render_frame(fbmem, &vinfo, &finfo, (float)elapsed / 1000.0f);
++        (void)ioctl(fbfd, FBIOPAN_DISPLAY, &vinfo);
++
++        struct timespec req = { 0, 33000000L }; /* ~30 fps */
++        nanosleep(&req, NULL);
++    }
++
++    if (fifofd >= 0) {
++        close(fifofd);
++    }
++    munmap(fbmem, screensize);
++    close(fbfd);
++    return 0;
++}
+diff --git a/overlay/asteroidos/asteroid-bootsplash/default.nix b/overlay/asteroidos/asteroid-bootsplash/default.nix
+new file mode 100644
+index 00000000..39d93cb0
+--- /dev/null
++++ b/overlay/asteroidos/asteroid-bootsplash/default.nix
+@@ -0,0 +1,29 @@
++{
++  lib,
++  stdenv,
++}:
++
++stdenv.mkDerivation {
++  pname = "asteroid-bootsplash";
++  version = "1.0.0";
++
++  src = ./.;
++
++  buildPhase = ''
++    runHook preBuild
++    $CC -O2 -Wall -Wextra -std=c11 asteroid-bootsplash.c -lm -o asteroid-bootsplash
++    runHook postBuild
++  '';
++
++  installPhase = ''
++    runHook preInstall
++    install -Dm755 asteroid-bootsplash $out/bin/asteroid-bootsplash
++    runHook postInstall
++  '';
++
++  meta = with lib; {
++    description = "Lightweight animated Linux framebuffer boot splash for AsteroidOS";
++    license = licenses.gpl3Plus;
++    platforms = platforms.linux;
++  };
++}
+diff --git a/overlay/asteroidos/community-apps/default.nix b/overlay/asteroidos/community-apps/default.nix
+index 4f895595..f16f0d91 100644
+--- a/overlay/asteroidos/community-apps/default.nix
++++ b/overlay/asteroidos/community-apps/default.nix
+@@ -15,6 +15,7 @@
+   mlite,
+   espeak-classic,
+   noUsrShareHook,
++  boost,
+ }:
+ 
+ rec {
+@@ -77,6 +78,7 @@ rec {
+     hash = "sha256-MQclAo5GOxRDbieuz21GCRvpfnWuWj+TTFijSR6qZdE=";
+     patches = [
+       ./sensorlogd-sleep-monitor.patch
++      ./sensorlogd-boost-period.patch
+     ];
+     # The wearable sensor types (QHrmSensor, QStepCounterSensor, …) come from
+     # Qt Sensors itself: the upstream AsteroidOS patches are applied to
+@@ -85,6 +87,7 @@ rec {
+     extraBuildInputs = [
+       qt6.qtsensors
+       mlite
++      boost
+     ];
+   };
+ 
+@@ -95,6 +98,7 @@ rec {
+     hash = "sha256-eI7d2+Mu+ayh2TQvO7Gzl6lIw8yLAm7h8EZtTRLwaM4=";
+     patches = [
+       ./health-sleep-monitor.patch
++      ./health-period-zh-hant.patch
+     ];
+     extraBuildInputs = [
+       qt6.qtsensors
+diff --git a/overlay/asteroidos/community-apps/health-period-zh-hant.patch b/overlay/asteroidos/community-apps/health-period-zh-hant.patch
+new file mode 100644
+index 00000000..37d48f92
+--- /dev/null
++++ b/overlay/asteroidos/community-apps/health-period-zh-hant.patch
+@@ -0,0 +1,604 @@
++diff --git a/i18n/asteroid-health.zh_Hant.ts b/i18n/asteroid-health.zh_Hant.ts
++new file mode 100644
++index 0000000..129fa60
++--- /dev/null
+++++ b/i18n/asteroid-health.zh_Hant.ts
++@@ -0,0 +1,187 @@
+++<?xml version="1.0" encoding="utf-8"?>
+++<!DOCTYPE TS>
+++<TS version="2.1" language="zh_Hant">
+++<context>
+++    <name></name>
+++    <message id="id-app-launcher-name">
+++        <source>Health</source>
+++        <translation>健康</translation>
+++    </message>
+++    <message id="id-overview">
+++        <source>Overview</source>
+++        <translation>總覽</translation>
+++    </message>
+++    <message id="id-settings">
+++        <source>Settings</source>
+++        <translation>設定</translation>
+++    </message>
+++    <message id="id-ui-settings">
+++        <source>UI settings</source>
+++        <translation>介面設定</translation>
+++    </message>
+++    <message id="id-logger-settings">
+++        <source>Logger settings</source>
+++        <translation>記錄器設定</translation>
+++    </message>
+++    <message id="id-ui-settings-title">
+++        <source>UI Settings</source>
+++        <translation>介面設定</translation>
+++    </message>
+++    <message id="id-show-step-count-preview">
+++        <source>Show step count preview</source>
+++        <translation>顯示步數預覽</translation>
+++    </message>
+++    <message id="id-show-heartrate-preview">
+++        <source>Show heartrate preview</source>
+++        <translation>顯示心率預覽</translation>
+++    </message>
+++    <message id="id-show-sleep-preview">
+++        <source>Show sleep preview</source>
+++        <translation>顯示睡眠預覽</translation>
+++    </message>
+++    <message id="id-show-period-preview">
+++        <source>Show cycle preview</source>
+++        <translation>顯示生理期預覽</translation>
+++    </message>
+++    <message id="id-show-weight-preview">
+++        <source>Show weight preview</source>
+++        <translation>顯示體重預覽</translation>
+++    </message>
+++    <message id="id-logger-settings-title">
+++        <source>Logger Settings</source>
+++        <translation>記錄器設定</translation>
+++    </message>
+++    <message id="id-log-step-count">
+++        <source>Log step count</source>
+++        <translation>記錄步數</translation>
+++    </message>
+++    <message id="id-enable-steps-goal">
+++        <source>Enable steps goal</source>
+++        <translation>啟用步數目標</translation>
+++    </message>
+++    <message id="id-log-heart-rate">
+++        <source>Log heart rate</source>
+++        <translation>記錄心率</translation>
+++    </message>
+++    <message id="id-steps-walked-today">
+++        <source>You've walked %1 steps today, keep it up!</source>
+++        <translation>今天已走 %1 步，繼續加油！</translation>
+++    </message>
+++    <message id="id-no-steps-today">
+++        <source>You haven't yet logged any steps today</source>
+++        <translation>今天尚未記錄任何步數</translation>
+++    </message>
+++    <message id="id-steps">
+++        <source>Steps</source>
+++        <translation>步數</translation>
+++    </message>
+++    <message id="id-steps-walked-on-day">
+++        <source>You walked %1 steps on this day</source>
+++        <translation>這天共走了 %1 步</translation>
+++    </message>
+++    <message id="id-3-weeks">
+++        <source>3 weeks</source>
+++        <translation>3 週</translation>
+++    </message>
+++    <message id="id-week">
+++        <source>week</source>
+++        <translation>週</translation>
+++    </message>
+++    <message id="id-day">
+++        <source>day</source>
+++        <translation>天</translation>
+++    </message>
+++    <message id="id-heartrate">
+++        <source>Heartrate</source>
+++        <translation>心率</translation>
+++    </message>
+++    <message id="id-weight">
+++        <source>Weight</source>
+++        <translation>體重</translation>
+++    </message>
+++    <message id="id-add-record">
+++        <source>Add record</source>
+++        <translation>新增記錄</translation>
+++    </message>
+++    <message id="id-period">
+++        <source>Cycle</source>
+++        <translation>生理期</translation>
+++    </message>
+++    <message id="id-cycle-day">
+++        <source>Day %1</source>
+++        <translation>第 %1 天</translation>
+++    </message>
+++    <message id="id-period-tap-to-log">
+++        <source>Tap to log</source>
+++        <translation>點擊記錄</translation>
+++    </message>
+++    <message id="id-phase-menstrual">
+++        <source>Period</source>
+++        <translation>經期中</translation>
+++    </message>
+++    <message id="id-phase-fertile">
+++        <source>Fertile window</source>
+++        <translation>排卵受孕期</translation>
+++    </message>
+++    <message id="id-phase-follicular">
+++        <source>Follicular</source>
+++        <translation>濾泡期</translation>
+++    </message>
+++    <message id="id-phase-luteal">
+++        <source>Luteal</source>
+++        <translation>黃體期</translation>
+++    </message>
+++    <message id="id-period-no-data">
+++        <source>No data</source>
+++        <translation>尚無資料</translation>
+++    </message>
+++    <message id="id-next-period-in">
+++        <source>Next period in %1 days</source>
+++        <translation>距離下次經期約 %1 天</translation>
+++    </message>
+++    <message id="id-period-overdue">
+++        <source>Period %1 days overdue</source>
+++        <translation>經期已延遲 %1 天</translation>
+++    </message>
+++    <message id="id-flow-light">
+++        <source>Light</source>
+++        <translation>量少</translation>
+++    </message>
+++    <message id="id-flow-medium">
+++        <source>Medium</source>
+++        <translation>適中</translation>
+++    </message>
+++    <message id="id-flow-heavy">
+++        <source>Heavy</source>
+++        <translation>量多</translation>
+++    </message>
+++    <message id="id-period-tap-end">
+++        <source>Tap check to end period today</source>
+++        <translation>點擊勾選以記錄今日結束</translation>
+++    </message>
+++    <message id="id-period-tap-start">
+++        <source>Tap + to log period start today</source>
+++        <translation>點擊 + 以記錄今日開始</translation>
+++    </message>
+++    <message id="id-next-period-date">
+++        <source>Next period: %1</source>
+++        <translation>預測下次經期：%1</translation>
+++    </message>
+++    <message id="id-fertile-window">
+++        <source>Fertile window: %1 – %2</source>
+++        <translation>受孕期：%1 – %2</translation>
+++    </message>
+++    <message id="id-cycle-stats">
+++        <source>Median cycle: %1 d · Period: %2 d</source>
+++        <translation>週期中位數：%1 天 · 經期：%2 天</translation>
+++    </message>
+++    <message id="id-cycle-irregular">
+++        <source>Cycle variability is elevated (±%1 d)</source>
+++        <translation>週期波動較大 (±%1 天)</translation>
+++    </message>
+++    <message id="id-period-history">
+++        <source>History</source>
+++        <translation>歷史記錄</translation>
+++    </message>
+++</context>
+++</TS>
++diff --git a/src/main.qml b/src/main.qml
++index 89df7d4..5fa9b5f 100644
++--- a/src/main.qml
+++++ b/src/main.qml
++@@ -27,6 +27,7 @@ import "settings"
++ import "stepCounter"
++ import "heartrate"
++ import "sleep"
+++import "period"
++ import "weight"
++ 
++ Application {
++@@ -79,6 +80,13 @@ Application {
++                             visible: sleepPreviewVisible.value
++                         }
++ 
+++                        Item { width: parent.width; height: parent.width*0.1; visible: periodPreviewVisible.value}
+++
+++                        PeriodPreview {
+++                            width: parent.width
+++                            visible: periodPreviewVisible.value
+++                        }
+++
++                         Item { width: parent.width; height: parent.width*0.1; visible: weightPreviewVisible.value}
++ 
++                         WeightPreview {
++@@ -114,6 +122,11 @@ Application {
++         key: "/org/asteroidos/health/ui/sleep/showpreview"
++         defaultValue: true
++     }
+++    ConfigurationValue {
+++        id: periodPreviewVisible
+++        key: "/org/asteroidos/health/ui/period/showpreview"
+++        defaultValue: true
+++    }
++     ConfigurationValue {
++         id: weightPreviewVisible
++         key: "/org/asteroidos/health/ui/weight/showpreview"
++diff --git a/src/period/PeriodDetailPage.qml b/src/period/PeriodDetailPage.qml
++new file mode 100644
++index 0000000..f33646e
++--- /dev/null
+++++ b/src/period/PeriodDetailPage.qml
++@@ -0,0 +1,198 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++import QtQuick
+++import org.asteroid.controls
+++import org.asteroid.sensorlogd
+++
+++Item {
+++    id: root
+++    property var loader
+++
+++    function flowLabel(f) {
+++        if (f === 1)
+++            //% "Light"
+++            return qsTrId("id-flow-light")
+++        if (f === 3)
+++            //% "Heavy"
+++            return qsTrId("id-flow-heavy")
+++        //% "Medium"
+++        return qsTrId("id-flow-medium")
+++    }
+++
+++    function phaseLabel(phase) {
+++        if (phase === "Menstrual") return qsTrId("id-phase-menstrual")
+++        if (phase === "Fertile") return qsTrId("id-phase-fertile")
+++        if (phase === "Follicular") return qsTrId("id-phase-follicular")
+++        if (phase === "Luteal") return qsTrId("id-phase-luteal")
+++        return qsTrId("id-period-no-data")
+++    }
+++
+++    PageHeader {
+++        //% "Cycle"
+++        text: qsTrId("id-period")
+++        z: 5
+++    }
+++
+++    Flickable {
+++        anchors.fill: parent
+++        contentHeight: mainCol.implicitHeight
+++
+++        Column {
+++            id: mainCol
+++            width: parent.width
+++            spacing: app.width * 0.04
+++
+++            Item { width: parent.width; height: app.height * 0.18 }
+++
+++            /* Action buttons */
+++            Row {
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                spacing: app.width * 0.04
+++
+++                IconButton {
+++                    iconName: "ios-add-circle-outline"
+++                    onClicked: loader.logPeriodStart("", loader.currentFlow)
+++                }
+++
+++                IconButton {
+++                    visible: loader.isPeriodActive
+++                    iconName: "ios-checkmark-circle-outline"
+++                    onClicked: loader.logPeriodEnd("")
+++                }
+++            }
+++
+++            Label {
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                font.pixelSize: app.height * 0.048
+++                color: "#FF80AB"
+++                text: loader.isPeriodActive
+++                      //% "Tap check to end period today"
+++                      ? qsTrId("id-period-tap-end")
+++                      //% "Tap + to log period start today"
+++                      : qsTrId("id-period-tap-start")
+++            }
+++
+++            /* Current status */
+++            Column {
+++                visible: loader.cycleCount > 0
+++                anchors {
+++                    left: parent.left
+++                    right: parent.right
+++                    margins: app.width * 0.1
+++                }
+++                spacing: app.height * 0.015
+++
+++                Label {
+++                    font.pixelSize: app.height * 0.075
+++                    font.bold: true
+++                    text: qsTrId("id-cycle-day").arg(loader.currentCycleDay) + " · " + phaseLabel(loader.currentPhase)
+++                }
+++
+++                Label {
+++                    font.pixelSize: app.height * 0.048
+++                    color: "#CCCCCC"
+++                    //% "Next period: %1"
+++                    text: qsTrId("id-next-period-date").arg(loader.predictedNextPeriod)
+++                }
+++
+++                Label {
+++                    font.pixelSize: app.height * 0.048
+++                    color: "#66E0FF"
+++                    //% "Fertile window: %1 – %2"
+++                    text: qsTrId("id-fertile-window").arg(loader.fertileWindowStart).arg(loader.fertileWindowEnd)
+++                }
+++
+++                Label {
+++                    font.pixelSize: app.height * 0.045
+++                    color: "#AAAAAA"
+++                    //% "Median cycle: %1 d · Period: %2 d"
+++                    text: qsTrId("id-cycle-stats").arg(loader.medianCycleLength).arg(loader.medianPeriodLength)
+++                }
+++
+++                Label {
+++                    visible: loader.isIrregular
+++                    font.pixelSize: app.height * 0.045
+++                    color: "#FFB74D"
+++                    wrapMode: Text.WordWrap
+++                    width: parent.width
+++                    //% "Cycle variability is elevated (±%1 d)"
+++                    text: qsTrId("id-cycle-irregular").arg(loader.cycleStdDev.toFixed(1))
+++                }
+++            }
+++
+++            /* Flow intensity selector when a cycle exists */
+++            Row {
+++                visible: loader.cycleCount > 0
+++                anchors.horizontalCenter: parent.horizontalCenter
+++                spacing: app.width * 0.04
+++
+++                Repeater {
+++                    model: [1, 2, 3]
+++                    delegate: Rectangle {
+++                        width: app.width * 0.23
+++                        height: app.height * 0.09
+++                        radius: height / 2
+++                        color: loader.currentFlow === modelData ? "#FF5277" : "#223344"
+++
+++                        Label {
+++                            anchors.centerIn: parent
+++                            font.pixelSize: app.height * 0.045
+++                            text: flowLabel(modelData)
+++                        }
+++
+++                        MouseArea {
+++                            anchors.fill: parent
+++                            onClicked: loader.setCurrentFlow(modelData)
+++                        }
+++                    }
+++                }
+++            }
+++
+++            /* History */
+++            Label {
+++                visible: loader.cycleCount > 0
+++                anchors {
+++                    left: parent.left
+++                    margins: app.width * 0.1
+++                }
+++                font.pixelSize: app.height * 0.055
+++                font.bold: true
+++                //% "History"
+++                text: qsTrId("id-period-history")
+++            }
+++
+++            Repeater {
+++                model: loader.cycles
+++                delegate: Row {
+++                    anchors {
+++                        left: parent.left
+++                        right: parent.right
+++                        margins: app.width * 0.1
+++                    }
+++                    spacing: app.width * 0.03
+++
+++                    Label {
+++                        width: parent.width * 0.72
+++                        anchors.verticalCenter: parent.verticalCenter
+++                        font.pixelSize: app.height * 0.048
+++                        text: modelData.startDate + (modelData.endDate ? (" → " + modelData.endDate) : " (…)") + " · " + flowLabel(modelData.flow)
+++                    }
+++
+++                    IconButton {
+++                        iconName: "ios-trash-outline"
+++                        onClicked: loader.deleteCycle(index)
+++                    }
+++                }
+++            }
+++
+++            Item { width: parent.width; height: app.height * 0.18 }
+++        }
+++    }
+++}
++diff --git a/src/period/PeriodPreview.qml b/src/period/PeriodPreview.qml
++new file mode 100644
++index 0000000..b9c807c
++--- /dev/null
+++++ b/src/period/PeriodPreview.qml
++@@ -0,0 +1,113 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * This program is free software: you can redistribute it and/or modify
+++ * it under the terms of the GNU General Public License as published by
+++ * the Free Software Foundation, either version 3 of the License, or
+++ * (at your option) any later version.
+++ */
+++
+++import QtQuick
+++import org.asteroid.controls
+++import org.asteroid.sensorlogd
+++
+++MouseArea {
+++    id: root
+++    implicitHeight: contentColumn.implicitHeight
+++
+++    PeriodDataLoader {
+++        id: periodLoader
+++    }
+++
+++    function phaseLabel(phase) {
+++        if (phase === "Menstrual")
+++            //% "Period"
+++            return qsTrId("id-phase-menstrual")
+++        if (phase === "Fertile")
+++            //% "Fertile window"
+++            return qsTrId("id-phase-fertile")
+++        if (phase === "Follicular")
+++            //% "Follicular"
+++            return qsTrId("id-phase-follicular")
+++        if (phase === "Luteal")
+++            //% "Luteal"
+++            return qsTrId("id-phase-luteal")
+++        //% "No data"
+++        return qsTrId("id-period-no-data")
+++    }
+++
+++    function phaseColor(phase) {
+++        if (phase === "Menstrual") return "#FF5277"
+++        if (phase === "Fertile") return "#66E0FF"
+++        if (phase === "Follicular") return "#A5D6A7"
+++        if (phase === "Luteal") return "#CE93D8"
+++        return "#8899A6"
+++    }
+++
+++    Column {
+++        id: contentColumn
+++        width: parent.width
+++        spacing: app.width * 0.03
+++
+++        Label {
+++            anchors {
+++                left: parent.left
+++                margins: app.width * 0.1
+++            }
+++            //% "Cycle"
+++            text: qsTrId("id-period")
+++        }
+++
+++        Row {
+++            anchors {
+++                left: parent.left
+++                right: parent.right
+++                margins: app.width * 0.1
+++            }
+++            spacing: app.width * 0.04
+++
+++            Label {
+++                text: periodLoader.cycleCount > 0
+++                      //% "Day %1"
+++                      ? qsTrId("id-cycle-day").arg(periodLoader.currentCycleDay)
+++                      //% "Tap to log"
+++                      : qsTrId("id-period-tap-to-log")
+++                font.pixelSize: app.height * 0.085
+++                font.bold: true
+++            }
+++
+++            Label {
+++                visible: periodLoader.cycleCount > 0
+++                anchors.verticalCenter: parent.verticalCenter
+++                text: phaseLabel(periodLoader.currentPhase)
+++                font.pixelSize: app.height * 0.052
+++                color: phaseColor(periodLoader.currentPhase)
+++            }
+++        }
+++
+++        Label {
+++            visible: periodLoader.cycleCount > 0
+++            anchors {
+++                left: parent.left
+++                right: parent.right
+++                margins: app.width * 0.1
+++            }
+++            wrapMode: Text.WordWrap
+++            font.pixelSize: app.height * 0.048
+++            color: "#CCCCCC"
+++            text: periodLoader.daysUntilNextPeriod >= 0
+++                  //% "Next period in %1 days"
+++                  ? qsTrId("id-next-period-in").arg(periodLoader.daysUntilNextPeriod)
+++                  //% "Period %1 days overdue"
+++                  : qsTrId("id-period-overdue").arg(-periodLoader.daysUntilNextPeriod)
+++        }
+++    }
+++
+++    onClicked: pageStack.push(detailPage)
+++    Component {
+++        id: detailPage
+++        PeriodDetailPage {
+++            loader: periodLoader
+++        }
+++    }
+++}
++diff --git a/src/resources.qrc b/src/resources.qrc
++index 32d140c..32c1759 100644
++--- a/src/resources.qrc
+++++ b/src/resources.qrc
++@@ -9,6 +9,8 @@
++         <file>heartrate/HrGraph.qml</file>
++         <file>sleep/SleepPreview.qml</file>
++         <file>sleep/SleepDetailPage.qml</file>
+++        <file>period/PeriodPreview.qml</file>
+++        <file>period/PeriodDetailPage.qml</file>
++         <file>weight/WeightPreview.qml</file>
++         <file>weight/WeightDetailPage.qml</file>
++         <file>weight/WeightGraph.qml</file>
++diff --git a/src/settings/UiSettingsPage.qml b/src/settings/UiSettingsPage.qml
++index 1a51c09..28995c8 100644
++--- a/src/settings/UiSettingsPage.qml
+++++ b/src/settings/UiSettingsPage.qml
++@@ -55,10 +55,19 @@ Item {
++             LabeledSwitch {
++                 width: parent.width
++                 height: width*0.25
++-                text: "Show sleep preview"
+++                //% "Show sleep preview"
+++                text: qsTrId("id-show-sleep-preview")
++                 checked: sleepPreviewVisible.value
++                 onCheckedChanged: sleepPreviewVisible.value = checked
++             }
+++            LabeledSwitch {
+++                width: parent.width
+++                height: width*0.25
+++                //% "Show cycle preview"
+++                text: qsTrId("id-show-period-preview")
+++                checked: periodPreviewVisible.value
+++                onCheckedChanged: periodPreviewVisible.value = checked
+++            }
++             LabeledSwitch {
++                 width: parent.width
++                 height: width*0.25
++@@ -86,6 +95,11 @@ Item {
++         key: "/org/asteroidos/health/ui/sleep/showpreview"
++         defaultValue: true
++     }
+++    ConfigurationValue {
+++        id: periodPreviewVisible
+++        key: "/org/asteroidos/health/ui/period/showpreview"
+++        defaultValue: true
+++    }
++     ConfigurationValue {
++         id: weightPreviewVisible
++         key: "/org/asteroidos/health/ui/weight/showpreview"
+diff --git a/overlay/asteroidos/community-apps/sensorlogd-boost-period.patch b/overlay/asteroidos/community-apps/sensorlogd-boost-period.patch
+new file mode 100644
+index 00000000..e9097f16
+--- /dev/null
++++ b/overlay/asteroidos/community-apps/sensorlogd-boost-period.patch
+@@ -0,0 +1,674 @@
++diff --git a/daemon/CMakeLists.txt b/daemon/CMakeLists.txt
++index fe45e2f..d585555 100644
++--- a/daemon/CMakeLists.txt
+++++ b/daemon/CMakeLists.txt
++@@ -15,6 +15,8 @@ add_executable(
++     ../common.h
++ )
++ 
+++find_package(Boost REQUIRED)
+++
++ set_target_properties(sensorlogd PROPERTIES AUTOMOC ON)
++ target_link_libraries(
++     sensorlogd
++@@ -23,6 +25,7 @@ target_link_libraries(
++         Qt::DBus
++         Qt::Qml
++         Qt::Sensors
+++        Boost::headers
++         ${mlite6_LIBRARIES}
++ )
++ target_include_directories(sensorlogd PRIVATE ${mlite6_INCLUDE_DIRS})
++diff --git a/daemon/sensorPlugins/sleepMonitor.cpp b/daemon/sensorPlugins/sleepMonitor.cpp
++index a51c9ad..8b80f6a 100644
++--- a/daemon/sensorPlugins/sleepMonitor.cpp
+++++ b/daemon/sensorPlugins/sleepMonitor.cpp
++@@ -1,6 +1,11 @@
++ /*
++  * Copyright (C) 2026 AsteroidOS / Matawaa
++  *
+++ * Sleep-wake & sleep-stage actigraphy classifier using:
+++ * - Van Hees et al. (2013) Euclidean Norm Minus One (ENMO) acceleration metric
+++ * - Cole-Kripke (1992) weighted sliding actigraphy sleep/wake scoring
+++ * - Boost.Math.Statistics (mean, sample_variance, median, median_absolute_deviation)
+++ *
++  * This program is free software: you can redistribute it and/or modify
++  * it under the terms of the GNU General Public License as published by
++  * the Free Software Foundation, either version 3 of the License, or
++@@ -13,6 +18,43 @@
++ #include <QDebug>
++ #include <QtMath>
++ 
+++#include <boost/math/statistics/univariate_statistics.hpp>
+++#include <vector>
+++
+++namespace {
+++constexpr double kGravityMs2 = 9.80665;
+++constexpr int kColeKripkeWindow = 7;
+++constexpr int kMaxRestingHrSamples = 64;
+++
+++/*
+++ * Cole-Kripke (1992) sleep/wake weights adapted for 1-5 min ENMO epochs (in milli-g):
+++ * D = P * sum(w_i * A_i), where D < 1.0 indicates sleep.
+++ */
+++double computeColeKripkeIndex(const QVector<double> &history)
+++{
+++    static const double weights[kColeKripkeWindow] = { 0.04, 0.06, 0.12, 0.40, 0.22, 0.10, 0.06 };
+++    const int n = history.size();
+++    if (n == 0) {
+++        return 0.0;
+++    }
+++
+++    double weightedSum = 0.0;
+++    double weightNorm = 0.0;
+++    for (int i = 0; i < kColeKripkeWindow; ++i) {
+++        const int idx = n - 1 - i;
+++        if (idx < 0) {
+++            break;
+++        }
+++        weightedSum += weights[i] * history.at(idx);
+++        weightNorm += weights[i];
+++    }
+++    if (weightNorm <= 0.0) {
+++        return 0.0;
+++    }
+++    return (weightedSum / weightNorm) / 35.0;
+++}
+++} // namespace
+++
++ SleepMonitorPlugin::SleepMonitorPlugin(QObject *parent, int initInterval)
++     : QObject(parent)
++     , interval(qMax(60000, initInterval))
++@@ -38,7 +80,7 @@ SleepMonitorPlugin::SleepMonitorPlugin(QObject *parent, int initInterval)
++     connect(accelSampleTimer, &QTimer::timeout, this, &SleepMonitorPlugin::sampleAccel);
++ 
++     lastRecordTime = QDateTime::currentDateTime();
++-    qDebug() << "sleep monitor is enabled. interval (ms):" << interval;
+++    qDebug() << "sleep monitor (Boost.Math Cole-Kripke/ENMO) enabled. interval (ms):" << interval;
++ }
++ 
++ void SleepMonitorPlugin::timeUpdate()
++@@ -59,7 +101,7 @@ void SleepMonitorPlugin::triggerRecording()
++     }
++ 
++     samplingActive = true;
++-    magSamples.clear();
+++    enmoSamples.clear();
++     latestBpm = 0;
++ 
++     if (stepSensor->start()) {
++@@ -71,7 +113,6 @@ void SleepMonitorPlugin::triggerRecording()
++     hrmSensor->start();
++ 
++     accelSampleTimer->start();
++-    // 4-second actigraphy + HR sampling window
++     sampleWindowTimer->start(4000);
++ }
++ 
++@@ -82,7 +123,8 @@ void SleepMonitorPlugin::sampleAccel()
++     }
++     if (auto *r = accelSensor->reading()) {
++         const double mag = qSqrt(r->x() * r->x() + r->y() * r->y() + r->z() * r->z());
++-        magSamples.append(mag);
+++        const double enmoMg = qMax(0.0, (mag - kGravityMs2) / kGravityMs2 * 1000.0);
+++        enmoSamples.append(enmoMg);
++     }
++ }
++ 
++@@ -113,38 +155,65 @@ void SleepMonitorPlugin::finalizeEpoch()
++         stepSensor->stop();
++     }
++ 
++-    // Compute mean absolute deviation of acceleration magnitude (m/s^2)
++-    double motionVar = 0.0;
++-    if (magSamples.size() >= 2) {
++-        double mean = 0.0;
++-        for (double v : magSamples) {
++-            mean += v;
+++    double enmoMean = 0.0;
+++    double enmoSd = 0.0;
+++    if (!enmoSamples.isEmpty()) {
+++        std::vector<double> vec(enmoSamples.cbegin(), enmoSamples.cend());
+++        enmoMean = boost::math::statistics::mean(vec);
+++        if (vec.size() >= 2) {
+++            enmoSd = qSqrt(boost::math::statistics::sample_variance(vec));
+++        }
+++    }
+++
+++    const double epochActivity = enmoMean + 0.5 * enmoSd;
+++    epochActivityHistory.append(epochActivity);
+++    if (epochActivityHistory.size() > 16) {
+++        epochActivityHistory.removeFirst();
+++    }
+++
+++    /* 5-tap median filter over recent epochs via Boost.Math median to suppress transient spikes */
+++    double smoothedActivity = epochActivity;
+++    if (epochActivityHistory.size() >= 3) {
+++        const int winLen = qMin(5, epochActivityHistory.size());
+++        std::vector<double> win;
+++        win.reserve(winLen);
+++        for (int i = epochActivityHistory.size() - winLen; i < epochActivityHistory.size(); ++i) {
+++            win.push_back(epochActivityHistory.at(i));
++         }
++-        mean /= magSamples.size();
++-        double mad = 0.0;
++-        for (double v : magSamples) {
++-            mad += qAbs(v - mean);
+++        smoothedActivity = boost::math::statistics::median(win);
+++    }
+++
+++    if (latestBpm > 25 && smoothedActivity < 20.0 && stepsDelta == 0) {
+++        restingHrHistory.append(static_cast<double>(latestBpm));
+++        if (restingHrHistory.size() > kMaxRestingHrSamples) {
+++            restingHrHistory.removeFirst();
++         }
++-        motionVar = mad / magSamples.size();
++     }
++ 
++-    // Update resting HR baseline during low-motion epochs
++-    if (latestBpm > 25 && motionVar < 0.25 && stepsDelta == 0) {
++-        restingBpmEma = restingBpmEma * 0.9 + static_cast<double>(latestBpm) * 0.1;
+++    double hrMedian = 62.0;
+++    double hrMadScaled = 4.0;
+++    if (restingHrHistory.size() >= 4) {
+++        std::vector<double> hrVec(restingHrHistory.cbegin(), restingHrHistory.cend());
+++        hrMedian = boost::math::statistics::median(hrVec);
+++        /* 1.4826 * MAD = consistent estimator of Gaussian SD */
+++        const double mad = boost::math::statistics::median_absolute_deviation(hrVec, hrMedian);
+++        hrMadScaled = qMax(3.0, 1.4826 * mad);
++     }
++ 
+++    const double ckIndex = computeColeKripkeIndex(epochActivityHistory);
+++
++     SleepStage stage = Awake;
++-    if (stepsDelta > 0 || motionVar >= 0.45) {
+++    if (stepsDelta > 0 || ckIndex >= 1.0) {
++         stage = Awake;
++-    } else if (motionVar >= 0.08) {
+++    } else if (smoothedActivity >= 12.0 || ckIndex >= 0.45) {
++         stage = LightSleep;
++-    } else if (latestBpm > 0 && static_cast<double>(latestBpm) > restingBpmEma + 6.0) {
+++    } else if (latestBpm > 25 && (static_cast<double>(latestBpm) - hrMedian) > 1.25 * hrMadScaled) {
++         stage = RemSleep;
++     } else {
++         stage = DeepSleep;
++     }
++ 
++-    const int motionMilli = qRound(motionVar * 1000.0);
+++    const int motionMilli = qRound(smoothedActivity);
++     const QString record = QStringLiteral("%1:%2:%3")
++                                .arg(static_cast<int>(stage))
++                                .arg(motionMilli)
++diff --git a/daemon/sensorPlugins/sleepMonitor.h b/daemon/sensorPlugins/sleepMonitor.h
++index c93bdd4..f6fd302 100644
++--- a/daemon/sensorPlugins/sleepMonitor.h
+++++ b/daemon/sensorPlugins/sleepMonitor.h
++@@ -60,8 +60,10 @@ private:
++     int lastStepCount = -1;
++     int epochStartSteps = -1;
++     int latestBpm = 0;
++-    double restingBpmEma = 62.0;
++-    QVector<double> magSamples;
+++
+++    QVector<double> enmoSamples;
+++    QVector<double> epochActivityHistory;
+++    QVector<double> restingHrHistory;
++ 
++     const QString sensorPathPrefix = QStringLiteral("sleepMonitor");
++ };
++diff --git a/qmlplugin/CMakeLists.txt b/qmlplugin/CMakeLists.txt
++index 16ab5e7..0a12eb2 100644
++--- a/qmlplugin/CMakeLists.txt
+++++ b/qmlplugin/CMakeLists.txt
++@@ -5,6 +5,7 @@ set(SRC
++     weightDataLoader.cpp
++     barometerDataLoader.cpp
++     sleepDataLoader.cpp
+++    periodDataLoader.cpp
++     loggerSettings.cpp
++     ../common.cpp
++ )
++@@ -16,10 +17,13 @@ SET(HEADERS
++     weightDataLoader.h
++     barometerDataLoader.h
++     sleepDataLoader.h
+++    periodDataLoader.h
++     loggerSettings.h
++     ../common.h
++ )
++ 
+++find_package(Boost REQUIRED)
+++
++ qt6_add_qml_module(sensorlogdqmlplugin
++     URI org.asteroid.sensorlogd
++     VERSION 1.0
++@@ -36,6 +40,7 @@ target_link_libraries(
++ 	    Qt::Qml
++         Qt::DBus
++         Qt::Sensors
+++        Boost::headers
++ )
++ 
++ install(
++diff --git a/qmlplugin/periodDataLoader.cpp b/qmlplugin/periodDataLoader.cpp
++new file mode 100644
++index 0000000..adcbe8e
++--- /dev/null
+++++ b/qmlplugin/periodDataLoader.cpp
++@@ -0,0 +1,307 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * Menstrual / period cycle tracker using Boost.Math.Statistics:
+++ * - boost::math::statistics::median for robust cycle/period duration
+++ * - boost::math::statistics::sample_variance for cycle regularity assessment
+++ * - boost::math::statistics::simple_ordinary_least_squares for cycle trend
+++ * - Standard 14-day luteal phase offset for ovulation & fertile window
+++ */
+++
+++#include "periodDataLoader.h"
+++
+++#include <QDate>
+++#include <QDir>
+++#include <QFile>
+++#include <QFileInfo>
+++#include <QJsonArray>
+++#include <QJsonDocument>
+++#include <QJsonObject>
+++#include <QStandardPaths>
+++#include <QVariantMap>
+++#include <QtMath>
+++
+++#include <algorithm>
+++#include <boost/math/statistics/linear_regression.hpp>
+++#include <boost/math/statistics/univariate_statistics.hpp>
+++#include <vector>
+++
+++namespace {
+++constexpr int kDefaultCycleLength = 28;
+++constexpr int kDefaultPeriodLength = 5;
+++constexpr int kLutealPhaseDays = 14;
+++} // namespace
+++
+++PeriodDataLoader::PeriodDataLoader(QObject *parent)
+++    : QObject(parent)
+++{
+++    refresh();
+++}
+++
+++QString PeriodDataLoader::storageFilePath() const
+++{
+++    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+++    return baseDir + QStringLiteral("/asteroid-sensorlogd/period.json");
+++}
+++
+++void PeriodDataLoader::loadFromDisk()
+++{
+++    m_cycles.clear();
+++    QFile file(storageFilePath());
+++    if (!file.open(QIODevice::ReadOnly)) {
+++        return;
+++    }
+++
+++    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+++    if (!doc.isArray()) {
+++        return;
+++    }
+++
+++    QList<QVariantMap> parsed;
+++    for (const QJsonValue &val : doc.array()) {
+++        if (!val.isObject()) {
+++            continue;
+++        }
+++        const QJsonObject obj = val.toObject();
+++        const QString startStr = obj.value(QStringLiteral("startDate")).toString();
+++        const QDate startDate = QDate::fromString(startStr, Qt::ISODate);
+++        if (!startDate.isValid()) {
+++            continue;
+++        }
+++        QVariantMap item;
+++        item.insert(QStringLiteral("startDate"), startStr);
+++        item.insert(QStringLiteral("endDate"), obj.value(QStringLiteral("endDate")).toString());
+++        item.insert(QStringLiteral("flow"), qBound(1, obj.value(QStringLiteral("flow")).toInt(2), 3));
+++        parsed.append(item);
+++    }
+++
+++    std::sort(parsed.begin(), parsed.end(), [](const QVariantMap &a, const QVariantMap &b) {
+++        return a.value(QStringLiteral("startDate")).toString() > b.value(QStringLiteral("startDate")).toString();
+++    });
+++
+++    for (const QVariantMap &item : parsed) {
+++        m_cycles.append(item);
+++    }
+++}
+++
+++void PeriodDataLoader::saveToDisk() const
+++{
+++    const QString path = storageFilePath();
+++    QDir().mkpath(QFileInfo(path).absolutePath());
+++
+++    QJsonArray arr;
+++    for (const QVariant &v : m_cycles) {
+++        const QVariantMap m = v.toMap();
+++        QJsonObject obj;
+++        obj.insert(QStringLiteral("startDate"), m.value(QStringLiteral("startDate")).toString());
+++        obj.insert(QStringLiteral("endDate"), m.value(QStringLiteral("endDate")).toString());
+++        obj.insert(QStringLiteral("flow"), m.value(QStringLiteral("flow")).toInt());
+++        arr.append(obj);
+++    }
+++
+++    QFile file(path);
+++    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+++        file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+++    }
+++}
+++
+++void PeriodDataLoader::recomputeMetrics()
+++{
+++    m_currentCycleDay = 0;
+++    m_currentPhase = QStringLiteral("NoData");
+++    m_isPeriodActive = false;
+++    m_isFertileWindow = false;
+++    m_isIrregular = false;
+++    m_daysUntilNextPeriod = 0;
+++    m_predictedNextPeriod.clear();
+++    m_fertileWindowStart.clear();
+++    m_fertileWindowEnd.clear();
+++    m_medianCycleLength = kDefaultCycleLength;
+++    m_medianPeriodLength = kDefaultPeriodLength;
+++    m_cycleStdDev = 0.0;
+++    m_currentFlow = 2;
+++
+++    if (m_cycles.isEmpty()) {
+++        return;
+++    }
+++
+++    QVector<QDate> startsChron;
+++    std::vector<double> periodDurations;
+++    for (int i = m_cycles.size() - 1; i >= 0; --i) {
+++        const QVariantMap m = m_cycles.at(i).toMap();
+++        const QDate s = QDate::fromString(m.value(QStringLiteral("startDate")).toString(), Qt::ISODate);
+++        if (!s.isValid()) {
+++            continue;
+++        }
+++        startsChron.append(s);
+++
+++        const QString endStr = m.value(QStringLiteral("endDate")).toString();
+++        if (!endStr.isEmpty()) {
+++            const QDate e = QDate::fromString(endStr, Qt::ISODate);
+++            if (e.isValid() && e >= s) {
+++                const int dur = static_cast<int>(s.daysTo(e)) + 1;
+++                if (dur >= 1 && dur <= 14) {
+++                    periodDurations.push_back(static_cast<double>(dur));
+++                }
+++            }
+++        }
+++    }
+++
+++    if (!periodDurations.empty()) {
+++        std::vector<double> durCopy = periodDurations;
+++        m_medianPeriodLength = qRound(boost::math::statistics::median(durCopy));
+++    }
+++
+++    std::vector<double> cycleLengths;
+++    for (int i = 1; i < startsChron.size(); ++i) {
+++        const int diff = static_cast<int>(startsChron.at(i - 1).daysTo(startsChron.at(i)));
+++        if (diff >= 15 && diff <= 60) {
+++            cycleLengths.push_back(static_cast<double>(diff));
+++        }
+++    }
+++
+++    int predictedCycleLen = kDefaultCycleLength;
+++    if (!cycleLengths.empty()) {
+++        std::vector<double> medCopy = cycleLengths;
+++        const double median = boost::math::statistics::median(medCopy);
+++        m_medianCycleLength = qRound(median);
+++
+++        if (cycleLengths.size() >= 2) {
+++            m_cycleStdDev = qSqrt(boost::math::statistics::sample_variance(cycleLengths));
+++            m_isIrregular = (m_cycleStdDev > 4.0);
+++        }
+++
+++        if (cycleLengths.size() >= 3) {
+++            std::vector<double> x(cycleLengths.size());
+++            for (size_t i = 0; i < cycleLengths.size(); ++i) {
+++                x[i] = static_cast<double>(i);
+++            }
+++            const auto [c0, c1] = boost::math::statistics::simple_ordinary_least_squares(x, cycleLengths);
+++            const double trendPred = c0 + c1 * static_cast<double>(cycleLengths.size());
+++            predictedCycleLen = qBound(21, qRound(0.6 * median + 0.4 * trendPred), 45);
+++        } else {
+++            predictedCycleLen = qBound(21, m_medianCycleLength, 45);
+++        }
+++    }
+++
+++    const QVariantMap latest = m_cycles.first().toMap();
+++    const QDate latestStart = QDate::fromString(latest.value(QStringLiteral("startDate")).toString(), Qt::ISODate);
+++    const QString latestEndStr = latest.value(QStringLiteral("endDate")).toString();
+++    const QDate latestEnd = latestEndStr.isEmpty() ? QDate() : QDate::fromString(latestEndStr, Qt::ISODate);
+++    m_currentFlow = qBound(1, latest.value(QStringLiteral("flow"), 2).toInt(), 3);
+++
+++    const QDate today = QDate::currentDate();
+++    m_currentCycleDay = qMax(1, static_cast<int>(latestStart.daysTo(today)) + 1);
+++
+++    if (!latestEnd.isValid()) {
+++        m_isPeriodActive = (today >= latestStart && m_currentCycleDay <= 14);
+++    } else {
+++        m_isPeriodActive = (today >= latestStart && today <= latestEnd);
+++    }
+++
+++    const QDate nextPeriod = latestStart.addDays(predictedCycleLen);
+++    const QDate ovulation = nextPeriod.addDays(-kLutealPhaseDays);
+++    const QDate fertileStart = ovulation.addDays(-5);
+++    const QDate fertileEnd = ovulation.addDays(1);
+++
+++    m_predictedNextPeriod = nextPeriod.toString(Qt::ISODate);
+++    m_fertileWindowStart = fertileStart.toString(Qt::ISODate);
+++    m_fertileWindowEnd = fertileEnd.toString(Qt::ISODate);
+++    m_daysUntilNextPeriod = static_cast<int>(today.daysTo(nextPeriod));
+++    m_isFertileWindow = (today >= fertileStart && today <= fertileEnd);
+++
+++    if (m_isPeriodActive) {
+++        m_currentPhase = QStringLiteral("Menstrual");
+++    } else if (m_isFertileWindow) {
+++        m_currentPhase = QStringLiteral("Fertile");
+++    } else if (today < fertileStart) {
+++        m_currentPhase = QStringLiteral("Follicular");
+++    } else {
+++        m_currentPhase = QStringLiteral("Luteal");
+++    }
+++}
+++
+++void PeriodDataLoader::logPeriodStart(const QString &isoDate, int flow)
+++{
+++    const QString dateStr = isoDate.isEmpty() ? QDate::currentDate().toString(Qt::ISODate) : isoDate;
+++    const QDate startDate = QDate::fromString(dateStr, Qt::ISODate);
+++    if (!startDate.isValid()) {
+++        return;
+++    }
+++
+++    for (int i = 0; i < m_cycles.size(); ++i) {
+++        QVariantMap m = m_cycles.at(i).toMap();
+++        if (m.value(QStringLiteral("startDate")).toString() == dateStr) {
+++            m.insert(QStringLiteral("flow"), qBound(1, flow, 3));
+++            m_cycles[i] = m;
+++            saveToDisk();
+++            recomputeMetrics();
+++            emit periodChanged();
+++            return;
+++        }
+++    }
+++
+++    QVariantMap entry;
+++    entry.insert(QStringLiteral("startDate"), dateStr);
+++    entry.insert(QStringLiteral("endDate"), QString());
+++    entry.insert(QStringLiteral("flow"), qBound(1, flow, 3));
+++    m_cycles.prepend(entry);
+++
+++    saveToDisk();
+++    refresh();
+++}
+++
+++void PeriodDataLoader::logPeriodEnd(const QString &isoDate)
+++{
+++    if (m_cycles.isEmpty()) {
+++        return;
+++    }
+++    const QString dateStr = isoDate.isEmpty() ? QDate::currentDate().toString(Qt::ISODate) : isoDate;
+++    const QDate endDate = QDate::fromString(dateStr, Qt::ISODate);
+++    if (!endDate.isValid()) {
+++        return;
+++    }
+++
+++    QVariantMap latest = m_cycles.first().toMap();
+++    const QDate startDate = QDate::fromString(latest.value(QStringLiteral("startDate")).toString(), Qt::ISODate);
+++    if (!startDate.isValid() || endDate < startDate) {
+++        return;
+++    }
+++
+++    latest.insert(QStringLiteral("endDate"), dateStr);
+++    m_cycles[0] = latest;
+++    saveToDisk();
+++    recomputeMetrics();
+++    emit periodChanged();
+++}
+++
+++void PeriodDataLoader::setCurrentFlow(int flow)
+++{
+++    if (m_cycles.isEmpty()) {
+++        return;
+++    }
+++    QVariantMap latest = m_cycles.first().toMap();
+++    latest.insert(QStringLiteral("flow"), qBound(1, flow, 3));
+++    m_cycles[0] = latest;
+++    saveToDisk();
+++    recomputeMetrics();
+++    emit periodChanged();
+++}
+++
+++void PeriodDataLoader::deleteCycle(int index)
+++{
+++    if (index < 0 || index >= m_cycles.size()) {
+++        return;
+++    }
+++    m_cycles.removeAt(index);
+++    saveToDisk();
+++    recomputeMetrics();
+++    emit periodChanged();
+++}
+++
+++void PeriodDataLoader::refresh()
+++{
+++    loadFromDisk();
+++    recomputeMetrics();
+++    emit periodChanged();
+++}
++diff --git a/qmlplugin/periodDataLoader.h b/qmlplugin/periodDataLoader.h
++new file mode 100644
++index 0000000..4a2908a
++--- /dev/null
+++++ b/qmlplugin/periodDataLoader.h
++@@ -0,0 +1,84 @@
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * Menstrual / period cycle tracker backed by GNU Scientific Library (GSL)
+++ * robust median, standard deviation, and weighted linear regression.
+++ */
+++
+++#ifndef PERIODDATALOADER_H
+++#define PERIODDATALOADER_H
+++
+++#include <QObject>
+++#include <QString>
+++#include <QVariantList>
+++
+++class PeriodDataLoader : public QObject
+++{
+++    Q_OBJECT
+++    Q_PROPERTY(int cycleCount READ cycleCount NOTIFY periodChanged)
+++    Q_PROPERTY(int currentCycleDay READ currentCycleDay NOTIFY periodChanged)
+++    Q_PROPERTY(QString currentPhase READ currentPhase NOTIFY periodChanged)
+++    Q_PROPERTY(bool isPeriodActive READ isPeriodActive NOTIFY periodChanged)
+++    Q_PROPERTY(bool isFertileWindow READ isFertileWindow NOTIFY periodChanged)
+++    Q_PROPERTY(bool isIrregular READ isIrregular NOTIFY periodChanged)
+++    Q_PROPERTY(int daysUntilNextPeriod READ daysUntilNextPeriod NOTIFY periodChanged)
+++    Q_PROPERTY(QString predictedNextPeriod READ predictedNextPeriod NOTIFY periodChanged)
+++    Q_PROPERTY(QString fertileWindowStart READ fertileWindowStart NOTIFY periodChanged)
+++    Q_PROPERTY(QString fertileWindowEnd READ fertileWindowEnd NOTIFY periodChanged)
+++    Q_PROPERTY(int medianCycleLength READ medianCycleLength NOTIFY periodChanged)
+++    Q_PROPERTY(int medianPeriodLength READ medianPeriodLength NOTIFY periodChanged)
+++    Q_PROPERTY(double cycleStdDev READ cycleStdDev NOTIFY periodChanged)
+++    Q_PROPERTY(int currentFlow READ currentFlow NOTIFY periodChanged)
+++    Q_PROPERTY(QVariantList cycles READ cycles NOTIFY periodChanged)
+++
+++public:
+++    explicit PeriodDataLoader(QObject *parent = nullptr);
+++
+++    int cycleCount() const { return m_cycles.size(); }
+++    int currentCycleDay() const { return m_currentCycleDay; }
+++    QString currentPhase() const { return m_currentPhase; }
+++    bool isPeriodActive() const { return m_isPeriodActive; }
+++    bool isFertileWindow() const { return m_isFertileWindow; }
+++    bool isIrregular() const { return m_isIrregular; }
+++    int daysUntilNextPeriod() const { return m_daysUntilNextPeriod; }
+++    QString predictedNextPeriod() const { return m_predictedNextPeriod; }
+++    QString fertileWindowStart() const { return m_fertileWindowStart; }
+++    QString fertileWindowEnd() const { return m_fertileWindowEnd; }
+++    int medianCycleLength() const { return m_medianCycleLength; }
+++    int medianPeriodLength() const { return m_medianPeriodLength; }
+++    double cycleStdDev() const { return m_cycleStdDev; }
+++    int currentFlow() const { return m_currentFlow; }
+++    QVariantList cycles() const { return m_cycles; }
+++
+++    Q_INVOKABLE void logPeriodStart(const QString &isoDate, int flow = 2);
+++    Q_INVOKABLE void logPeriodEnd(const QString &isoDate);
+++    Q_INVOKABLE void setCurrentFlow(int flow);
+++    Q_INVOKABLE void deleteCycle(int index);
+++    Q_INVOKABLE void refresh();
+++
+++signals:
+++    void periodChanged();
+++
+++private:
+++    QString storageFilePath() const;
+++    void loadFromDisk();
+++    void saveToDisk() const;
+++    void recomputeMetrics();
+++
+++    QVariantList m_cycles;
+++    int m_currentCycleDay = 0;
+++    QString m_currentPhase = QStringLiteral("NoData");
+++    bool m_isPeriodActive = false;
+++    bool m_isFertileWindow = false;
+++    bool m_isIrregular = false;
+++    int m_daysUntilNextPeriod = 0;
+++    QString m_predictedNextPeriod;
+++    QString m_fertileWindowStart;
+++    QString m_fertileWindowEnd;
+++    int m_medianCycleLength = 28;
+++    int m_medianPeriodLength = 5;
+++    double m_cycleStdDev = 0.0;
+++    int m_currentFlow = 2;
+++};
+++
+++#endif // PERIODDATALOADER_H
++diff --git a/qmlplugin/sensorlogdqmlplugin.cpp b/qmlplugin/sensorlogdqmlplugin.cpp
++index d17e446..9b40cdb 100644
++--- a/qmlplugin/sensorlogdqmlplugin.cpp
+++++ b/qmlplugin/sensorlogdqmlplugin.cpp
++@@ -15,6 +15,7 @@
++ #include "weightDataLoader.h"
++ #include "barometerDataLoader.h"
++ #include "sleepDataLoader.h"
+++#include "periodDataLoader.h"
++ #include <QtQml>
++ 
++ LogdPlugin::LogdPlugin(QObject* parent)
++@@ -30,5 +31,6 @@ void LogdPlugin::registerTypes(const char* uri)
++     qmlRegisterType<WeightDataLoader>(uri, 1, 0, "WeightDataLoader");
++     qmlRegisterType<BarometerDataLoader>(uri, 1, 0, "BarometerDataLoader");
++     qmlRegisterType<SleepDataLoader>(uri, 1, 0, "SleepDataLoader");
+++    qmlRegisterType<PeriodDataLoader>(uri, 1, 0, "PeriodDataLoader");
++     qmlRegisterType<LoggerSettings>(uri, 1, 0, "LoggerSettings");
++ }
+diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
+index 419e8e12..cd926bfd 100644
+--- a/overlay/asteroidos/default.nix
++++ b/overlay/asteroidos/default.nix
+@@ -25,6 +25,7 @@ rec {
+   swclock-offset = callPackage ./swclock-offset { };
+   kernel-timezone = callPackage ./kernel-timezone { };
+   asteroid-seconddisplay = callPackage ./asteroid-seconddisplay { inherit mlite; };
++  asteroid-bootsplash = callPackage ./asteroid-bootsplash { };
+   extreme-battery-saver = callPackage ./extreme-battery-saver { };
+   bluebinder = callPackage ./bluebinder { inherit metaAsteroidSrc; };
+   ngfd = callPackage ./ngfd { inherit metaAsteroidSrc mce-dev; };
+-- 
+2.56.0
+
