@@ -1,4 +1,4 @@
-From de77e970d6b75285e1a21ed92ac6062b1a16f906 Mon Sep 17 00:00:00 2001
+From d637899469d55527c50680dab646fc6a6b7b479a Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Fri, 20 Nov 2026 12:47:32 +1100
 Subject: [PATCH] asteroid: add bootsplash animation, zh_Hant support, Boost
@@ -11,9 +11,9 @@ Subject: [PATCH] asteroid: add bootsplash animation, zh_Hant support, Boost
  overlay/asteroidos/community-apps/default.nix |   7 +
  .../health-period-zh-hant.patch               | 717 ++++++++++++++++++
  .../sensorlogd-boost-period.patch             | 674 ++++++++++++++++
- .../sensorlogd-sleep-monitor-fixes.patch      | 331 ++++++++
+ .../sensorlogd-sleep-monitor-fixes.patch      | 394 ++++++++++
  overlay/asteroidos/default.nix                |   3 +-
- 8 files changed, 2109 insertions(+), 4 deletions(-)
+ 8 files changed, 2172 insertions(+), 4 deletions(-)
  create mode 100644 overlay/asteroidos/asteroid-bootsplash/asteroid-bootsplash.c
  create mode 100644 overlay/asteroidos/asteroid-bootsplash/default.nix
  create mode 100644 overlay/asteroidos/community-apps/health-period-zh-hant.patch
@@ -1882,10 +1882,10 @@ index 00000000..e9097f16
 + }
 diff --git a/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor-fixes.patch b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor-fixes.patch
 new file mode 100644
-index 00000000..833fea49
+index 00000000..ef1f1783
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor-fixes.patch
-@@ -0,0 +1,331 @@
+@@ -0,0 +1,394 @@
 +diff --git a/daemon/CMakeLists.txt b/daemon/CMakeLists.txt
 +index d585555..2e98af5 100644
 +--- a/daemon/CMakeLists.txt
@@ -2157,6 +2157,69 @@ index 00000000..833fea49
 +     int latestBpm = 0;
 + 
 +     QVector<double> enmoSamples;
++diff --git a/daemon/sensorPlugins/stepCounter.cpp b/daemon/sensorPlugins/stepCounter.cpp
++index 87c1c3c..c42dcba 100644
++--- a/daemon/sensorPlugins/stepCounter.cpp
+++++ b/daemon/sensorPlugins/stepCounter.cpp
++@@ -39,18 +39,35 @@ StepCounterPlugin::StepCounterPlugin(QObject* parent, int initInterval, bool dae
++     QDateTime currDateTime = QDateTime::currentDateTime();
++ 
++     setupFilePath(sensorPathPrefix);
++-    while (!stepcounterSensor->isActive()) { }
++     m_settings = new QSettings("asteroid", "sensorlogd");
+++    lastRecordTime = QDateTime::currentDateTime();
+++    m_stepsOffset = m_settings->value("StepCounterPrivate/stepsOffset", 0).toInt();
+++
+++    auto initOffset = [this, daemonFresh]() {
+++        if (!stepcounterSensor->isActive() || !stepcounterSensor->reading()) {
+++            return false;
+++        }
+++        if (dayFileExists(sensorPathPrefix) && daemonFresh) {
+++            QStringList lastLineData = fileGetPrevRecord(sensorPathPrefix);
+++            if (lastLineData.size() >= 2) {
+++                m_stepsOffset = stepcounterSensor->reading()->steps() - lastLineData[1].toInt();
+++            }
+++        }
+++        m_settings->setValue("StepCounterPrivate/stepsOffset", m_stepsOffset);
+++        return true;
+++    };
++ 
++-    if (dayFileExists(sensorPathPrefix) && daemonFresh) {
++-        QStringList lastLineData = fileGetPrevRecord(sensorPathPrefix);
++-        lastRecordTime = QDateTime::currentDateTime();
++-        m_stepsOffset = stepcounterSensor->reading()->steps() - lastLineData[1].toInt(); // we reset the step count, ignoring all steps that may have been taken while the daemon isn't running. Devices which count steps independently will need custom code.
++-    } else if (dayFileExists) {
++-        lastRecordTime = QDateTime::currentDateTime();
++-        m_stepsOffset = m_settings->value("StepCounterPrivate/stepsOffset", 0).toInt();
+++    if (!initOffset()) {
+++        qWarning() << "stepcounterSensor not ready at startup; scheduling non-blocking retry";
+++        QTimer::singleShot(5000, this, [this, initOffset]() {
+++            if (!stepcounterSensor->isActive()) {
+++                stepcounterSensor->start();
+++            }
+++            if (!initOffset()) {
+++                qWarning() << "stepcounterSensor still inactive after retry; will retry on interval";
+++            }
+++        });
++     }
++-    m_settings->setValue("StepCounterPrivate/stepsOffset", m_stepsOffset);
++ }
++ 
++ void StepCounterPlugin::timeUpdate()
++@@ -68,6 +85,13 @@ void StepCounterPlugin::timeUpdate()
++ void StepCounterPlugin::triggerRecording()
++ {
++     qDebug() << "stepcounter interval recording";
+++    if (!stepcounterSensor->isActive()) {
+++        stepcounterSensor->start();
+++    }
+++    if (!stepcounterSensor->isActive() || !stepcounterSensor->reading()) {
+++        qWarning() << "stepcounterSensor inactive; skipping stepcounter recording";
+++        return;
+++    }
++     int rawSteps = stepcounterSensor->reading()->steps();
++     if (lastRecordTime.date() != QDate::currentDate()) { // ok, so the date has changed.
++         if (dayFileExists(sensorPathPrefix)) { // this likely means we have just had a system time change
 +diff --git a/qmlplugin/sleepDataLoader.cpp b/qmlplugin/sleepDataLoader.cpp
 +index 0170d88..83fe1e7 100644
 +--- a/qmlplugin/sleepDataLoader.cpp
