@@ -1,0 +1,38 @@
+From cb16b06492ccb82a2636fb816a69ac4ad7023fd3 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Fri, 20 Nov 2026 14:17:31 +1100
+Subject: [PATCH] usb-moded: prefer rndis.usb0 gadget in developer_mode
+
+---
+ overlay/asteroidos/usb-moded/usb-moded-switch.sh | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/overlay/asteroidos/usb-moded/usb-moded-switch.sh b/overlay/asteroidos/usb-moded/usb-moded-switch.sh
+index 64b2c51e..6f7fb2f8 100644
+--- a/overlay/asteroidos/usb-moded/usb-moded-switch.sh
++++ b/overlay/asteroidos/usb-moded/usb-moded-switch.sh
+@@ -59,13 +59,16 @@ echo "$HOST" > "$G/strings/0x409/product"
+ 
+ case "$MODE" in
+   developer_mode)
+-    echo "0xd002" > "$G/idProduct"
+-    echo "CDC NCM" > "$G/configs/c.1/strings/0x409/configuration"
++    echo "0xd001" > "$G/idProduct"
++    echo "RNDIS" > "$G/configs/c.1/strings/0x409/configuration"
+ 
+-    FUNC="ncm.usb0"
++    FUNC="rndis.usb0"
+     if ! @mkdir@ -p "$G/functions/$FUNC" 2>/dev/null; then
+-      FUNC="rndis.usb0"
+-      @mkdir@ -p "$G/functions/$FUNC"
++      FUNC="ecm.usb0"
++      if ! @mkdir@ -p "$G/functions/$FUNC" 2>/dev/null; then
++        FUNC="ncm.usb0"
++        @mkdir@ -p "$G/functions/$FUNC"
++      fi
+     fi
+     @ln@ -sf "$G/functions/$FUNC" "$G/configs/c.1/$FUNC"
+     echo "$UDC" > "$G/UDC"
+-- 
+2.56.0
+
