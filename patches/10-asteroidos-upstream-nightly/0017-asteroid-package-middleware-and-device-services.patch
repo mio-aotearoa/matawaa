@@ -1,55 +1,55 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 928b94f82e898fa644323b8b55a8b4fd08089108 Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Mon, 9 Nov 2026 10:55:51 +1100
 Subject: [PATCH] asteroid: package middleware and device services
 
 ---
- overlay/asteroidos/accounts-qt/default.nix    |  85 ++++++
- overlay/asteroidos/amber-mpris/CMakeLists.txt | 128 +++++++++
- overlay/asteroidos/amber-mpris/default.nix    |  54 ++++
- overlay/asteroidos/bluebinder/default.nix     |  81 ++++++
- overlay/asteroidos/default.nix                | 114 ++++++++
- overlay/asteroidos/dsme/default.nix           | 105 +++++++
- overlay/asteroidos/kcalendarcore/default.nix  |  51 ++++
- overlay/asteroidos/keepalive/default.nix      | 104 +++++++
+ overlay/asteroidos/accounts-qt/default.nix    |  60 ++++++
+ overlay/asteroidos/amber-mpris/default.nix    |  58 ++++++
+ overlay/asteroidos/bluebinder/default.nix     |  81 +++++++
+ overlay/asteroidos/default.nix                | 118 +++++++++++
+ overlay/asteroidos/dsme/default.nix           | 105 ++++++++++
+ overlay/asteroidos/kcalendarcore/default.nix  |  51 +++++
+ overlay/asteroidos/keepalive/default.nix      | 104 +++++++++
  .../patches/0001-Disable-tests.patch          |  23 ++
  .../keepalive/patches/0002-Fix-build.patch    |  23 ++
- overlay/asteroidos/libconnman-qt/default.nix  | 139 +++++++++
- overlay/asteroidos/libdsme/default.nix        |  82 ++++++
- overlay/asteroidos/libiodata/default.nix      |  71 +++++
- overlay/asteroidos/libiphb/default.nix        |  54 ++++
- overlay/asteroidos/libncicore/default.nix     |  71 +++++
- overlay/asteroidos/libnciplugin/default.nix   |  90 ++++++
- overlay/asteroidos/libnfcdef/default.nix      |  71 +++++
- overlay/asteroidos/libngf/default.nix         |  53 ++++
- .../0003-invoker-fallback-dlopen-so.patch     |  69 +++++
- overlay/asteroidos/mapplauncherd/default.nix  |  59 ++++
- overlay/asteroidos/mce-dev/default.nix        |  41 +++
- .../mce-plugin-libhybris/default.nix          |  69 +++++
- overlay/asteroidos/mce-qt6/default.nix        | 100 +++++++
+ overlay/asteroidos/lib/qmake-cross-hook.nix   |  19 ++
+ overlay/asteroidos/lib/qmake-cross-hook.sh    |  68 ++++++
+ overlay/asteroidos/libconnman-qt/default.nix  | 139 ++++++++++++
+ overlay/asteroidos/libdsme/default.nix        |  82 ++++++++
+ overlay/asteroidos/libiodata/default.nix      |  71 +++++++
+ overlay/asteroidos/libiphb/default.nix        |  54 +++++
+ overlay/asteroidos/libncicore/default.nix     |  71 +++++++
+ overlay/asteroidos/libnciplugin/default.nix   |  90 ++++++++
+ overlay/asteroidos/libnfcdef/default.nix      |  71 +++++++
+ overlay/asteroidos/libngf/default.nix         |  53 +++++
+ .../0003-invoker-fallback-dlopen-so.patch     |  69 ++++++
+ overlay/asteroidos/mapplauncherd/default.nix  |  59 ++++++
+ overlay/asteroidos/mce-dev/default.nix        |  41 ++++
+ .../mce-plugin-libhybris/default.nix          |  69 ++++++
+ overlay/asteroidos/mce-qt6/default.nix        | 100 +++++++++
  overlay/asteroidos/mce/builtin-gconf.values   |   6 +
- overlay/asteroidos/mce/default.nix            | 108 +++++++
+ overlay/asteroidos/mce/default.nix            | 108 ++++++++++
  overlay/asteroidos/mce/mce.service            |  17 ++
- overlay/asteroidos/mkcal/default.nix          |  60 ++++
- overlay/asteroidos/mlite/CMakeLists.txt       | 122 ++++++++
- overlay/asteroidos/mlite/default.nix          |  62 ++++
- .../nemo-qml-plugin-alarms/default.nix        | 135 +++++++++
- .../nemo-qml-plugin-calendar/default.nix      |  94 +++++++
- .../nemo-qml-plugin-notifications/default.nix | 121 ++++++++
- overlay/asteroidos/nfcd/default.nix           | 197 +++++++++++++
- overlay/asteroidos/ngf-qt6/default.nix        |  96 +++++++
+ overlay/asteroidos/mkcal/default.nix          |  60 ++++++
+ overlay/asteroidos/mlite/CMakeLists.txt       | 122 +++++++++++
+ overlay/asteroidos/mlite/default.nix          |  62 ++++++
+ .../nemo-qml-plugin-alarms/default.nix        |  60 ++++++
+ .../nemo-qml-plugin-calendar/default.nix      |  61 ++++++
+ .../nemo-qml-plugin-configuration/default.nix |  54 +++++
+ .../nemo-qml-plugin-notifications/default.nix |  52 +++++
+ overlay/asteroidos/nfcd/default.nix           | 197 ++++++++++++++++++
+ overlay/asteroidos/ngf-qt6/default.nix        |  96 +++++++++
  .../0005-gst-sink-fallback-to-alsasink.patch  |  22 ++
- overlay/asteroidos/ngfd/default.nix           | 113 ++++++++
- overlay/asteroidos/sensorfw/CMakeLists.txt    | 266 ++++++++++++++++++
- overlay/asteroidos/sensorfw/default.nix       |  71 +++++
- overlay/asteroidos/swclock-offset/default.nix |  30 ++
- overlay/asteroidos/timed-qt6/default.nix      | 109 +++++++
- .../asteroidos/udev-droid-system/default.nix  |  24 ++
- overlay/asteroidos/usb-moded-dev/default.nix  |  42 +++
- overlay/asteroidos/usb-moded-qt6/default.nix  |  90 ++++++
- 43 files changed, 3522 insertions(+)
+ overlay/asteroidos/ngfd/default.nix           | 113 ++++++++++
+ overlay/asteroidos/sensorfw/default.nix       |  96 +++++++++
+ overlay/asteroidos/swclock-offset/default.nix |  30 +++
+ overlay/asteroidos/timed-qt6/default.nix      | 109 ++++++++++
+ .../asteroidos/udev-droid-system/default.nix  |  24 +++
+ overlay/asteroidos/usb-moded-dev/default.nix  |  42 ++++
+ overlay/asteroidos/usb-moded-qt6/default.nix  |  54 +++++
+ 44 files changed, 3064 insertions(+)
  create mode 100644 overlay/asteroidos/accounts-qt/default.nix
- create mode 100644 overlay/asteroidos/amber-mpris/CMakeLists.txt
  create mode 100644 overlay/asteroidos/amber-mpris/default.nix
  create mode 100644 overlay/asteroidos/bluebinder/default.nix
  create mode 100644 overlay/asteroidos/dsme/default.nix
@@ -57,6 +57,8 @@ Subject: [PATCH] asteroid: package middleware and device services
  create mode 100644 overlay/asteroidos/keepalive/default.nix
  create mode 100644 overlay/asteroidos/keepalive/patches/0001-Disable-tests.patch
  create mode 100644 overlay/asteroidos/keepalive/patches/0002-Fix-build.patch
+ create mode 100644 overlay/asteroidos/lib/qmake-cross-hook.nix
+ create mode 100644 overlay/asteroidos/lib/qmake-cross-hook.sh
  create mode 100644 overlay/asteroidos/libconnman-qt/default.nix
  create mode 100644 overlay/asteroidos/libdsme/default.nix
  create mode 100644 overlay/asteroidos/libiodata/default.nix
@@ -78,12 +80,12 @@ Subject: [PATCH] asteroid: package middleware and device services
  create mode 100644 overlay/asteroidos/mlite/default.nix
  create mode 100644 overlay/asteroidos/nemo-qml-plugin-alarms/default.nix
  create mode 100644 overlay/asteroidos/nemo-qml-plugin-calendar/default.nix
+ create mode 100644 overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
  create mode 100644 overlay/asteroidos/nemo-qml-plugin-notifications/default.nix
  create mode 100644 overlay/asteroidos/nfcd/default.nix
  create mode 100644 overlay/asteroidos/ngf-qt6/default.nix
  create mode 100644 overlay/asteroidos/ngfd/0005-gst-sink-fallback-to-alsasink.patch
  create mode 100644 overlay/asteroidos/ngfd/default.nix
- create mode 100644 overlay/asteroidos/sensorfw/CMakeLists.txt
  create mode 100644 overlay/asteroidos/sensorfw/default.nix
  create mode 100644 overlay/asteroidos/swclock-offset/default.nix
  create mode 100644 overlay/asteroidos/timed-qt6/default.nix
@@ -93,19 +95,19 @@ Subject: [PATCH] asteroid: package middleware and device services
 
 diff --git a/overlay/asteroidos/accounts-qt/default.nix b/overlay/asteroidos/accounts-qt/default.nix
 new file mode 100644
-index 00000000..b0ba7f11
+index 00000000..f739e776
 --- /dev/null
 +++ b/overlay/asteroidos/accounts-qt/default.nix
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,60 @@
 +{
 +  lib,
 +  stdenv,
 +  fetchFromGitLab,
-+  cmake,
 +  pkg-config,
 +  qt6,
 +  libaccounts-glib,
 +  glib,
++  qmakeCrossHook,
 +}:
 +
 +stdenv.mkDerivation (finalAttrs: {
@@ -127,8 +129,8 @@ index 00000000..b0ba7f11
 +  dontWrapQtApps = true;
 +
 +  nativeBuildInputs = [
-+    cmake
 +    pkg-config
++    qmakeCrossHook
 +  ];
 +
 +  buildInputs = [
@@ -137,42 +139,17 @@ index 00000000..b0ba7f11
 +    glib
 +  ];
 +
++  qmakeFlags = [
++    "PREFIX=${placeholder "out"}"
++    "LIBDIR=${placeholder "out"}/lib"
++    "CONFIG+=release"
++    "CONFIG+=c++17"
++    "Accounts/Accounts.pro"
++  ];
++
 +  postPatch = ''
-+    cat > CMakeLists.txt <<'EOF'
-+    cmake_minimum_required(VERSION 3.16)
-+    project(accounts-qt LANGUAGES CXX)
-+    set(CMAKE_CXX_STANDARD 17)
-+    set(CMAKE_AUTOMOC ON)
-+    add_compile_definitions(BUILDING_ACCOUNTS_QT QT_NO_KEYWORDS QT_NO_CAST_TO_ASCII QT_NO_CAST_FROM_ASCII)
-+
-+    find_package(PkgConfig REQUIRED)
-+    pkg_check_modules(GLIB REQUIRED IMPORTED_TARGET libaccounts-glib gio-2.0)
-+    find_package(Qt6 REQUIRED COMPONENTS Core Xml)
-+
-+    file(GLOB SOURCES Accounts/*.cpp)
-+    file(GLOB HEADERS Accounts/*.h)
-+
-+    add_library(accounts-qt6 SHARED ''${SOURCES} ''${HEADERS})
-+    target_include_directories(accounts-qt6 PUBLIC
-+      $<BUILD_INTERFACE:''${CMAKE_CURRENT_SOURCE_DIR}>
-+      $<INSTALL_INTERFACE:include/accounts-qt6>
-+    )
-+    target_link_libraries(accounts-qt6 PUBLIC Qt6::Core Qt6::Xml PkgConfig::GLIB)
-+    set_target_properties(accounts-qt6 PROPERTIES OUTPUT_NAME accounts-qt6 SOVERSION 1 VERSION 1.17)
-+
-+    install(TARGETS accounts-qt6 LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
-+
-+    file(GLOB ROOT_HEADERS Accounts/Account Accounts/AccountService Accounts/Application Accounts/AuthData Accounts/Error Accounts/Manager Accounts/Provider Accounts/Service Accounts/ServiceType)
-+    install(FILES ''${HEADERS} ''${ROOT_HEADERS} DESTINATION include/accounts-qt6/Accounts)
-+
-+    configure_file(Accounts/accounts-qt6.pc.in accounts-qt6.pc @ONLY)
-+    install(FILES ''${CMAKE_CURRENT_BINARY_DIR}/accounts-qt6.pc DESTINATION lib/pkgconfig)
-+    EOF
-+
-+    substituteInPlace Accounts/accounts-qt6.pc.in \
-+      --replace-fail '$$INSTALL_PREFIX' "$out" \
-+      --replace-fail '$$INSTALL_LIBDIR' "$out/lib" \
-+      --replace-fail '$$PROJECT_VERSION' '${finalAttrs.version}'
++    substituteInPlace Accounts/Accounts.pro \
++      --replace-fail 'include($${TOP_SRC_DIR}/common-pkgconfig.pri)' 'include(../common-pkgconfig.pri)'
 +  '';
 +
 +  meta = with lib; {
@@ -182,146 +159,12 @@ index 00000000..b0ba7f11
 +    platforms = platforms.linux;
 +  };
 +})
-diff --git a/overlay/asteroidos/amber-mpris/CMakeLists.txt b/overlay/asteroidos/amber-mpris/CMakeLists.txt
-new file mode 100644
-index 00000000..03a35cfe
---- /dev/null
-+++ b/overlay/asteroidos/amber-mpris/CMakeLists.txt
-@@ -0,0 +1,128 @@
-+cmake_minimum_required(VERSION 3.16)
-+project(amber-mpris VERSION 1.0.0 LANGUAGES CXX)
-+
-+set(CMAKE_CXX_STANDARD 17)
-+set(CMAKE_CXX_STANDARD_REQUIRED ON)
-+set(CMAKE_AUTOMOC ON)
-+
-+find_package(Qt6Core REQUIRED)
-+find_package(Qt6DBus REQUIRED)
-+find_package(Qt6Qml REQUIRED)
-+
-+include(GNUInstallDirs)
-+
-+# Static library for qtdbusextended
-+add_library(qtdbusextended STATIC
-+    qtdbusextended/dbusextendedabstractinterface.cpp
-+    qtdbusextended/dbusextendedabstractinterface.h
-+    qtdbusextended/dbusextended.h
-+)
-+target_include_directories(qtdbusextended PUBLIC qtdbusextended)
-+target_link_libraries(qtdbusextended PUBLIC Qt6::Core Qt6::DBus)
-+set_target_properties(qtdbusextended PROPERTIES POSITION_INDEPENDENT_CODE ON)
-+
-+# Shared library ambermpris6
-+add_library(ambermpris6 SHARED
-+    src/mpris.cpp
-+    src/mprisclient.cpp
-+    src/mpriscontroller.cpp
-+    src/mprisintrospectableadaptor.cpp
-+    src/mprismetadata.cpp
-+    src/mprismetadataproxy.cpp
-+    src/mprisplayer.cpp
-+    src/mprisplayeradaptor.cpp
-+    src/mprisplayerinterface.cpp
-+    src/mprispropertiesadaptor.cpp
-+    src/mprisrootinterface.cpp
-+    src/mprisserviceadaptor.cpp
-+    src/mpris.h
-+    src/mpris_p.h
-+    src/mprisclient.h
-+    src/mprisclient_p.h
-+    src/mpriscontroller.h
-+    src/mprisintrospectableadaptor_p.h
-+    src/mprismetadata.h
-+    src/mprismetadata_p.h
-+    src/mprismetadataproxy.h
-+    src/mprisplayeradaptor_p.h
-+    src/mprisplayer.h
-+    src/mprisplayer_p.h
-+    src/ambermpris.h
-+    src/ambermpris_p.h
-+    src/mprispropertiesadaptor_p.h
-+    src/mprisserviceadaptor_p.h
-+)
-+target_compile_definitions(ambermpris6 PRIVATE MPRIS_QT_LIBRARY)
-+target_include_directories(ambermpris6 PUBLIC
-+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/qtdbusextended>
-+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/AmberMpris>
-+)
-+target_link_libraries(ambermpris6 PUBLIC Qt6::Core Qt6::DBus PRIVATE qtdbusextended)
-+
-+# QML declarative plugin
-+add_library(ambermprisplugin SHARED
-+    declarative/declarativemprisplayer.cpp
-+    declarative/declarativemprisplayer_p.h
-+    declarative/mprisplugin.cpp
-+    declarative/mprisplugin.h
-+)
-+target_include_directories(ambermprisplugin PRIVATE src qtdbusextended declarative)
-+target_link_libraries(ambermprisplugin PRIVATE ambermpris6 Qt6::Core Qt6::DBus Qt6::Qml)
-+
-+# Headers to install
-+set(AMBER_HEADERS
-+    src/Mpris
-+    src/MprisPlayer
-+    src/MprisClient
-+    src/MprisController
-+    src/MprisMetaData
-+    src/mpris.h
-+    src/mprisclient.h
-+    src/mpriscontroller.h
-+    src/mprisplayer.h
-+    src/mprismetadata.h
-+    src/ambermpris.h
-+)
-+
-+install(TARGETS ambermpris6
-+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-+)
-+
-+install(FILES ${AMBER_HEADERS}
-+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/AmberMpris
-+)
-+
-+# Install QML plugin into Amber/Mpris
-+set(QML_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR}/qt-6/qml/Amber/Mpris)
-+install(TARGETS ambermprisplugin
-+    DESTINATION ${QML_INSTALL_DIR}
-+)
-+install(FILES
-+    declarative/qmldir
-+    declarative/plugins.qmltypes
-+    DESTINATION ${QML_INSTALL_DIR}
-+)
-+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/example/qml/MprisAudio.qml)
-+    install(FILES example/qml/MprisAudio.qml DESTINATION ${QML_INSTALL_DIR})
-+endif()
-+
-+# Configure and install pkg-config
-+set(PKG_CONFIG_PREFIX "${CMAKE_INSTALL_PREFIX}")
-+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/ambermpris6.pc
-+"prefix=${PKG_CONFIG_PREFIX}
-+exec_prefix=\${prefix}
-+libdir=\${prefix}/lib
-+includedir=\${prefix}/include/AmberMpris
-+
-+Name: AmberMpris
-+Description: AmberMpris library
-+Version: 1.0.0
-+Requires: Qt6Core Qt6DBus
-+Libs: -L\${libdir} -lambermpris6
-+Cflags: -I\${includedir}
-+")
-+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ambermpris6.pc
-+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
-+)
 diff --git a/overlay/asteroidos/amber-mpris/default.nix b/overlay/asteroidos/amber-mpris/default.nix
 new file mode 100644
-index 00000000..f38be0d3
+index 00000000..0f04b3ed
 --- /dev/null
 +++ b/overlay/asteroidos/amber-mpris/default.nix
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,58 @@
 +# QML MPRIS integration library used by AsteroidOS music and btsyncd components
 +# Upstream repository: https://github.com/sailfishos/amber-mpris
 +# Packaging reference in AsteroidOS: https://github.com/AsteroidOS/meta-asteroid/tree/master/recipes-qt/amber-mpris
@@ -329,10 +172,9 @@ index 00000000..f38be0d3
 +  lib,
 +  stdenv,
 +  fetchFromGitHub,
-+  cmake,
 +  pkg-config,
 +  qt6,
-+  buildPackages,
++  qmakeCrossHook,
 +}:
 +
 +stdenv.mkDerivation {
@@ -348,24 +190,29 @@ index 00000000..f38be0d3
 +
 +  strictDeps = true;
 +
-+  preConfigure = ''
-+    cp ${./CMakeLists.txt} CMakeLists.txt
-+  '';
-+
 +  nativeBuildInputs = [
-+    cmake
 +    pkg-config
++    qmakeCrossHook
 +  ];
 +
-+  cmakeFlags = [
-+    "-DQt6QmlTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
-+    "-DQt6QuickTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QuickTools"
++  qmakeFlags = [
++    "CONFIG+=qt6"
 +  ];
++
++  postPatch = ''
++    substituteInPlace src/src.pro \
++      --replace-fail '$$[QT_INSTALL_LIBS]' '/lib' \
++      --replace-fail '/usr/include' '/include'
++    substituteInPlace declarative/declarative.pro \
++      --replace-fail '$$[QT_INSTALL_QML]' '/lib/qt-6/qml'
++  '';
 +
 +  buildInputs = [
 +    qt6.qtbase
 +    qt6.qtdeclarative
 +  ];
++
++  installFlags = [ "INSTALL_ROOT=$(out)" ];
 +
 +  dontWrapQtApps = true;
 +
@@ -464,17 +311,19 @@ index 00000000..e38bf0b5
 +  };
 +})
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index ccbb901b..ea3921e0 100644
+index 9e9579c1..f8f9edc4 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
-@@ -3,7 +3,15 @@
+@@ -2,8 +2,17 @@
+ 
  rec {
    noUsrShareHook = callPackage ./lib/no-usr-share-hook.nix { };
- 
++  qmakeCrossHook = callPackage ./lib/qmake-cross-hook.nix { };
++
 +  mkAsteroidApp = callPackage ./lib/mk-asteroid-app.nix {
 +    inherit qml-asteroid mapplauncherd noUsrShareHook;
 +  };
-+
+ 
    qml-asteroid = callPackage ./qml-asteroid { inherit noUsrShareHook; };
 +  mapplauncherd = callPackage ./mapplauncherd { inherit metaAsteroidSrc; };
 +
@@ -482,8 +331,8 @@ index ccbb901b..ea3921e0 100644
 +  # (udev rules, unit files, patches) instead of vendoring them.
    metaAsteroidSrc = pkgs.fetchgit {
      url = "https://github.com/AsteroidOS/meta-asteroid";
-     rev = "aa42e158032bf4abbc0d0f898c5c3595a84538ef";
-@@ -12,4 +20,110 @@ rec {
+     rev = "20a8d379f67038208a32b8b59a3093fac8410c73";
+@@ -12,4 +21,113 @@ rec {
    meta-asteroid-src = metaAsteroidSrc;
  
    # Device features shipped by upstream meta-hoki (IMAGE_INSTALL) and asteroid-image.
@@ -506,7 +355,7 @@ index ccbb901b..ea3921e0 100644
 +      ;
 +  };
 +
-+  amber-mpris = callPackage ./amber-mpris { };
++  amber-mpris = callPackage ./amber-mpris { inherit qmakeCrossHook; };
 +  mlite = callPackage ./mlite { };
 +  libconnman-qt = callPackage ./libconnman-qt { };
 +  libiodata = callPackage ./libiodata { };
@@ -518,7 +367,7 @@ index ccbb901b..ea3921e0 100644
 +  ngf-qt6 = callPackage ./ngf-qt6 { };
 +  usb-moded-dev = callPackage ./usb-moded-dev { };
 +  usb-moded-qt6 = callPackage ./usb-moded-qt6 {
-+    inherit usb-moded-dev;
++    inherit usb-moded-dev qmakeCrossHook;
 +  };
 +
 +  # Low-level Nemomobile/SailfishOS libraries for MCE and KeepAlive
@@ -546,7 +395,7 @@ index ccbb901b..ea3921e0 100644
 +  # Nemomobile SensorFW daemon and client API (qtsensors sensorfw backend).
 +  # Upstream: https://github.com/sailfishos/sensorfw
 +  sensorfw = callPackage ./sensorfw {
-+    inherit metaAsteroidSrc;
++    inherit metaAsteroidSrc qmakeCrossHook;
 +    inherit (pkgs) libhybris;
 +  };
 +
@@ -569,16 +418,18 @@ index ccbb901b..ea3921e0 100644
 +    inherit libiodata metaAsteroidSrc;
 +  };
 +  nemo-qml-plugin-alarms = callPackage ./nemo-qml-plugin-alarms {
-+    inherit timed-qt6;
++    inherit timed-qt6 qmakeCrossHook;
 +  };
-+  nemo-qml-plugin-notifications = callPackage ./nemo-qml-plugin-notifications { };
++  nemo-qml-plugin-notifications = callPackage ./nemo-qml-plugin-notifications {
++    inherit qmakeCrossHook;
++  };
 +
 +  # Calendar subsystem: accounts-qt, kcalendarcore, mkcal, and nemo-qml-plugin-calendar
 +  # Upstream repository: https://gitlab.com/accounts-sso/accounts-qt
 +  # Upstream repository: https://github.com/sailfishos-mirror/kcalendarcore
 +  # Upstream repository: https://github.com/sailfishos/mkcal
 +  # Upstream repository: https://github.com/sailfishos/nemo-qml-plugin-calendar
-+  accounts-qt = callPackage ./accounts-qt { };
++  accounts-qt = callPackage ./accounts-qt { inherit qmakeCrossHook; };
 +  kcalendarcore = callPackage ./kcalendarcore { };
 +  mkcal = callPackage ./mkcal {
 +    inherit kcalendarcore timed-qt6;
@@ -590,6 +441,7 @@ index ccbb901b..ea3921e0 100644
 +      mkcal
 +      timed-qt6
 +      libiodata
++      qmakeCrossHook
 +      ;
 +  };
 +
@@ -930,6 +782,105 @@ index 00000000..a430a281
 + 
 + SOURCES += \
 +     displayblanking.cpp \
+diff --git a/overlay/asteroidos/lib/qmake-cross-hook.nix b/overlay/asteroidos/lib/qmake-cross-hook.nix
+new file mode 100644
+index 00000000..deb07965
+--- /dev/null
++++ b/overlay/asteroidos/lib/qmake-cross-hook.nix
+@@ -0,0 +1,19 @@
++{
++  makeSetupHook,
++  buildPackages,
++  qt6,
++}:
++
++makeSetupHook {
++  name = "qmake-cross-hook";
++  substitutions = {
++    hostQmake = "${buildPackages.qt6.qtbase}/bin/qmake";
++    hostQtBin = "${buildPackages.qt6.qtbase}/bin";
++    hostQtLibexec = "${buildPackages.qt6.qtbase}/libexec";
++    hostQtBase = "${buildPackages.qt6.qtbase}";
++    hostQtDev = "${buildPackages.qt6.qtbase.dev}";
++    targetQtBase = "${qt6.qtbase}";
++    targetQtDev = "${qt6.qtbase.dev}";
++    targetQtDeclarativeDev = "${qt6.qtdeclarative.dev}";
++  };
++} ./qmake-cross-hook.sh
+diff --git a/overlay/asteroidos/lib/qmake-cross-hook.sh b/overlay/asteroidos/lib/qmake-cross-hook.sh
+new file mode 100644
+index 00000000..e95e5b56
+--- /dev/null
++++ b/overlay/asteroidos/lib/qmake-cross-hook.sh
+@@ -0,0 +1,68 @@
++qmakeCrossConfigurePhase() {
++    runHook preConfigure
++
++    export PATH="@hostQtBin@:$PATH"
++    local filteredQmakePath=""
++    local oldIfs="$IFS"
++    IFS=:
++    for p in @targetQtDev@ @targetQtDeclarativeDev@ ${QMAKEPATH:-}; do
++        if [ -n "$p" ] && [ "$p" != "@targetQtBase@" ] && [[ ":$filteredQmakePath:" != *":$p:"* ]]; then
++            filteredQmakePath="${filteredQmakePath}${filteredQmakePath:+:}$p"
++        fi
++    done
++    IFS="$oldIfs"
++    for flag in ${NIX_CFLAGS_COMPILE:-}; do
++        case "$flag" in
++            */include)
++                local pkg="${flag%/include}"
++                if [ -d "$pkg/mkspecs" ] && [ ! -d "$pkg/mkspecs/features" ] && [[ ":$filteredQmakePath:" != *":$pkg:"* ]]; then
++                    filteredQmakePath="$filteredQmakePath:$pkg"
++                fi
++                ;;
++        esac
++    done
++    export QMAKEPATH="$filteredQmakePath"
++
++    local flagsArray=()
++    concatTo flagsArray qmakeFlags
++
++    echo "QMAKEPATH=$QMAKEPATH"
++    echo "@hostQmake@ -early" "${flagsArray[@]}"
++    @hostQmake@ -early \
++      "QMAKE_CC=$CC" \
++      "QMAKE_CXX=$CXX" \
++      "QMAKE_LINK=$CXX" \
++      "QMAKE_AR=$AR cqs" \
++      "QMAKE_STRIP=$STRIP" \
++      "QMAKE_PKG_CONFIG=$PKG_CONFIG" \
++      "QMAKE_LIBDIR_QT=@targetQtBase@/lib" \
++      "QMAKE_LFLAGS_RPATH=" \
++      "${flagsArray[@]}"
++
++    if ! [[ -v enableParallelBuilding ]]; then
++        enableParallelBuilding=1
++    fi
++
++    if ! [[ -v enableParallelInstalling ]]; then
++        enableParallelInstalling=1
++    fi
++
++    runHook postConfigure
++}
++
++if [ -z "${dontUseQmakeCrossConfigure-}" -a -z "${configurePhase-}" ]; then
++    configurePhase=qmakeCrossConfigurePhase
++fi
++
++qmakeCrossFixupPc() {
++    local pc
++    for pc in "$out"/lib/pkgconfig/*.pc; do
++        [ -f "$pc" ] || continue
++        sed -i \
++            -e "s|^prefix=.*|prefix=$out|" \
++            -e "s|^libdir=/lib$|libdir=\${prefix}/lib|" \
++            -e "s|^includedir=/include|includedir=\${prefix}/include|" \
++            "$pc"
++    done
++}
++appendToVar preFixupHooks qmakeCrossFixupPc
 diff --git a/overlay/asteroidos/libconnman-qt/default.nix b/overlay/asteroidos/libconnman-qt/default.nix
 new file mode 100644
 index 00000000..264328c9
@@ -2390,10 +2341,10 @@ index 00000000..1206bcae
 +}
 diff --git a/overlay/asteroidos/nemo-qml-plugin-alarms/default.nix b/overlay/asteroidos/nemo-qml-plugin-alarms/default.nix
 new file mode 100644
-index 00000000..4bd75c3c
+index 00000000..f3fa09f9
 --- /dev/null
 +++ b/overlay/asteroidos/nemo-qml-plugin-alarms/default.nix
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,60 @@
 +# Nemomobile alarms QML plugin (Nemo.Alarms)
 +# Upstream repository: https://github.com/sailfishos/nemo-qml-plugin-alarms
 +# Packaging reference in AsteroidOS: https://github.com/AsteroidOS/meta-asteroid/blob/master/recipes-nemomobile/nemo-qml-plugins/nemo-qml-plugin-alarms_git.bb
@@ -2401,11 +2352,10 @@ index 00000000..4bd75c3c
 +  lib,
 +  stdenv,
 +  fetchFromGitHub,
-+  cmake,
 +  pkg-config,
 +  qt6,
-+  buildPackages,
 +  timed-qt6,
++  qmakeCrossHook,
 +}:
 +
 +stdenv.mkDerivation {
@@ -2423,9 +2373,8 @@ index 00000000..4bd75c3c
 +  dontWrapQtApps = true;
 +
 +  nativeBuildInputs = [
-+    cmake
 +    pkg-config
-+    qt6.wrapQtAppsHook
++    qmakeCrossHook
 +  ];
 +
 +  buildInputs = [
@@ -2434,8 +2383,6 @@ index 00000000..4bd75c3c
 +    timed-qt6
 +  ];
 +
-+  # Upstream is a qmake project; mirror the src/src.pro target (Qt QML plugin
-+  # using the timed-qt6 and timed-voland-qt6 client libraries).
 +  postPatch = ''
 +    # timed-qt6 intentionally does not install src/lib/hidden/exception (a
 +    # file named "exception" in the public include dir shadows the C++
@@ -2443,84 +2390,13 @@ index 00000000..4bd75c3c
 +    substituteInPlace src/alarmobject.cpp \
 +      --replace-fail "#include <timed-qt6/exception>" "#include <timed-qt6/exception.h>"
 +
-+    cat > CMakeLists.txt << 'EOF'
-+    cmake_minimum_required(VERSION 3.16)
-+    project(nemoalarms LANGUAGES CXX)
-+
-+    set(CMAKE_CXX_STANDARD 17)
-+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-+    set(CMAKE_AUTOMOC ON)
-+
-+    find_package(Qt6 REQUIRED COMPONENTS Core Qml DBus)
-+    find_package(PkgConfig REQUIRED)
-+    pkg_check_modules(TIMED REQUIRED timed-qt6)
-+    pkg_check_modules(TIMED_VOLAND REQUIRED timed-voland-qt6)
-+
-+    set(SRC_DIR "''${CMAKE_CURRENT_SOURCE_DIR}/src")
-+
-+    add_library(nemoalarms MODULE
-+      ''${SRC_DIR}/plugin.cpp
-+      ''${SRC_DIR}/alarmsbackendmodel.cpp
-+      ''${SRC_DIR}/alarmsbackendmodel_p.cpp
-+      ''${SRC_DIR}/enabledalarmsproxymodel.cpp
-+      ''${SRC_DIR}/alarmobject.cpp
-+      ''${SRC_DIR}/alarmhandlerinterface.cpp
-+      ''${SRC_DIR}/alarmdialogobject.cpp
-+      ''${SRC_DIR}/alarmsettings.cpp
-+      ''${SRC_DIR}/interface.cpp
-+      ''${SRC_DIR}/alarmsbackendmodel.h
-+      ''${SRC_DIR}/alarmsbackendmodel_p.h
-+      ''${SRC_DIR}/enabledalarmsproxymodel.h
-+      ''${SRC_DIR}/alarmobject.h
-+      ''${SRC_DIR}/alarmhandlerinterface.h
-+      ''${SRC_DIR}/alarmdialogobject.h
-+      ''${SRC_DIR}/alarmsettings.h
-+      ''${SRC_DIR}/interface.h
-+      ''${SRC_DIR}/time_interface.cpp
-+    )
-+
-+    target_include_directories(nemoalarms PRIVATE
-+      ''${SRC_DIR}
-+      ''${CMAKE_CURRENT_BINARY_DIR}
-+      ''${TIMED_INCLUDE_DIRS}
-+      ''${TIMED_VOLAND_INCLUDE_DIRS}
-+    )
-+
-+    target_link_libraries(nemoalarms PRIVATE
-+      Qt6::Core
-+      Qt6::Qml
-+      Qt6::DBus
-+      ''${TIMED_LIBRARIES}
-+      ''${TIMED_VOLAND_LIBRARIES}
-+    )
-+
-+    set_target_properties(nemoalarms PROPERTIES
-+      OUTPUT_NAME nemoalarms
-+      LIBRARY_OUTPUT_DIRECTORY "''${CMAKE_CURRENT_BINARY_DIR}"
-+    )
-+
-+    install(TARGETS nemoalarms DESTINATION lib/qt-6/qml/Nemo/Alarms)
-+    install(FILES ''${SRC_DIR}/qmldir ''${SRC_DIR}/plugins.qmltypes
-+      DESTINATION lib/qt-6/qml/Nemo/Alarms)
-+    EOF
++    find . -name '*.pro' -exec sed -i \
++      -e 's|$$\[QT_INSTALL_QML\]|/lib/qt-6/qml|g' \
++      -e 's|$$\[QT_INSTALL_LIBS\]|/lib|g' \
++      -e 's|/usr/include|/include|g' {} +
 +  '';
 +
-+  postInstall = ''
-+    # Provide both libnemoalarms.so and nemoalarms.so symlinks for QML plugin loader
-+    ln -s libnemoalarms.so $out/lib/qt-6/qml/Nemo/Alarms/nemoalarms.so
-+  '';
-+
-+  cmakeFlags = [
-+    "-DQt6Qml_DIR=${qt6.qtdeclarative}/lib/cmake/Qt6Qml"
-+    "-DQt6QmlTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
-+  ];
-+
-+  preConfigure = ''
-+    # qmake's DBUS_INTERFACES generates time_interface.h/.cpp from the
-+    # introspection XML (header_flags/source_flags: -N -c TimeDaemon).
-+    (cd src && ${buildPackages.qt6.qtbase}/bin/qdbusxml2cpp \
-+      -p time_interface -N -c TimeDaemon com.nokia.time.xml)
-+  '';
++  installFlags = [ "INSTALL_ROOT=$(out)" ];
 +
 +  meta = with lib; {
 +    description = "Nemomobile alarms QML plugin for AsteroidOS";
@@ -2531,10 +2407,10 @@ index 00000000..4bd75c3c
 +}
 diff --git a/overlay/asteroidos/nemo-qml-plugin-calendar/default.nix b/overlay/asteroidos/nemo-qml-plugin-calendar/default.nix
 new file mode 100644
-index 00000000..a21e30c9
+index 00000000..adb00707
 --- /dev/null
 +++ b/overlay/asteroidos/nemo-qml-plugin-calendar/default.nix
-@@ -0,0 +1,94 @@
+@@ -0,0 +1,61 @@
 +# QML plugin for calendar on Nemo
 +# Upstream repository: https://github.com/sailfishos/nemo-qml-plugin-calendar
 +# Packaging reference in AsteroidOS: https://github.com/AsteroidOS/meta-asteroid/blob/master/recipes-nemomobile/nemo-qml-plugins/nemo-qml-plugin-calendar_git.bb
@@ -2542,15 +2418,14 @@ index 00000000..a21e30c9
 +  lib,
 +  stdenv,
 +  fetchFromGitHub,
-+  cmake,
 +  pkg-config,
 +  qt6,
-+  buildPackages,
 +  accounts-qt,
 +  kcalendarcore,
 +  mkcal,
 +  timed-qt6,
 +  libiodata,
++  qmakeCrossHook,
 +}:
 +
 +stdenv.mkDerivation {
@@ -2568,8 +2443,8 @@ index 00000000..a21e30c9
 +  dontWrapQtApps = true;
 +
 +  nativeBuildInputs = [
-+    cmake
 +    pkg-config
++    qmakeCrossHook
 +  ];
 +
 +  buildInputs = [
@@ -2582,45 +2457,13 @@ index 00000000..a21e30c9
 +    libiodata
 +  ];
 +
-+  cmakeFlags = [
-+    "-DQt6Qml_DIR=${qt6.qtdeclarative}/lib/cmake/Qt6Qml"
-+    "-DQt6QmlTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
-+  ];
-+
 +  postPatch = ''
-+    cat > CMakeLists.txt <<'EOF'
-+    cmake_minimum_required(VERSION 3.16)
-+    project(nemo-qml-plugin-calendar LANGUAGES CXX)
-+    set(CMAKE_CXX_STANDARD 17)
-+    set(CMAKE_AUTOMOC ON)
-+
-+    find_package(PkgConfig REQUIRED)
-+    pkg_check_modules(KCAL REQUIRED IMPORTED_TARGET KF6CalendarCore)
-+    pkg_check_modules(MKCAL REQUIRED IMPORTED_TARGET libmkcal-qt6)
-+    pkg_check_modules(ACCOUNTS REQUIRED IMPORTED_TARGET accounts-qt6)
-+    pkg_check_modules(TIMED REQUIRED IMPORTED_TARGET timed-qt6)
-+
-+    find_package(Qt6 REQUIRED COMPONENTS Core Qml Concurrent)
-+
-+    file(GLOB SOURCES src/*.cpp)
-+    file(GLOB HEADERS src/*.h)
-+
-+    add_library(nemocalendar MODULE ''${SOURCES} ''${HEADERS})
-+    target_include_directories(nemocalendar PRIVATE src)
-+    target_link_libraries(nemocalendar PRIVATE
-+      Qt6::Core
-+      Qt6::Qml
-+      Qt6::Concurrent
-+      PkgConfig::KCAL
-+      PkgConfig::MKCAL
-+      PkgConfig::ACCOUNTS
-+      PkgConfig::TIMED
-+    )
-+
-+    install(TARGETS nemocalendar LIBRARY DESTINATION lib/qt-6/qml/org/nemomobile/calendar)
-+    install(FILES src/qmldir src/plugins.qmltypes DESTINATION lib/qt-6/qml/org/nemomobile/calendar)
-+    EOF
++    find . -name '*.pro' -exec sed -i \
++      -e 's|$$\[QT_INSTALL_QML\]|/lib/qt-6/qml|g' \
++      -e 's|$$\[QT_INSTALL_LIBS\]|/lib|g' {} +
 +  '';
++
++  installFlags = [ "INSTALL_ROOT=$(out)" ];
 +
 +  meta = with lib; {
 +    description = "Nemomobile calendar QML plugin";
@@ -2629,12 +2472,72 @@ index 00000000..a21e30c9
 +    platforms = platforms.linux;
 +  };
 +}
+diff --git a/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix b/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
+new file mode 100644
+index 00000000..39a2f01f
+--- /dev/null
++++ b/overlay/asteroidos/nemo-qml-plugin-configuration/default.nix
+@@ -0,0 +1,54 @@
++{
++  lib,
++  stdenv,
++  fetchFromGitHub,
++  pkg-config,
++  qt6,
++  mlite,
++  qmakeCrossHook,
++}:
++
++stdenv.mkDerivation {
++  pname = "nemo-qml-plugin-configuration";
++  version = "nightly";
++
++  src = fetchFromGitHub {
++    owner = "sailfishos";
++    repo = "nemo-qml-plugin-configuration";
++    rev = "b8ff8957f7ed9d2e3fceffc782434f2609768686";
++    hash = "sha256-KYmzafNLN+lhX45qazzZEjrEK251lOi4o6Qlas6/11g=";
++  };
++
++  strictDeps = true;
++  dontWrapQtApps = true;
++
++  nativeBuildInputs = [
++    pkg-config
++    qmakeCrossHook
++  ];
++
++  buildInputs = [
++    qt6.qtbase
++    qt6.qtdeclarative
++    mlite
++  ];
++
++  preConfigure = ''
++    export PKG_CONFIG_PATH="${mlite}/lib/pkgconfig:$PKG_CONFIG_PATH"
++  '';
++
++  postPatch = ''
++    find . -name '*.pro' -exec sed -i \
++      -e 's|$$\[QT_INSTALL_QML\]|/lib/qt-6/qml|g' \
++      -e 's|$$\[QT_INSTALL_LIBS\]|/lib|g' {} +
++  '';
++
++  installFlags = [ "INSTALL_ROOT=$(out)" ];
++
++  meta = with lib; {
++    description = "Nemo configuration QML plugin";
++    homepage = "https://github.com/sailfishos/nemo-qml-plugin-configuration";
++    license = licenses.bsd3;
++    platforms = platforms.linux;
++  };
++}
 diff --git a/overlay/asteroidos/nemo-qml-plugin-notifications/default.nix b/overlay/asteroidos/nemo-qml-plugin-notifications/default.nix
 new file mode 100644
-index 00000000..b7ae2e17
+index 00000000..e9c6a76c
 --- /dev/null
 +++ b/overlay/asteroidos/nemo-qml-plugin-notifications/default.nix
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,52 @@
 +# Nemomobile notifications library and QML plugin (Nemo.Notifications)
 +# Upstream repository: https://github.com/sailfishos/nemo-qml-plugin-notifications
 +# Packaging reference in AsteroidOS: https://github.com/AsteroidOS/meta-asteroid/blob/master/recipes-nemomobile/nemo-qml-plugins/nemo-qml-plugin-notifications_git.bb
@@ -2642,10 +2545,9 @@ index 00000000..b7ae2e17
 +  lib,
 +  stdenv,
 +  fetchFromGitHub,
-+  cmake,
 +  pkg-config,
 +  qt6,
-+  buildPackages,
++  qmakeCrossHook,
 +}:
 +
 +stdenv.mkDerivation {
@@ -2663,9 +2565,8 @@ index 00000000..b7ae2e17
 +  dontWrapQtApps = true;
 +
 +  nativeBuildInputs = [
-+    cmake
 +    pkg-config
-+    qt6.wrapQtAppsHook
++    qmakeCrossHook
 +  ];
 +
 +  buildInputs = [
@@ -2673,81 +2574,14 @@ index 00000000..b7ae2e17
 +    qt6.qtdeclarative
 +  ];
 +
-+  # Upstream is a qmake project: src/src.pro builds libnemonotifications-qt6
-+  # and src/plugin/plugin.pro builds the Nemo.Notifications QML plugin.
 +  postPatch = ''
-+    cat > CMakeLists.txt << 'EOF'
-+    cmake_minimum_required(VERSION 3.16)
-+    project(nemonotifications LANGUAGES CXX)
-+
-+    set(CMAKE_CXX_STANDARD 17)
-+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-+    set(CMAKE_AUTOMOC ON)
-+
-+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml DBus)
-+
-+    set(SRC_DIR "''${CMAKE_CURRENT_SOURCE_DIR}/src")
-+
-+    add_library(nemonotifications-qt6 SHARED
-+      ''${SRC_DIR}/notification.cpp
-+      ''${SRC_DIR}/notificationmanagerproxy.cpp
-+      ''${SRC_DIR}/notification.h
-+      ''${SRC_DIR}/notification_p.h
-+      ''${SRC_DIR}/notificationmanagerproxy.h
-+      ''${SRC_DIR}/notificationexport.h
-+    )
-+    target_compile_definitions(nemonotifications-qt6 PRIVATE
-+      BUILD_NEMO_QML_PLUGIN_NOTIFICATIONS_LIB)
-+    target_include_directories(nemonotifications-qt6 PUBLIC
-+      ''${SRC_DIR}
-+      ''${CMAKE_CURRENT_BINARY_DIR})
-+    target_link_libraries(nemonotifications-qt6 PUBLIC Qt6::Core Qt6::Gui Qt6::DBus)
-+    set_target_properties(nemonotifications-qt6 PROPERTIES
-+      OUTPUT_NAME nemonotifications-qt6)
-+
-+    add_library(nemonotifications MODULE ''${SRC_DIR}/plugin/plugin.cpp)
-+    target_include_directories(nemonotifications PRIVATE
-+      ''${SRC_DIR}
-+      ''${CMAKE_CURRENT_BINARY_DIR})
-+    target_link_libraries(nemonotifications PRIVATE
-+      nemonotifications-qt6
-+      Qt6::Core
-+      Qt6::Qml
-+      Qt6::DBus)
-+    set_target_properties(nemonotifications PROPERTIES
-+      OUTPUT_NAME nemonotifications)
-+
-+    install(TARGETS nemonotifications-qt6 DESTINATION lib)
-+    install(TARGETS nemonotifications DESTINATION lib/qt-6/qml/Nemo/Notifications)
-+    install(FILES
-+      ''${SRC_DIR}/plugin/qmldir
-+      ''${SRC_DIR}/plugin/plugins.qmltypes
-+      DESTINATION lib/qt-6/qml/Nemo/Notifications)
-+    install(FILES
-+      ''${SRC_DIR}/notification.h
-+      ''${SRC_DIR}/notification_p.h
-+      ''${SRC_DIR}/notificationexport.h
-+      DESTINATION include/nemonotifications-qt6)
-+    EOF
++    find . -name '*.pro' -exec sed -i \
++      -e 's|$$\[QT_INSTALL_QML\]|/lib/qt-6/qml|g' \
++      -e 's|$$\[QT_INSTALL_LIBS\]|/lib|g' \
++      -e 's|/usr/include|/include|g' {} +
 +  '';
 +
-+  postInstall = ''
-+    # Provide both libnemonotifications.so and nemonotifications.so symlinks for QML plugin loader
-+    ln -s libnemonotifications.so $out/lib/qt-6/qml/Nemo/Notifications/nemonotifications.so
-+  '';
-+
-+  cmakeFlags = [
-+    "-DQt6Qml_DIR=${qt6.qtdeclarative}/lib/cmake/Qt6Qml"
-+    "-DQt6QmlTools_DIR=${buildPackages.qt6.qtdeclarative}/lib/cmake/Qt6QmlTools"
-+  ];
-+
-+  preConfigure = ''
-+    # Upstream src.pro generates the proxy through qdbusxml2cpp with
-+    # QT_HOST_BINS; do the same explicitly for cross builds.
-+    (cd src && ${buildPackages.qt6.qtbase}/bin/qdbusxml2cpp \
-+      -p notificationmanagerproxy -c NotificationManagerProxy -i notification_p.h \
-+      org.freedesktop.Notifications.xml)
-+  '';
++  installFlags = [ "INSTALL_ROOT=$(out)" ];
 +
 +  meta = with lib; {
 +    description = "Nemomobile notifications library and QML plugin for AsteroidOS";
@@ -3208,284 +3042,12 @@ index 00000000..f05731fc
 +    platforms = [ "armv7l-linux" ];
 +  };
 +}
-diff --git a/overlay/asteroidos/sensorfw/CMakeLists.txt b/overlay/asteroidos/sensorfw/CMakeLists.txt
-new file mode 100644
-index 00000000..47bb6a51
---- /dev/null
-+++ b/overlay/asteroidos/sensorfw/CMakeLists.txt
-@@ -0,0 +1,266 @@
-+# CMake build for Nemomobile SensorFW.
-+#
-+# The upstream project ships qmake files only. nixpkgs' qmake cannot be used
-+# for cross-compilation here (its installed mkspecs never load
-+# mkspecs/modules/qmodule.pri, so even a trivial Qt project fails on
-+# qtConfig()), so this file mirrors what the .pro files build:
-+#   - libsensordatatypes-qt6, libsensorfw-qt6, libsensorclient-qt6
-+#   - sensorfwd
-+#   - sensor / filter / chain / adaptor plugins
-+#   - the hybris adaptor library and plugins (option ENABLE_HYBRIS)
-+cmake_minimum_required(VERSION 3.16)
-+project(sensorfw LANGUAGES CXX)
-+
-+set(CMAKE_CXX_STANDARD 17)
-+set(CMAKE_CXX_STANDARD_REQUIRED ON)
-+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-+set(CMAKE_AUTOMOC ON)
-+
-+option(ENABLE_HYBRIS "Build the libhybris sensor adaptors" OFF)
-+
-+find_package(Qt6 REQUIRED COMPONENTS Core DBus Network)
-+find_package(PkgConfig REQUIRED)
-+pkg_check_modules(SYSTEMD REQUIRED IMPORTED_TARGET libsystemd)
-+
-+set(SFW_PLUGIN_DIR "${CMAKE_INSTALL_PREFIX}/lib/sensord-qt6")
-+
-+include_directories(
-+  ${CMAKE_CURRENT_SOURCE_DIR}
-+  ${CMAKE_CURRENT_SOURCE_DIR}/include
-+  ${CMAKE_CURRENT_SOURCE_DIR}/core
-+  ${CMAKE_CURRENT_SOURCE_DIR}/datatypes
-+  ${CMAKE_CURRENT_SOURCE_DIR}/filters
-+  ${CMAKE_CURRENT_SOURCE_DIR}/sensors/magnetometersensor
-+  ${ANDROID_INCLUDE}
-+  ${HYBRIS_LIB}/include/hybris/common
-+)
-+
-+# --- datatypes ------------------------------------------------------------
-+file(GLOB DATATYPES_SRC ${CMAKE_CURRENT_SOURCE_DIR}/datatypes/*.cpp)
-+file(GLOB DATATYPES_HDR ${CMAKE_CURRENT_SOURCE_DIR}/datatypes/*.h)
-+add_library(sensordatatypes-qt6 SHARED ${DATATYPES_SRC} ${DATATYPES_HDR})
-+target_link_libraries(sensordatatypes-qt6 PUBLIC Qt6::Core Qt6::DBus)
-+set_target_properties(sensordatatypes-qt6 PROPERTIES VERSION 0.9.0 SOVERSION 0)
-+install(TARGETS sensordatatypes-qt6 LIBRARY DESTINATION lib)
-+install(FILES ${DATATYPES_HDR} DESTINATION include/sensord-qt6/datatypes)
-+
-+file(GLOB SFW_PUBLIC_HDR ${CMAKE_CURRENT_SOURCE_DIR}/include/*.h)
-+install(FILES ${SFW_PUBLIC_HDR} DESTINATION include/sensord-qt6)
-+
-+# --- core (libsensorfw) ---------------------------------------------------
-+set(CORE_SRC
-+  core/sensormanager.cpp
-+  core/sensormanager_a.cpp
-+  core/pusher.cpp
-+  core/ringbuffer.cpp
-+  core/producer.cpp
-+  core/source.cpp
-+  core/consumer.cpp
-+  core/bin.cpp
-+  core/filter.cpp
-+  core/deviceadaptor.cpp
-+  core/loader.cpp
-+  core/plugin.cpp
-+  core/abstractsensor_a.cpp
-+  core/abstractsensor.cpp
-+  core/logging.cpp
-+  core/parameterparser.cpp
-+  core/abstractchain.cpp
-+  core/sysfsadaptor.cpp
-+  core/sockethandler.cpp
-+  core/inputdevadaptor.cpp
-+  core/config.cpp
-+  core/nodebase.cpp
-+  # Used by config.cpp (display/PSM state changes); part of the upstream core
-+  # build even though it is not listed in core.pro.
-+  core/mcewatcher.cpp
-+)
-+file(GLOB CORE_HDR ${CMAKE_CURRENT_SOURCE_DIR}/core/*.h)
-+# hybrisadaptor.h is built by the hybris library, not the core one (it needs
-+# the Android HAL headers). lsclient/hybrisbindertypes belong to the Sailfish
-+# and binder variants that this build does not compile.
-+list(REMOVE_ITEM CORE_HDR
-+  ${CMAKE_CURRENT_SOURCE_DIR}/core/hybrisadaptor.h
-+  ${CMAKE_CURRENT_SOURCE_DIR}/core/lsclient.h
-+  ${CMAKE_CURRENT_SOURCE_DIR}/core/hybrisbindertypes.h
-+)
-+add_library(sensorfw-qt6 SHARED ${CORE_SRC} ${CORE_HDR})
-+target_compile_definitions(sensorfw-qt6 PRIVATE PLUGIN_DIRECTORY="${SFW_PLUGIN_DIR}")
-+target_link_libraries(sensorfw-qt6 PUBLIC Qt6::Core Qt6::DBus Qt6::Network sensordatatypes-qt6)
-+set_target_properties(sensorfw-qt6 PROPERTIES VERSION 0.9.0 SOVERSION 0)
-+install(TARGETS sensorfw-qt6 LIBRARY DESTINATION lib)
-+
-+# --- D-Bus client API -----------------------------------------------------
-+file(GLOB CLIENT_SRC ${CMAKE_CURRENT_SOURCE_DIR}/qt-api/*.cpp)
-+file(GLOB CLIENT_HDR ${CMAKE_CURRENT_SOURCE_DIR}/qt-api/*.h)
-+add_library(sensorclient-qt6 SHARED ${CLIENT_SRC} ${CLIENT_HDR})
-+target_link_libraries(sensorclient-qt6 PUBLIC Qt6::Core Qt6::DBus Qt6::Network sensordatatypes-qt6)
-+set_target_properties(sensorclient-qt6 PROPERTIES VERSION 0.9.0 SOVERSION 0)
-+install(TARGETS sensorclient-qt6 LIBRARY DESTINATION lib)
-+install(FILES ${CLIENT_HDR} DESTINATION include/sensord-qt6)
-+
-+# --- daemon ---------------------------------------------------------------
-+add_executable(sensorfwd
-+  sensord/main.cpp
-+  sensord/parser.cpp
-+  sensord/calibrationhandler.cpp
-+)
-+target_link_libraries(sensorfwd PRIVATE
-+  sensorfw-qt6
-+  sensordatatypes-qt6
-+  Qt6::Core
-+  Qt6::DBus
-+  Qt6::Network
-+  PkgConfig::SYSTEMD
-+)
-+install(TARGETS sensorfwd RUNTIME DESTINATION sbin)
-+
-+# --- plugins --------------------------------------------------------------
-+# Each plugin directory is flat: globbing *.cpp reproduces the upstream
-+# SOURCES lists (they never mix files in from other directories).
-+function(sfw_plugin target dir)
-+  file(GLOB srcs ${dir}/*.cpp)
-+  file(GLOB hdrs ${dir}/*.h)
-+  add_library(${target} MODULE ${srcs} ${hdrs})
-+  # Loader::pluginFileName builds lib${name}-qt6.so (see core/loader.cpp).
-+  set_target_properties(${target} PROPERTIES PREFIX "lib" SUFFIX "-qt6.so")
-+  target_include_directories(${target} PRIVATE ${dir})
-+  target_link_libraries(${target} PRIVATE
-+    sensorfw-qt6
-+    sensordatatypes-qt6
-+    Qt6::Core
-+    Qt6::DBus
-+    Qt6::Network
-+  )
-+  install(TARGETS ${target} LIBRARY DESTINATION lib/sensord-qt6)
-+endfunction()
-+
-+file(GLOB SENSOR_DIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/sensors/*)
-+file(GLOB FILTER_DIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/filters/*)
-+file(GLOB CHAIN_DIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/chains/*)
-+file(GLOB ADAPTOR_DIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/adaptors/*)
-+
-+# Plugins include headers from sibling plugin dirs (chains use filters/*),
-+# so every plugin directory is on the include path.
-+foreach(d ${SENSOR_DIRS} ${FILTER_DIRS} ${CHAIN_DIRS} ${ADAPTOR_DIRS})
-+  if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+  endif()
-+endforeach()
-+
-+foreach(d ${SENSOR_DIRS})
-+  get_filename_component(name ${d} NAME)
-+  if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${d} AND NOT name STREQUAL "contextplugin")
-+    sfw_plugin(${name} ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+  endif()
-+endforeach()
-+
-+foreach(d ${FILTER_DIRS})
-+  get_filename_component(name ${d} NAME)
-+  if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+    sfw_plugin(${name} ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+  endif()
-+endforeach()
-+
-+foreach(d ${CHAIN_DIRS})
-+  get_filename_component(name ${d} NAME)
-+  if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+    sfw_plugin(${name} ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+  endif()
-+endforeach()
-+
-+# Legacy x86/tablet adaptors that no longer compile against Qt 6/GCC 16 and
-+# are not referenced by the wearable (hybris) sensor configuration.
-+set(SKIP_ADAPTORS
-+  magnetometeradaptor-ncdk
-+  mpu6050accelerometer
-+  mrstaccelerometer
-+  oaktrailaccelerometer
-+  oemtabletaccelerometer
-+  oemtabletalsadaptor-ascii
-+  oemtabletgyroscopeadaptor
-+  oemtabletmagnetometeradaptor
-+  pegatronaccelerometeradaptor
-+  steaccelerometeradaptor
-+)
-+
-+foreach(d ${ADAPTOR_DIRS})
-+  get_filename_component(name ${d} NAME)
-+  if(NOT IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+    continue()
-+  endif()
-+  if(name MATCHES "^hybris")
-+    continue()
-+  endif()
-+  if(name IN_LIST SKIP_ADAPTORS)
-+    continue()
-+  endif()
-+  sfw_plugin(${name} ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+  if(name STREQUAL "iioadaptor")
-+    pkg_check_modules(UDEV REQUIRED IMPORTED_TARGET libudev)
-+    target_link_libraries(${name} PRIVATE PkgConfig::UDEV)
-+  endif()
-+endforeach()
-+
-+# --- hybris adaptors ------------------------------------------------------
-+if(ENABLE_HYBRIS)
-+  if(NOT HYBRIS_LIB)
-+    message(FATAL_ERROR "HYBRIS_LIB must point at the libhybris prefix")
-+  endif()
-+  if(NOT ANDROID_INCLUDE)
-+    message(FATAL_ERROR "ANDROID_INCLUDE must point at the Android headers")
-+  endif()
-+  find_library(HARDWARE_LIB hardware PATHS ${HYBRIS_LIB}/lib REQUIRED)
-+  find_library(HYBRIS_COMMON_LIB hybris-common PATHS ${HYBRIS_LIB}/lib REQUIRED)
-+
-+  include_directories(${ANDROID_INCLUDE} ${HYBRIS_LIB}/include/hybris/common)
-+
-+  add_library(hybrissensorfw-qt6 SHARED core/hybrisadaptor.cpp core/hybrisadaptor.h)
-+  target_link_libraries(hybrissensorfw-qt6 PUBLIC
-+    sensorfw-qt6
-+    sensordatatypes-qt6
-+    Qt6::Core
-+    ${HARDWARE_LIB}
-+    ${HYBRIS_COMMON_LIB}
-+  )
-+  set_target_properties(hybrissensorfw-qt6 PROPERTIES VERSION 0.9.0 SOVERSION 0)
-+  install(TARGETS hybrissensorfw-qt6 LIBRARY DESTINATION lib)
-+
-+  foreach(d ${ADAPTOR_DIRS})
-+    get_filename_component(name ${d} NAME)
-+    if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${d} AND name MATCHES "^hybris")
-+      sfw_plugin(${name} ${CMAKE_CURRENT_SOURCE_DIR}/${d})
-+      target_link_libraries(${name} PRIVATE
-+        hybrissensorfw-qt6
-+        ${HARDWARE_LIB}
-+        ${HYBRIS_COMMON_LIB}
-+      )
-+    endif()
-+  endforeach()
-+endif()
-+
-+# --- configuration, unit and pkg-config ----------------------------------
-+install(FILES
-+  config/10-sensord-default.conf
-+  config/20-sensors-default.conf
-+  DESTINATION etc/sensorfw/sensord.conf.d
-+)
-+install(FILES sensorfw.conf DESTINATION share/dbus-1/system.d)
-+install(FILES rpm/sensorfwd.service DESTINATION lib/systemd/system)
-+if(ENABLE_HYBRIS)
-+  install(FILES config/sensord-hybris.conf DESTINATION etc/sensorfw RENAME primaryuse.conf)
-+endif()
-+
-+file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/sensord-qt6.pc
-+"prefix=${CMAKE_INSTALL_PREFIX}
-+includedir=\${prefix}/include/sensord-qt6
-+libdir=\${prefix}/lib
-+
-+Name: Sensorfw-qt6
-+Description: Sensord for Qt 6
-+Version: 0.15.1
-+Requires: Qt6Core Qt6DBus Qt6Network
-+Libs: -L\${libdir} -lsensorclient-qt6 -lsensordatatypes-qt6
-+Cflags: -I\${includedir} -I\${includedir}/datatypes
-+")
-+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/sensord-qt6.pc DESTINATION lib/pkgconfig)
 diff --git a/overlay/asteroidos/sensorfw/default.nix b/overlay/asteroidos/sensorfw/default.nix
 new file mode 100644
-index 00000000..6aca4bcc
+index 00000000..37cfc405
 --- /dev/null
 +++ b/overlay/asteroidos/sensorfw/default.nix
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,96 @@
 +# Nemomobile SensorFW sensor daemon and Qt client API
 +# Upstream repository: https://github.com/sailfishos/sensorfw
 +# Packaging reference in AsteroidOS: https://github.com/AsteroidOS/meta-asteroid/tree/master/recipes-nemomobile/sensorfw
@@ -3493,13 +3055,13 @@ index 00000000..6aca4bcc
 +  lib,
 +  stdenv,
 +  fetchFromGitHub,
-+  cmake,
 +  pkg-config,
 +  qt6,
 +  systemd,
 +  libhybris,
 +  udev,
 +  metaAsteroidSrc,
++  qmakeCrossHook,
 +}:
 +
 +stdenv.mkDerivation {
@@ -3527,8 +3089,8 @@ index 00000000..6aca4bcc
 +  dontWrapQtApps = true;
 +
 +  nativeBuildInputs = [
-+    cmake
 +    pkg-config
++    qmakeCrossHook
 +  ];
 +
 +  buildInputs = [
@@ -3539,16 +3101,41 @@ index 00000000..6aca4bcc
 +    udev
 +  ];
 +
-+  # Upstream only ships qmake project files; CMakeLists.txt mirrors them.
 +  postPatch = ''
-+    cp ${./CMakeLists.txt} CMakeLists.txt
++    sed "s=@LIB@=lib/=g" sensord-qt6.pc.in > sensord-qt6.pc
++    sed -i '/include( doc\/doc.pri )/d' sensorfw.pro
++    sed -i 's/sensord-qt5/sensord-qt6/g' sensorfw.pro
++    sed -i '/^[[:space:]]*tests[[:space:]]*\\$/d' sensorfw.pro
++    sed -i 's:-L/usr/lib ::' core/hybris.pro
++    find . \( -name '*.pro' -o -name '*.pri' \) -exec sed -i \
++      -e 's|$$\[QT_INSTALL_LIBS\]|/lib|g' \
++      -e 's|$$\[QT_INSTALL_DATA\]||g' \
++      -e 's|/usr/include|/include|g' \
++      -e 's|/usr/lib|/lib|g' \
++      -e 's|/usr/sbin|/sbin|g' \
++      -e 's|/usr/bin|/bin|g' \
++      -e 's|/usr/share|/share|g' {} +
 +  '';
 +
-+  cmakeFlags = [
-+    "-DENABLE_HYBRIS=ON"
-+    "-DHYBRIS_LIB=${libhybris}"
-+    "-DANDROID_INCLUDE=${libhybris.androidHeadersInclude}"
++  qmakeFlags = [
++    "CONFIG+=hybris"
++    "INCLUDEPATH+=${libhybris}/include"
++    "INCLUDEPATH+=${libhybris.androidHeadersInclude}"
++    "LIBS+=-L${libhybris}/lib"
 +  ];
++
++  preConfigure = ''
++    mkdir -p "$NIX_BUILD_TOP/pkgconfig"
++    cat > "$NIX_BUILD_TOP/pkgconfig/android-headers.pc" <<EOF
++Name: android-headers
++Description: Android headers for libhybris
++Version: 1.0
++Cflags: -I${libhybris.androidHeadersInclude}
++EOF
++    export PKG_CONFIG_PATH="$NIX_BUILD_TOP/pkgconfig''${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
++  '';
++
++  installFlags = [ "INSTALL_ROOT=$(out)" ];
 +
 +  meta = with lib; {
 +    description = "Nemomobile sensor daemon and Qt sensor client API";
@@ -3788,22 +3375,21 @@ index 00000000..21b65afd
 +})
 diff --git a/overlay/asteroidos/usb-moded-qt6/default.nix b/overlay/asteroidos/usb-moded-qt6/default.nix
 new file mode 100644
-index 00000000..97ec49d7
+index 00000000..784d64a0
 --- /dev/null
 +++ b/overlay/asteroidos/usb-moded-qt6/default.nix
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,54 @@
 +# Qt6 bindings and client library for usb-moded daemon
 +# Upstream repository: https://github.com/sailfishos/libusb-moded-qt
 +{
 +  lib,
 +  stdenv,
 +  fetchFromGitHub,
-+  cmake,
 +  pkg-config,
 +  qt6,
 +  dbus,
-+  buildPackages,
 +  usb-moded-dev,
++  qmakeCrossHook,
 +}:
 +
 +stdenv.mkDerivation {
@@ -3818,11 +3404,11 @@ index 00000000..97ec49d7
 +  };
 +
 +  strictDeps = true;
++  dontWrapQtApps = true;
 +
 +  nativeBuildInputs = [
-+    cmake
 +    pkg-config
-+    qt6.wrapQtAppsHook
++    qmakeCrossHook
 +  ];
 +
 +  buildInputs = [
@@ -3832,48 +3418,13 @@ index 00000000..97ec49d7
 +  ];
 +
 +  postPatch = ''
-+        cat << "EOF" > CMakeLists.txt
-+    cmake_minimum_required(VERSION 3.16)
-+    project(usb-moded-qt6 LANGUAGES CXX)
-+    find_package(Qt6 REQUIRED COMPONENTS Core DBus)
-+    find_package(PkgConfig REQUIRED)
-+    pkg_check_modules(dbus-1 REQUIRED IMPORTED_TARGET dbus-1)
-+    pkg_check_modules(usb_moded REQUIRED IMPORTED_TARGET usb_moded)
-+    set(CMAKE_AUTOMOC ON)
-+    file(GLOB HEADERS "src/*.h")
-+    set(SOURCES src/qusbmode.cpp src/qusbmoded.cpp usb_moded_interface.cpp)
-+    add_library(usb-moded-qt6 SHARED ''${SOURCES} ''${HEADERS})
-+    target_compile_definitions(usb-moded-qt6 PRIVATE QUSBMODED_LIBRARY)
-+    target_include_directories(usb-moded-qt6 PUBLIC
-+      $<BUILD_INTERFACE:''${CMAKE_CURRENT_SOURCE_DIR}/src>
-+      $<BUILD_INTERFACE:''${CMAKE_CURRENT_SOURCE_DIR}>
-+      $<INSTALL_INTERFACE:include/usb-moded-qt6>
-+    )
-+    target_link_libraries(usb-moded-qt6 PUBLIC Qt6::Core Qt6::DBus PkgConfig::dbus-1 PkgConfig::usb_moded)
-+    set_target_properties(usb-moded-qt6 PROPERTIES VERSION 1.0.0 SOVERSION 1)
-+    install(TARGETS usb-moded-qt6 DESTINATION lib)
-+    install(FILES ''${HEADERS} DESTINATION include/usb-moded-qt6)
-+    configure_file(usb-moded-qt6.pc.in usb-moded-qt6.pc @ONLY)
-+    install(FILES ''${CMAKE_CURRENT_BINARY_DIR}/usb-moded-qt6.pc DESTINATION lib/pkgconfig)
-+    EOF
-+        cat << "EOF" > usb-moded-qt6.pc.in
-+    prefix=@CMAKE_INSTALL_PREFIX@
-+    exec_prefix=''${prefix}
-+    libdir=''${prefix}/lib
-+    includedir=''${prefix}/include/usb-moded-qt6
-+
-+    Name: usb-moded-qt6
-+    Description: Qt bindings for usb_moded
-+    Version: 1.0.0
-+    Requires: Qt6Core Qt6DBus
-+    Libs: -L''${libdir} -lusb-moded-qt6
-+    Cflags: -I''${includedir}
-+    EOF
++    find . -name '*.pro' -exec sed -i \
++      -e 's|$$\[QT_INSTALL_LIBS\]|/lib|g' \
++      -e 's|/usr/include|/include|g' \
++      -e 's|pkg-config|$$QMAKE_PKG_CONFIG|g' {} +
 +  '';
 +
-+  preConfigure = ''
-+    ${buildPackages.qt6.qtbase}/bin/qdbusxml2cpp -N -c QUsbModedInterface -p usb_moded_interface.h:usb_moded_interface.cpp ${usb-moded-dev}/include/usb-moded/com.meego.usb_moded.xml
-+  '';
++  installFlags = [ "INSTALL_ROOT=$(out)" ];
 +
 +  meta = with lib; {
 +    description = "Qt6 client library and bindings for usb_moded daemon";
@@ -3882,3 +3433,6 @@ index 00000000..97ec49d7
 +    platforms = platforms.linux;
 +  };
 +}
+-- 
+2.56.0
+

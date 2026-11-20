@@ -1,28 +1,23 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 5d4eaf00e858cda68589de3082367c4c439288ee Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
-Date: Fri, 20 Nov 2026 10:18:13 +1100
+Date: Tue, 10 Nov 2026 11:33:29 +1100
 Subject: [PATCH] hwcomposer: optional DOZE ambient presents for Hoki
 
 Keep AsteroidOS meta-hoki QPA_HWC2_FORCE_DOZE_UPDATE as the device default
 (lipstick wakes ambient once per minute). Ship an opt-in QPA_HWC2_DOZE_UPDATE
 plugin path for low-power presents without switching the default.
-
-Includes minute WallClock ambient cadence and sticky DOZE_UPDATE cleanup.
 ---
- devices/fossil-hoki/default.nix               | 29 ++++++
- .../ambient-wallclock-minute.patch            | 13 +++
- .../asteroidos/asteroid-launcher/default.nix  |  2 +
+ devices/fossil-hoki/default.nix               | 21 ++++
  .../ambient-doze-update.patch                 | 97 +++++++++++++++++++
- .../qt6-qpa-hwcomposer-plugin/default.nix     | 14 +--
- 5 files changed, 149 insertions(+), 6 deletions(-)
- create mode 100644 overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch
+ .../qt6-qpa-hwcomposer-plugin/default.nix     |  2 +
+ 3 files changed, 120 insertions(+)
  create mode 100644 overlay/asteroidos/qt6-qpa-hwcomposer-plugin/ambient-doze-update.patch
 
 diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
-index 47a5dd97..34b02cb6 100644
+index 1d7f7e96..eb3de32f 100644
 --- a/devices/fossil-hoki/default.nix
 +++ b/devices/fossil-hoki/default.nix
-@@ -401,6 +401,35 @@ in
+@@ -396,6 +396,27 @@ in
      ''} ./var/lib/environment/compositor/qt6-hidpi.conf
    '';
  
@@ -36,18 +31,10 @@ index 47a5dd97..34b02cb6 100644
 +      Type = "oneshot";
 +      RemainAfterExit = true;
 +      ExecStart = pkgs.writeShellScript "hoki-clear-sticky-doze-update" ''
-+        confdir=/var/lib/environment/compositor
-+        # Strip experimental DOZE_UPDATE from any compositor env drop-in; that
-+        # flag wins over FORCE_DOZE_UPDATE in the HWC plugin and caused ~1 Hz flashes.
-+        if [ -d "$confdir" ]; then
-+          for conf in "$confdir"/*.conf; do
-+            [ -f "$conf" ] || continue
-+            if grep -q '^QPA_HWC2_DOZE_UPDATE=' "$conf"; then
-+              sed -i '/^QPA_HWC2_DOZE_UPDATE=/d' "$conf"
-+            fi
-+          done
++        conf=/var/lib/environment/compositor/20-device.conf
++        if [ -f "$conf" ] && grep -q '^QPA_HWC2_DOZE_UPDATE=' "$conf"; then
++          sed -i '/^QPA_HWC2_DOZE_UPDATE=/d' "$conf"
 +        fi
-+        conf=$confdir/20-device.conf
 +        if [ -f "$conf" ] && ! grep -q '^QPA_HWC2_FORCE_DOZE_UPDATE=' "$conf"; then
 +          printf '%s\n' 'QPA_HWC2_FORCE_DOZE_UPDATE=1' >> "$conf"
 +        fi
@@ -58,38 +45,6 @@ index 47a5dd97..34b02cb6 100644
    # Symlink modem and bluetooth partition firmware into /lib/firmware
    # once /vendor/firmware_mnt and /vendor/bt_firmware are mounted.
    systemd.services.firmware-mount-links-hoki = {
-diff --git a/overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch b/overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch
-new file mode 100644
-index 00000000..72f2c868
---- /dev/null
-+++ b/overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch
-@@ -0,0 +1,13 @@
-+--- a/src/qml/MainScreen.qml
-++++ b/src/qml/MainScreen.qml
-+@@ -198,7 +198,9 @@ Item {
-+     WallClock {
-+         id: wallClock
-+         enabled: desktop.visible
-+-        updateFrequency: WallClock.Second
-++        // Ambient is woken once per minute by lipstick. Keeping Second here
-++        // with QPA_HWC2_FORCE_DOZE_UPDATE caused ~1 Hz full-ON present flashes.
-++        updateFrequency: displayAmbient ? WallClock.Minute : WallClock.Second
-+     }
-+ 
-+     MceChargerType {
-diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroidos/asteroid-launcher/default.nix
-index 04736a1f..b1c5d773 100644
---- a/overlay/asteroidos/asteroid-launcher/default.nix
-+++ b/overlay/asteroidos/asteroid-launcher/default.nix
-@@ -90,6 +90,8 @@ stdenv.mkDerivation {
-     # screen with a live render loop) names the failing Loader instead of
-     # leaving only "update from item" chatter in the log.
-     ./qml-boot-diagnostics.patch
-+    # Ambient: WallClock.Minute so FORCE_DOZE_UPDATE presents stay once/minute.
-+    ./ambient-wallclock-minute.patch
-   ];
- 
-   nativeBuildInputs = [
 diff --git a/overlay/asteroidos/qt6-qpa-hwcomposer-plugin/ambient-doze-update.patch b/overlay/asteroidos/qt6-qpa-hwcomposer-plugin/ambient-doze-update.patch
 new file mode 100644
 index 00000000..cd0a8dc8
@@ -194,46 +149,10 @@ index 00000000..cd0a8dc8
 +     procs = new HwcProcs_v20();
 +     procs->on_vsync_received = hwc2_callback_vsync;
 diff --git a/overlay/asteroidos/qt6-qpa-hwcomposer-plugin/default.nix b/overlay/asteroidos/qt6-qpa-hwcomposer-plugin/default.nix
-index 18a7b4a3..4b28ebad 100644
+index a4b3a5ed..08d04ec2 100644
 --- a/overlay/asteroidos/qt6-qpa-hwcomposer-plugin/default.nix
 +++ b/overlay/asteroidos/qt6-qpa-hwcomposer-plugin/default.nix
-@@ -25,30 +25,30 @@ let
-     cp ${
-       fetchurl {
-         url = "https://raw.githubusercontent.com/aosp-mirror/platform_hardware_libhardware/android-10.0.0_r1/include/hardware/hardware.h";
--        sha256 = "1s5f4gxmqhd4xfddwaiw9q8csjnk8fcmb02370v7xj6n100jzk05";
-+        hash = "sha256-BcwvAQjWyH42OEOAVZlD00rNEE48Kt6a66RBXPsjrug=";
-       }
-     } $out/include/hardware/hardware.h
-     cp ${
-       fetchurl {
-         url = "https://raw.githubusercontent.com/aosp-mirror/platform_hardware_libhardware/android-10.0.0_r1/include/hardware/hwcomposer_defs.h";
--        sha256 = "1far10f35b95apgqdasmpl7jgdqm51j5xjwzsgj3h59n5n1almhi";
-+        hash = "sha256-EVaqgi02FTjk05/LXmQoFbcnD71Vq4bfVSWtMhwIWbk=";
-       }
-     } $out/include/hardware/hwcomposer_defs.h
-     cp ${
-       fetchurl {
-         url = "https://raw.githubusercontent.com/aosp-mirror/platform_hardware_libhardware/android-10.0.0_r1/include/hardware/hwcomposer.h";
--        sha256 = "12i9w601lnsli38wnwal81zzvfr4x6ynlxhm2crd1qwhw29jwqz7";
-+        hash = "sha256-52Muk+CQ49AyExV2ar3pJLv9f0BUccvRiFRbGoDhKYo=";
-       }
-     } $out/include/hardware/hwcomposer.h
-     cp ${
-       fetchurl {
-         url = "https://raw.githubusercontent.com/aosp-mirror/platform_hardware_libhardware/android-10.0.0_r1/include/hardware/hwcomposer2.h";
--        sha256 = "0f2vp1mqvn7psvx0xhdfspxjf07f4gr42wprkv1l8n5llfxqklgd";
-+        hash = "sha256-7dGJu6O0WETDnvlyQfIj7gAn+9WuwQ761vfYjWu4Wzg=";
-       }
-     } $out/include/hardware/hwcomposer2.h
-   '';
- in
--stdenv.mkDerivation (finalAttrs: {
-+stdenv.mkDerivation {
-   pname = "qt6-qpa-hwcomposer-plugin";
-   version = "6.3.0+git";
- 
-@@ -69,6 +69,8 @@ stdenv.mkDerivation (finalAttrs: {
+@@ -69,6 +69,8 @@ stdenv.mkDerivation {
      "${metaAsteroidSrc}/recipes-qt/qt6/qt6-qpa-hwcomposer-plugin/0006-v10-Fix-refresh-rate-fallback-unit.patch"
      "${metaAsteroidSrc}/recipes-qt/qt6/qt6-qpa-hwcomposer-plugin/0007-v10-Make-updates-request-driven-and-vsync-paced.patch"
      ./hwc-present-diagnostics.patch
@@ -242,9 +161,6 @@ index 18a7b4a3..4b28ebad 100644
    ];
  
    strictDeps = true;
-@@ -253,4 +255,4 @@ stdenv.mkDerivation (finalAttrs: {
-     license = licenses.lgpl21Only;
-     platforms = platforms.linux;
-   };
--})
-+}
+-- 
+2.56.0
+
