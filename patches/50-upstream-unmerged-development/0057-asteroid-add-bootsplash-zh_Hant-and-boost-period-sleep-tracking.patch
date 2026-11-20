@@ -1,18 +1,18 @@
-From 49989a6f5141f1f7bdc4c4dad51fbe2f81589142 Mon Sep 17 00:00:00 2001
+From bf9469ae0bf3127c9ce22a37552e688358196f2d Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Fri, 20 Nov 2026 12:47:32 +1100
-Subject: [PATCH 54/54] asteroid: add bootsplash animation, zh_Hant support,
- Boost sleep/period tracking
+Subject: [PATCH] asteroid: add bootsplash animation, zh_Hant support, Boost
+ sleep/period tracking
 
 ---
  examples/asteroid/asteroid-desktop.nix        |  32 +-
- .../asteroid-bootsplash/asteroid-bootsplash.c | 282 ++++++++
+ .../asteroid-bootsplash/asteroid-bootsplash.c | 282 +++++++
  .../asteroid-bootsplash/default.nix           |  29 +
  overlay/asteroidos/community-apps/default.nix |   4 +
- .../health-period-zh-hant.patch               | 604 ++++++++++++++++
- .../sensorlogd-boost-period.patch             | 674 ++++++++++++++++++
+ .../health-period-zh-hant.patch               | 717 ++++++++++++++++++
+ .../sensorlogd-boost-period.patch             | 674 ++++++++++++++++
  overlay/asteroidos/default.nix                |   1 +
- 7 files changed, 1623 insertions(+), 3 deletions(-)
+ 7 files changed, 1736 insertions(+), 3 deletions(-)
  create mode 100644 overlay/asteroidos/asteroid-bootsplash/asteroid-bootsplash.c
  create mode 100644 overlay/asteroidos/asteroid-bootsplash/default.nix
  create mode 100644 overlay/asteroidos/community-apps/health-period-zh-hant.patch
@@ -436,16 +436,16 @@ index 4f895595..f16f0d91 100644
        qt6.qtsensors
 diff --git a/overlay/asteroidos/community-apps/health-period-zh-hant.patch b/overlay/asteroidos/community-apps/health-period-zh-hant.patch
 new file mode 100644
-index 00000000..37d48f92
+index 00000000..85a2f0f3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/health-period-zh-hant.patch
-@@ -0,0 +1,604 @@
+@@ -0,0 +1,717 @@
 +diff --git a/i18n/asteroid-health.zh_Hant.ts b/i18n/asteroid-health.zh_Hant.ts
 +new file mode 100644
-+index 0000000..129fa60
++index 0000000..deb6865
 +--- /dev/null
 ++++ b/i18n/asteroid-health.zh_Hant.ts
-+@@ -0,0 +1,187 @@
++@@ -0,0 +1,219 @@
 ++<?xml version="1.0" encoding="utf-8"?>
 ++<!DOCTYPE TS>
 ++<TS version="2.1" language="zh_Hant">
@@ -630,6 +630,38 @@ index 00000000..37d48f92
 ++    <message id="id-period-history">
 ++        <source>History</source>
 ++        <translation>歷史記錄</translation>
+++    </message>
+++    <message id="id-sleep">
+++        <source>Sleep</source>
+++        <translation>睡眠</translation>
+++    </message>
+++    <message id="id-sleep-no-data">
+++        <source>No data</source>
+++        <translation>尚無資料</translation>
+++    </message>
+++    <message id="id-sleep-score">
+++        <source>Score %1</source>
+++        <translation>評分 %1</translation>
+++    </message>
+++    <message id="id-no-sleep-recorded">
+++        <source>No sleep recorded</source>
+++        <translation>尚無睡眠記錄</translation>
+++    </message>
+++    <message id="id-sleep-deep">
+++        <source>Deep: %1</source>
+++        <translation>深層睡眠：%1</translation>
+++    </message>
+++    <message id="id-sleep-light">
+++        <source>Light: %1</source>
+++        <translation>淺層睡眠：%1</translation>
+++    </message>
+++    <message id="id-sleep-rem">
+++        <source>REM: %1</source>
+++        <translation>快速動眼期：%1</translation>
+++    </message>
+++    <message id="id-sleep-awake">
+++        <source>Awake: %1</source>
+++        <translation>清醒：%1</translation>
 ++    </message>
 ++</context>
 ++</TS>
@@ -1044,6 +1076,87 @@ index 00000000..37d48f92
 +     ConfigurationValue {
 +         id: weightPreviewVisible
 +         key: "/org/asteroidos/health/ui/weight/showpreview"
++diff --git a/src/sleep/SleepDetailPage.qml b/src/sleep/SleepDetailPage.qml
++index 248fe11..6600ff6 100644
++--- a/src/sleep/SleepDetailPage.qml
+++++ b/src/sleep/SleepDetailPage.qml
++@@ -48,7 +48,8 @@ Item {
++     Component.onCompleted: refresh()
++ 
++     PageHeader {
++-        text: "Sleep"
+++        //% "Sleep"
+++        text: qsTrId("id-sleep")
++         z: 5
++     }
++ 
++@@ -72,7 +73,8 @@ Item {
++ 
++             Label {
++                 anchors.horizontalCenter: parent.horizontalCenter
++-                text: summary.hasData ? formatDuration(summary.totalMinutes) : "No sleep recorded"
+++                //% "No sleep recorded"
+++                text: summary.hasData ? formatDuration(summary.totalMinutes) : qsTrId("id-no-sleep-recorded")
++                 font.pixelSize: app.height * 0.1
++                 font.bold: true
++             }
++@@ -80,7 +82,7 @@ Item {
++             Label {
++                 visible: summary.hasData
++                 anchors.horizontalCenter: parent.horizontalCenter
++-                text: "Score " + summary.sleepScore + "  \u2022  " + summary.bedtime + " \u2192 " + summary.wakeTime
+++                text: qsTrId("id-sleep-score").arg(summary.sleepScore) + "  \u2022  " + summary.bedtime + " \u2192 " + summary.wakeTime
++                 font.pixelSize: app.height * 0.048
++                 color: "#66E0FF"
++             }
++@@ -122,10 +124,10 @@ Item {
++                 width: parent.width * 0.82
++                 spacing: app.height * 0.015
++ 
++-                Label { text: "Deep: " + formatDuration(summary.deepMinutes); color: "#6699FF"; font.pixelSize: app.height * 0.045 }
++-                Label { text: "Light: " + formatDuration(summary.lightMinutes); color: "#33B5E5"; font.pixelSize: app.height * 0.045 }
++-                Label { text: "REM: " + formatDuration(summary.remMinutes); color: "#CC88EE"; font.pixelSize: app.height * 0.045 }
++-                Label { text: "Awake: " + formatDuration(summary.awakeMinutes); color: "#FFAA44"; font.pixelSize: app.height * 0.045 }
+++                Label { text: qsTrId("id-sleep-deep").arg(formatDuration(summary.deepMinutes)); color: "#6699FF"; font.pixelSize: app.height * 0.045 }
+++                Label { text: qsTrId("id-sleep-light").arg(formatDuration(summary.lightMinutes)); color: "#33B5E5"; font.pixelSize: app.height * 0.045 }
+++                Label { text: qsTrId("id-sleep-rem").arg(formatDuration(summary.remMinutes)); color: "#CC88EE"; font.pixelSize: app.height * 0.045 }
+++                Label { text: qsTrId("id-sleep-awake").arg(formatDuration(summary.awakeMinutes)); color: "#FFAA44"; font.pixelSize: app.height * 0.045 }
++             }
++ 
++             Row {
++diff --git a/src/sleep/SleepPreview.qml b/src/sleep/SleepPreview.qml
++index 513a7e3..892fddf 100644
++--- a/src/sleep/SleepPreview.qml
+++++ b/src/sleep/SleepPreview.qml
++@@ -44,7 +44,8 @@ MouseArea {
++                 left: parent.left
++                 margins: app.width * 0.1
++             }
++-            text: "Sleep"
+++            //% "Sleep"
+++            text: qsTrId("id-sleep")
++         }
++ 
++         Row {
++@@ -56,7 +57,7 @@ MouseArea {
++             spacing: app.width * 0.05
++ 
++             Label {
++-                text: summary.hasData ? formatDuration(summary.totalMinutes) : "No data"
+++                text: summary.hasData ? formatDuration(summary.totalMinutes) : qsTrId("id-sleep-no-data")
++                 font.pixelSize: app.height * 0.09
++                 font.bold: true
++             }
++@@ -64,7 +65,8 @@ MouseArea {
++             Label {
++                 visible: summary.hasData
++                 anchors.verticalCenter: parent.verticalCenter
++-                text: "Score " + summary.sleepScore
+++                //% "Score %1"
+++                text: qsTrId("id-sleep-score").arg(summary.sleepScore)
++                 font.pixelSize: app.height * 0.055
++                 color: "#66E0FF"
++             }
 diff --git a/overlay/asteroidos/community-apps/sensorlogd-boost-period.patch b/overlay/asteroidos/community-apps/sensorlogd-boost-period.patch
 new file mode 100644
 index 00000000..e9097f16
