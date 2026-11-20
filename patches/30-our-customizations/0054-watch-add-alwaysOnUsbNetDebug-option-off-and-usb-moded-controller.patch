@@ -1,4 +1,4 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From 8703e3849e10fe2b12ef51e135436171ce4b1ec7 Mon Sep 17 00:00:00 2001
 From: Mio <mio@mio19.uk>
 Date: Fri, 20 Nov 2026 07:20:15 +1100
 Subject: [PATCH] watch: add alwaysOnUsbNetDebug option (off) and usb-moded
@@ -14,11 +14,11 @@ Subject: [PATCH] watch: add alwaysOnUsbNetDebug option (off) and usb-moded
  overlay/asteroidos/default.nix                |   1 +
  overlay/asteroidos/usb-moded/CMakeLists.txt   |  21 ++
  .../usb-moded/com.meego.usb_moded.conf        |  17 ++
- overlay/asteroidos/usb-moded/default.nix      |  66 ++++++
- .../asteroidos/usb-moded/usb-moded-switch.sh  | 126 ++++++++++
+ overlay/asteroidos/usb-moded/default.nix      |  68 ++++++
+ .../asteroidos/usb-moded/usb-moded-switch.sh  | 143 ++++++++++++
  .../asteroidos/usb-moded/usbmodedservice.cpp  | 218 ++++++++++++++++++
  .../asteroidos/usb-moded/usbmodedservice.h    |  64 +++++
- 13 files changed, 576 insertions(+), 20 deletions(-)
+ 13 files changed, 595 insertions(+), 20 deletions(-)
  create mode 100644 overlay/asteroidos/usb-moded/CMakeLists.txt
  create mode 100644 overlay/asteroidos/usb-moded/com.meego.usb_moded.conf
  create mode 100644 overlay/asteroidos/usb-moded/default.nix
@@ -231,17 +231,17 @@ index d352c600..a720a813 100644
  
    config = mkIf (config.mobile.enable && watchCfg.enable) {
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index e3b2f74f..419e8e12 100644
+index 8ef9e8c4..bf2c9bf3 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
-@@ -81,6 +81,7 @@ rec {
+@@ -82,6 +82,7 @@ rec {
      inherit mce-dev;
    };
    ngf-qt6 = callPackage ./ngf-qt6 { inherit metaAsteroidSrc; };
 +  usb-moded = callPackage ./usb-moded { };
    usb-moded-dev = callPackage ./usb-moded-dev { };
    usb-moded-qt6 = callPackage ./usb-moded-qt6 {
-     inherit usb-moded-dev;
+     inherit usb-moded-dev qmakeCrossHook;
 diff --git a/overlay/asteroidos/usb-moded/CMakeLists.txt b/overlay/asteroidos/usb-moded/CMakeLists.txt
 new file mode 100644
 index 00000000..ec3e4b06
@@ -294,10 +294,10 @@ index 00000000..02f5ed37
 +</busconfig>
 diff --git a/overlay/asteroidos/usb-moded/default.nix b/overlay/asteroidos/usb-moded/default.nix
 new file mode 100644
-index 00000000..57a279e4
+index 00000000..ad261ae7
 --- /dev/null
 +++ b/overlay/asteroidos/usb-moded/default.nix
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,68 @@
 +# AsteroidOS USB mode controller daemon (com.meego.usb_moded)
 +# Drives Linux configfs USB gadgets for charging_only, developer_mode (SSH/usbnet), and adb_mode.
 +{
@@ -310,6 +310,7 @@ index 00000000..57a279e4
 +  iproute2,
 +  procps,
 +  systemd,
++  busybox,
 +}:
 +
 +stdenv.mkDerivation {
@@ -352,7 +353,8 @@ index 00000000..57a279e4
 +      --replace-fail "@ip@" "${iproute2}/bin/ip" \
 +      --replace-fail "@pkill@" "${procps}/bin/pkill" \
 +      --replace-fail "@pgrep@" "${procps}/bin/pgrep" \
-+      --replace-fail "@systemctl@" "${systemd}/bin/systemctl"
++      --replace-fail "@systemctl@" "${systemd}/bin/systemctl" \
++      --replace-fail "@udhcpd@" "${busybox}/bin/udhcpd"
 +    runHook postInstall
 +  '';
 +
@@ -366,10 +368,10 @@ index 00000000..57a279e4
 +}
 diff --git a/overlay/asteroidos/usb-moded/usb-moded-switch.sh b/overlay/asteroidos/usb-moded/usb-moded-switch.sh
 new file mode 100644
-index 00000000..e523889e
+index 00000000..6f7fb2f8
 --- /dev/null
 +++ b/overlay/asteroidos/usb-moded/usb-moded-switch.sh
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,143 @@
 +#!/bin/sh
 +set -eu
 +
@@ -400,6 +402,7 @@ index 00000000..e523889e
 +fi
 +
 +if [ "$MODE" != "developer_mode" ]; then
++  @pkill@ -x udhcpd 2>/dev/null || true
 +  for iface in usb0 rndis0; do
 +    if [ -e "/sys/class/net/$iface" ]; then
 +      @ip@ link set "$iface" down 2>/dev/null || true
@@ -430,13 +433,16 @@ index 00000000..e523889e
 +
 +case "$MODE" in
 +  developer_mode)
-+    echo "0xd002" > "$G/idProduct"
-+    echo "CDC NCM" > "$G/configs/c.1/strings/0x409/configuration"
++    echo "0xd001" > "$G/idProduct"
++    echo "RNDIS" > "$G/configs/c.1/strings/0x409/configuration"
 +
-+    FUNC="ncm.usb0"
++    FUNC="rndis.usb0"
 +    if ! @mkdir@ -p "$G/functions/$FUNC" 2>/dev/null; then
-+      FUNC="rndis.usb0"
-+      @mkdir@ -p "$G/functions/$FUNC"
++      FUNC="ecm.usb0"
++      if ! @mkdir@ -p "$G/functions/$FUNC" 2>/dev/null; then
++        FUNC="ncm.usb0"
++        @mkdir@ -p "$G/functions/$FUNC"
++      fi
 +    fi
 +    @ln@ -sf "$G/functions/$FUNC" "$G/configs/c.1/$FUNC"
 +    echo "$UDC" > "$G/UDC"
@@ -456,6 +462,19 @@ index 00000000..e523889e
 +      @ip@ addr replace 192.168.2.15/24 dev "$NET_IF"
 +      @ip@ addr replace 172.16.42.1/24 dev "$NET_IF"
 +      @ip@ link set "$NET_IF" up
++
++      @pkill@ -x udhcpd 2>/dev/null || true
++      @cat@ > /run/usb-moded-udhcpd.conf <<EOF
++start 192.168.2.20
++end 192.168.2.30
++interface $NET_IF
++max_leases 10
++lease_file /run/usb-moded-udhcpd.leases
++pidfile /run/usb-moded-udhcpd.pid
++opt subnet 255.255.255.0
++opt lease 3600
++EOF
++      @udhcpd@ /run/usb-moded-udhcpd.conf 2>/dev/null || true
 +    fi
 +
 +    @systemctl@ start --no-block sshd.service 2>/dev/null || true
@@ -790,3 +809,6 @@ index 00000000..bea19d14
 +    QString m_whitelistedModes;
 +    QString m_hiddenModes;
 +};
+-- 
+2.56.0
+
