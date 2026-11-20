@@ -1,0 +1,26 @@
+From e4071e9117e60f83a634d7b3c1b9e154075f0b12 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Fri, 20 Nov 2026 14:25:48 +1100
+Subject: [PATCH] asteroid-btsyncd: fix translations path and en_GB fallback
+
+---
+ overlay/asteroidos/asteroid-btsyncd/default.nix | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/overlay/asteroidos/asteroid-btsyncd/default.nix b/overlay/asteroidos/asteroid-btsyncd/default.nix
+index e2801ae8..3c9889a2 100644
+--- a/overlay/asteroidos/asteroid-btsyncd/default.nix
++++ b/overlay/asteroidos/asteroid-btsyncd/default.nix
+@@ -42,6 +42,9 @@ stdenv.mkDerivation {
+   postPatch = ''
+     cp ${./appbridgeservice.h} src/appbridgeservice.h
+     cp ${./appbridgeservice.cpp} src/appbridgeservice.cpp
++    substituteInPlace src/main.cpp \
++      --replace-fail 'translator.load(QLocale(), "asteroid-btsyncd", ".", "/usr/share/translations", ".qm");' \
++                     'if (!translator.load(QLocale(), "asteroid-btsyncd", ".", "/run/current-system/sw/share/translations", ".qm")) translator.load(QLocale("en_GB"), "asteroid-btsyncd", ".", "/run/current-system/sw/share/translations", ".qm");'
+   '';
+ 
+   nativeBuildInputs = [
+-- 
+2.56.0
+
