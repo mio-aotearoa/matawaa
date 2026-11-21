@@ -103,3 +103,10 @@ Mobile NixOS worktree. The image is:
 These health changes have not been deployed. Overnight Hoki acquisition, battery
 use, actual sample delivery, and comparison with reference sleep measurements
 remain unvalidated. Synthetic integration tests do not establish clinical accuracy.
+
+The follow-up patch consolidation folds the health correction into `0055` and
+removes the superseded health additions from `0057` and the standalone `0066`.
+The consolidated nested patches produce byte-identical final application sources;
+all other Mobile NixOS files and runtime configuration are unchanged. Fresh full
+series replay and native regressions pass after consolidation. The image path
+above records the build before this patch packaging change.
