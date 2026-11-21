@@ -42,18 +42,21 @@ Updated 2026-11-20 (on `/nix/store/d5dy0gcr3dxgp67scy0m6d2zzn7ahfm4-nixos-system
   - AP-side display/clock/bus activity while paused: `ftrace` (`mdss:*`,
     `clk:*`, `regulator:*`, `i2c:*`, `spi:*`, `workqueue:*`) showed zero MDP
     commits, `dsi0` clocks off, and zero display regulator/I2C/SPI events.
-- **Root-cause conclusion**: With zero AP display/clock/bus activity during
-  `SIGSTOP`, and flashing disappearing immediately when external USB charger
-  power is connected and returning immediately when unplugged, this is a
-  **hardware / PMIC `VSYS` / battery-rail / AMOLED panel** sensitivity on battery
-  in active `ON` mode (possibly aggravated by `sensorlogd` spinning ~60–70% CPU
-  and `wcnss` load, or `pm-adc5` 1 Hz battery polling).
+- The active panel or its power supply on battery remains a hypothesis. The
+  traces do not measure the panel supply voltage or optical output.
+- On 2026-11-21, Hoki booted the system built from `5eb8ee6`. During an
+  18-second battery capture, sensorlogd stayed at 0% CPU. With the screen
+  held on and automatic brightness disabled, the user observed flashing on
+  battery and a steady screen on the charger at the same brightness setting.
+  Preventing deep CPU idle also failed to stop the flash (CPU0 C1 entries
+  stayed flat during a sampled battery interval). In a separate trial the
+  watch logged three consecutive discharging samples with ConnMan Wi-Fi
+  powered off, and the user again reported flashing until docking.
 - **Side note**: `logcat` also showed two `android.hardware.graphics.composer@2.1-service`
   instances racing at boot (`android-hwcomposer.service` and Android `init`'s
   `vendor.hwcomposer-2-1`).
-- **Next**: Fix `sensorfwd`/`sensorlogd` ~60–70% CPU spin and test if reducing
-  battery current draw/spikes helps, and clean up the duplicate
-  `android-hwcomposer` launch.
+- A known-good software baseline on this same watch would distinguish a
+  regression from a fault that persists across systems.
 
 ## Normal ambient mode
 
