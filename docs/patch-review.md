@@ -87,3 +87,19 @@ for banner rotation.
   remain unimplemented.
 - Other devices' mainline kernels, graphics, audio, camera, and keyboard behavior
   need hardware validation. A Hoki build does not validate those devices.
+
+## Health correction verification (2026-11-21)
+
+The health changes replace unsupported sleep stages/scores and calendar fertility
+predictions with manual history, bounded opt-in motion recording, and host-side
+upstream scikit-digital-health analysis. See [method provenance and limitations](health-methods.md).
+
+Validation: 68 upstream sleep tests, seven host integration tests, native Qt
+regressions against the Nix-applied sensorlogd sources, flake evaluation, and the
+full Hoki image build passed. The exported patch series replays to the committed
+Mobile NixOS worktree. The image is:
+`/nix/store/zf678djp675dfkpqac71ciarb3f0r2a2-nixos-system-hoki-26.11pre-git`.
+
+These health changes have not been deployed. Overnight Hoki acquisition, battery
+use, actual sample delivery, and comparison with reference sleep measurements
+remain unvalidated. Synthetic integration tests do not establish clinical accuracy.

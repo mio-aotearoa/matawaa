@@ -127,8 +127,21 @@
         {
           patched-mobile-nixos = patchedMobileNixos;
           default = patchedMobileNixos;
+          sleep-analysis = (pkgs.callPackage ./tools/sleep-analysis { }).analyzeSleep;
         }
       );
+
+      checks = forAllSystems (system: {
+        sleep-analysis =
+          (nixpkgs.legacyPackages.${system}.callPackage ./tools/sleep-analysis { }).analysisTests;
+      });
+
+      apps = forAllSystems (system: {
+        analyze-sleep = {
+          type = "app";
+          program = "${self.packages.${system}.sleep-analysis}/bin/matawaa-analyze-sleep";
+        };
+      });
 
       nixosModules =
         builtins.listToAttrs (

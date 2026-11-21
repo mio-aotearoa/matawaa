@@ -58,6 +58,10 @@ Already in the Asteroid desktop profile:
 - Qt Sensors `QHrmSensor` patches
 - Apps: `asteroid-hrm`, `asteroid-health`, `asteroid-sensorlogd`
 - BLE app-bridge protocol id `org.asteroidos.spo2` **without** a measurement backend
+- Opt-in, eight-hour motion recording for host-side analysis with the pinned
+  upstream scikit-digital-health pipeline; see [health methods](health-methods.md).
+  The former local sleep-stage/score and fertility-date formulas are removed.
+  Existing logs remain on disk. Recording is off by default and keeps the CPU awake.
 
 Bring-up fixes in progress:
 
@@ -73,7 +77,7 @@ Bring-up fixes in progress:
 |---------|-----|
 | Heart rate | End-to-end **unverified** on matawaa images (SSC up? type 21 visible? BPM on wrist?) |
 | SpO2 | No SensorFW/Qt adaptor; need private HAL **type id** for `lifeq_lel_spo2`; upstream marks unsupported |
-| Sleep | No SensorFW/Qt adaptor; need type id for `lifeq_lel_sleep_wake` / SAC; no UI |
+| Sleep | Raw motion recording and host sleep/wake analysis are implemented; no validated Hoki sleep staging or LifeQ sleep adaptor. See [methods and limits](health-methods.md). |
 | Persist/calibration | Vendor expects `/persist/sensors` etc.; confirm provisioning under NixOS |
 
 Hybris adaptors key off **numeric** `sensors_event_t.type`. Standard HR is `21`.
