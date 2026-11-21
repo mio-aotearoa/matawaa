@@ -13,6 +13,6 @@ health_includes=(-I"$health_source" -I"$health_qt/include" -I"$health_qt/include
 "${CXX:-c++}" -std=c++17 -fPIC "${health_includes[@]}" \
     "$(dirname "$0")/regressions.cpp" "$health_build/moc_sleep.cpp" "$health_build/moc_period.cpp" "$health_build/moc_settings.cpp" \
     "$health_source/common.cpp" "$health_source/qmlplugin/sleepDataLoader.cpp" \
-    "$health_source/qmlplugin/periodDataLoader.cpp" "$health_source/qmlplugin/loggerSettings.cpp" "$health_source/daemon/sensorPlugins/motionRecording.cpp" \
+    "$health_source/qmlplugin/periodDataLoader.cpp" "$health_source/qmlplugin/loggerSettings.cpp" "$health_source/daemon/sensorPlugins/sleepDetector.cpp" \
     -L"$health_qt/lib" -Wl,-rpath,"$health_qt/lib" -lQt6Core -lQt6DBus -o "$health_build/regressions"
 "$health_build/regressions"
