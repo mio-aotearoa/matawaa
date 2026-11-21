@@ -38,7 +38,11 @@ nightly recipe baseline.
 - The full Hoki system build passes:
   `/nix/store/mwzkvrxdv2fsmfvacwnn7zbkwkxzwkn4-nixos-system-hoki-26.11pre-git`.
   No additional compatibility patches were needed for this Nixpkgs update.
-- This maintenance build has not been deployed to the watch.
+- Deployed to Hoki at `192.168.8.183` and rebooted on 2026-11-21.
+  Both `/run/booted-system` and the system profile match the build above.
+  Boot ID: `53e2fd19-9509-450d-a5e8-be1a366a4f22`. Launcher and sensor logger
+  are running with zero restarts; the watch user has no failed units.
+  The existing firewall failure remains.
 
 ## Previous build status (2026-11-19)
 
