@@ -260,7 +260,7 @@ new file mode 100644
 index 00000000..f7a7d93a
 --- /dev/null
 +++ b/overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch
-@@ -0,0 +1,585 @@
+@@ -0,0 +1,694 @@
 +diff --git a/lipstick/src/components/launcheritem.cpp b/lipstick/src/components/launcheritem.cpp
 +index 3f8446f..85b44c6 100644
 +--- a/lipstick/src/components/launcheritem.cpp
@@ -846,6 +846,115 @@ index 00000000..f7a7d93a
 ++    bool m_wifiAppActive = false;
 ++    bool m_idleTimerRunning = false;
 ++};
++diff --git a/src/applauncher/000-default-horizontal.qml b/src/applauncher/000-default-horizontal.qml
++--- a/src/applauncher/000-default-horizontal.qml
+++++ b/src/applauncher/000-default-horizontal.qml
++@@ -80,7 +80,10 @@
++             height: width
++             enabled: !appsListView.dragging
++ 
++-            onClicked: model.object.launchApplication()
+++            onClicked: {
+++                wifiPowerManager.onAppLaunched(model.object.needsWifi)
+++                model.object.launchApplication()
+++            }
++ 
++             DropShadow {
++                 anchors.fill: circleWrapper
++diff --git a/src/applauncher/000-vertical.qml b/src/applauncher/000-vertical.qml
++--- a/src/applauncher/000-vertical.qml
+++++ b/src/applauncher/000-vertical.qml
++@@ -70,6 +70,7 @@
++             enabled: !appsListView.dragging
++ 
++             onClicked: {
+++                wifiPowerManager.onAppLaunched(model.object.needsWifi)
++                 model.object.launchApplication()
++             }
++ 
++diff --git a/src/applauncher/001-three-icons-horizontal.qml b/src/applauncher/001-three-icons-horizontal.qml
++--- a/src/applauncher/001-three-icons-horizontal.qml
+++++ b/src/applauncher/001-three-icons-horizontal.qml
++@@ -73,7 +73,10 @@
++         height: width
++         enabled: !appsListView.dragging
++ 
++-        onClicked: model.object.launchApplication()
+++        onClicked: {
+++            wifiPowerManager.onAppLaunched(model.object.needsWifi)
+++            model.object.launchApplication()
+++        }
++ 
++         Item {
++             id: circleWrapper
++diff --git a/src/applauncher/002-two-columns.qml b/src/applauncher/002-two-columns.qml
++--- a/src/applauncher/002-two-columns.qml
+++++ b/src/applauncher/002-two-columns.qml
++@@ -95,7 +95,10 @@
++         height: width
++         enabled: !appsView.dragging
++ 
++-        onClicked: model.object.launchApplication()
+++        onClicked: {
+++            wifiPowerManager.onAppLaunched(model.object.needsWifi)
+++            model.object.launchApplication()
+++        }
++ 
++         Item {
++             id: circleWrapper
++diff --git a/src/applauncher/003-turbo-list.qml b/src/applauncher/003-turbo-list.qml
++--- a/src/applauncher/003-turbo-list.qml
+++++ b/src/applauncher/003-turbo-list.qml
++@@ -100,7 +100,10 @@
++         enabled: !appsView.dragging
++         opacity: normalizedBezelOffset
++ 
++-        onClicked: model.object.launchApplication()
+++        onClicked: {
+++            wifiPowerManager.onAppLaunched(model.object.needsWifi)
+++            model.object.launchApplication()
+++        }
++ 
++         Item {
++             width: parent.width
++diff --git a/src/applauncher/004-three-by-three.qml b/src/applauncher/004-three-by-three.qml
++--- a/src/applauncher/004-three-by-three.qml
+++++ b/src/applauncher/004-three-by-three.qml
++@@ -103,6 +103,7 @@
++ 
++             onClicked: {
++                 clickToggle = true
+++                wifiPowerManager.onAppLaunched(model.object.needsWifi)
++                 model.object.launchApplication()
++             }
++ 
++diff --git a/src/applauncher/005-speed-dial.qml b/src/applauncher/005-speed-dial.qml
++--- a/src/applauncher/005-speed-dial.qml
+++++ b/src/applauncher/005-speed-dial.qml
++@@ -101,7 +101,10 @@
++                 launcherCenterColor = alb.centerColor(root.selectedLauncherItem.filePath);
++                 launcherOuterColor = alb.outerColor(root.selectedLauncherItem.filePath);
++             }
++-            onClicked: model.object.launchApplication()
+++            onClicked: {
+++                wifiPowerManager.onAppLaunched(model.object.needsWifi)
+++                model.object.launchApplication()
+++            }
++ 
++             Item {
++                 id: circleWrapper
++@@ -280,7 +283,10 @@
++                 forbidTop = false
++                 grid.changeAllowedDirections()
++             }
++-            onClicked: root.selectedLauncherItem.launchApplication()
+++            onClicked: {
+++                wifiPowerManager.onAppLaunched(root.selectedLauncherItem.needsWifi)
+++                root.selectedLauncherItem.launchApplication()
+++            }
++         }
++ 
++         layer.enabled: true
 diff --git a/overlay/asteroidos/browser/asteroid-browser.desktop b/overlay/asteroidos/browser/asteroid-browser.desktop
 index 6e0de5d7..dc116941 100644
 --- a/overlay/asteroidos/browser/asteroid-browser.desktop

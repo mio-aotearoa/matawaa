@@ -1031,7 +1031,7 @@ new file mode 100644
 index 00000000..ea3babe3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
-@@ -0,0 +1,1955 @@
+@@ -0,0 +1,1964 @@
 +diff --git a/common.cpp b/common.cpp
 +index 71524dc..e9f8f26 100644
 +--- a/common.cpp
@@ -1867,7 +1867,7 @@ index 00000000..ea3babe3
 +index 0000000..b099b09
 +--- /dev/null
 ++++ b/daemon/sensorPlugins/sleepMonitor.cpp
-+@@ -0,0 +1,159 @@
++@@ -0,0 +1,168 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -1982,17 +1982,25 @@ index 00000000..ea3babe3
 ++        }
 ++    }
 ++
-++    if (!result.valid || result.minutes.empty()) {
+++    if (status == QStringLiteral("recording") || !result.valid || result.minutes.empty()) {
 ++        return;
 ++    }
 ++
 ++    // Store per-minute 2-field records (<epoch_sec>:<0|1>) under the wake-up date
 ++    const QDate wakeDate = QDateTime::fromSecsSinceEpoch(result.sptEndSec).date();
 ++    const QString logPath = fileNameForDate(wakeDate, QStringLiteral("sleepMonitor"));
+++    QByteArray previous;
+++    QFile history(logPath);
+++    if (history.exists()) {
+++        if (!history.open(QIODevice::ReadOnly)) return;
+++        previous = history.readAll();
+++        if (history.error() != QFileDevice::NoError) return;
+++        if (!previous.isEmpty() && !previous.endsWith('\n')) previous.append('\n');
+++    }
 ++    QSaveFile logFile(logPath);
 ++    if (logFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
 ++        logFile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-++        QByteArray out;
+++        QByteArray out = previous;
 ++        out.reserve(static_cast<int>(result.minutes.size()) * 16);
 ++        for (const auto &m : result.minutes) {
 ++            out.append(QByteArray::number(m.timestampSec));
@@ -2013,8 +2021,9 @@ index 00000000..ea3babe3
 ++    m_firstSample.stop();
 ++    m_sensor.stop();
 ++    m_activity.stop();
-++    if (m_started) {
+++    if (m_startSec != 0) {
 ++        persistAnalysis(status);
+++        m_startSec = 0;
 ++    }
 ++    if (clearSetting) {
 ++        QSettings settings("asteroid", "sensorlogd");
