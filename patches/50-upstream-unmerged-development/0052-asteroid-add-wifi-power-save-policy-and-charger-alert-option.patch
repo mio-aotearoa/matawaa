@@ -1,0 +1,949 @@
+From fc4605f399a50e4fa85044a73eacb1e131bac117 Mon Sep 17 00:00:00 2001
+From: Mio <mio@mio19.uk>
+Date: Sat, 21 Nov 2026 22:02:35 +1100
+Subject: [PATCH] asteroid: add Wi-Fi power-save policy and charger-disconnect
+ alert option
+
+---
+ overlay/asteroidos/apps/default.nix           |  15 +-
+ .../apps/settings-power-wifi-policy.patch     | 166 +++++
+ .../asteroidos/asteroid-launcher/default.nix  |   2 +
+ .../asteroid-launcher/power-wifi-policy.patch | 585 ++++++++++++++++++
+ .../browser/asteroid-browser.desktop          |   1 +
+ overlay/asteroidos/community-apps/default.nix |   2 +
+ .../asteroid-extreme-battery-saver.desktop    |   1 +
+ .../kiwix/org.kiwix.desktop.desktop           |   1 +
+ overlay/asteroidos/lib/mk-asteroid-app.nix    |  15 +-
+ .../telegram/asteroid-telegram.desktop        |   1 +
+ overlay/asteroidos/vela/asteroid-vela.desktop |   1 +
+ 11 files changed, 786 insertions(+), 4 deletions(-)
+ create mode 100644 overlay/asteroidos/apps/settings-power-wifi-policy.patch
+ create mode 100644 overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch
+
+diff --git a/overlay/asteroidos/apps/default.nix b/overlay/asteroidos/apps/default.nix
+index a0ac383e..a3ea891b 100644
+--- a/overlay/asteroidos/apps/default.nix
++++ b/overlay/asteroidos/apps/default.nix
+@@ -37,10 +37,12 @@
+   settings = mkAsteroidApp {
+     name = "settings";
+     desc = "Smartwatch preferences and configuration application";
++    needsWifi = true;
+     patches = [
+       ./settings-wrist-rotation.patch
+       ./settings-input.patch
+       ./settings-bluetooth-labels.patch
++      ./settings-power-wifi-policy.patch
+     ];
+     rev = "b1717016d481d1f1b9dbd98b59ad7d2068f11b4c";
+     hash = "sha256-ZnGMQAsIR6sNohEppwIRz1LESKXP9MNRpDmgKOEWSTo=";
+@@ -66,15 +68,21 @@
+         disc_tr="Not connected"
+         ip_tr="IP: %1"
+         getting_ip_tr="Getting IP address..."
++        wifi_ps_tr="Wi-Fi power save"
++        wifi_to_tr="Wi-Fi idle timeout"
++        remcha_tr="Disconnect charger alert"
+         case "$f" in
+-          *zh_Hant*) conn_tr="已連線"; disc_tr="未連線"; getting_ip_tr="正在取得 IP 位址..." ;;
+-          *zh_Hans*) conn_tr="已连接"; disc_tr="未连接"; getting_ip_tr="正在获取 IP 地址..." ;;
++          *zh_Hant*) conn_tr="已連線"; disc_tr="未連線"; getting_ip_tr="正在取得 IP 位址..."; wifi_ps_tr="Wi-Fi 省電模式"; wifi_to_tr="Wi-Fi 閒置關閉時間"; remcha_tr="拔除充電器提醒" ;;
++          *zh_Hans*) conn_tr="已连接"; disc_tr="未连接"; getting_ip_tr="正在获取 IP 地址..."; wifi_ps_tr="Wi-Fi 省电模式"; wifi_to_tr="Wi-Fi 空闲关闭时间"; remcha_tr="拔除充电器提醒" ;;
+         esac
+         for entry in \
+           "id-connected|Connected|$conn_tr" \
+           "id-disconnected|Not connected|$disc_tr" \
+           "id-wifi-ip-address|IP: %1|$ip_tr" \
+-          "id-wifi-getting-ip|Getting IP address...|$getting_ip_tr"; do
++          "id-wifi-getting-ip|Getting IP address...|$getting_ip_tr" \
++          "id-wifi-power-save|Wi-Fi power save|$wifi_ps_tr" \
++          "id-wifi-idle-timeout|Wi-Fi idle timeout|$wifi_to_tr" \
++          "id-show-remove-charger-alert|Disconnect charger alert|$remcha_tr"; do
+           IFS='|' read -r msg_id msg_src msg_tr <<< "$entry"
+           if ! grep -q "id=\"$msg_id\"" "$f"; then
+             sed -i "s|</context>|    <message id=\"$msg_id\"><source>$msg_src</source><translation>$msg_tr</translation></message>\n</context>|" "$f"
+@@ -99,6 +107,7 @@
+   music = mkAsteroidApp {
+     name = "music";
+     desc = "Media playback controller with standalone YouTube Music streaming over Wi-Fi";
++    needsWifi = true;
+     rev = "1087453140957314ef7ce20bb79250dd2509dd35";
+     hash = "sha256-pjWUnP7+ETCccbm63t9ia6UUc3FQmP7k1iKJQzzrkg0=";
+     patches = [
+diff --git a/overlay/asteroidos/apps/settings-power-wifi-policy.patch b/overlay/asteroidos/apps/settings-power-wifi-policy.patch
+new file mode 100644
+index 00000000..ab150a05
+--- /dev/null
++++ b/overlay/asteroidos/apps/settings-power-wifi-policy.patch
+@@ -0,0 +1,166 @@
++diff --git a/src/qml/PowerPage.qml b/src/qml/PowerPage.qml
++index a185f3f..1b0e745 100644
++--- a/src/qml/PowerPage.qml
+++++ b/src/qml/PowerPage.qml
++@@ -19,6 +19,7 @@
++ 
++ import QtQuick
++ import org.asteroid.controls
+++import Nemo.Configuration
++ import Nemo.DBus
++ 
++ Item {
++@@ -27,6 +28,35 @@ Item {
++ 
++     property int pendingIndex: -1
++ 
+++    ConfigurationValue {
+++        id: wifiPowerSaveConf
+++        key: "/desktop/asteroid/power/wifi-power-save-enabled"
+++        defaultValue: true
+++    }
+++
+++    ConfigurationValue {
+++        id: wifiIdleTimeoutConf
+++        key: "/desktop/asteroid/power/wifi-idle-timeout-sec"
+++        defaultValue: 300
+++    }
+++
+++    ConfigurationValue {
+++        id: showRemoveChargerConf
+++        key: "/desktop/asteroid/power/show-remove-charger-notification"
+++        defaultValue: false
+++    }
+++
+++    function nextWifiTimeout(sec) {
+++        if (sec < 180) return 180
+++        if (sec < 300) return 300
+++        if (sec < 600) return 600
+++        return 60
+++    }
+++
+++    function formatTimeout(sec) {
+++        return Math.max(1, Math.round(sec / 60)) + " min"
+++    }
+++
++     ListModel {
++         id: powerModel
++         //% "Power Off"
++@@ -35,26 +65,67 @@ Item {
++         ListElement { text: qsTrId("id-reboot-page"); icon: "ios-sync" }
++         //% "Bootloader"
++         ListElement { text: qsTrId("id-reboot-bootloader-page"); icon: "ios-bootloader-outline" }
++-
++     }
++ 
++-    ListView {
++-        id: powerItems
++-        model: powerModel
++-        anchors {
++-            top: parent.top
++-            topMargin: pageHeader.height
++-        }
++-        height: parent.height
++-        width: parent.width
++-        delegate: ListItem {
++-            title: text
++-            iconName: icon
++-            HighlightBar {
++-                onClicked: {
++-                    pendingIndex = index
++-                    remorse.action = text
++-                    remorse.start()
+++    Flickable {
+++        anchors.fill: parent
+++        contentHeight: powerColumn.implicitHeight + Dims.h(12)
+++
+++        Column {
+++            id: powerColumn
+++            width: parent.width
+++
+++            Item { width: parent.width; height: pageHeader.height }
+++
+++            LabeledSwitch {
+++                width: parent.width
+++                height: Dims.h(20)
+++                //% "Wi-Fi power save"
+++                text: qsTrId("id-wifi-power-save")
+++                checked: wifiPowerSaveConf.value
+++                onCheckedChanged: {
+++                    if (wifiPowerSaveConf.value !== checked)
+++                        wifiPowerSaveConf.value = checked
+++                }
+++            }
+++
+++            ListItem {
+++                visible: wifiPowerSaveConf.value
+++                width: parent.width
+++                //% "Wi-Fi idle timeout"
+++                title: qsTrId("id-wifi-idle-timeout")
+++                value: formatTimeout(wifiIdleTimeoutConf.value)
+++                iconName: "ios-timer-outline"
+++                HighlightBar {
+++                    onClicked: wifiIdleTimeoutConf.value = nextWifiTimeout(wifiIdleTimeoutConf.value)
+++                }
+++            }
+++
+++            LabeledSwitch {
+++                width: parent.width
+++                height: Dims.h(20)
+++                //% "Disconnect charger alert"
+++                text: qsTrId("id-show-remove-charger-alert")
+++                checked: showRemoveChargerConf.value
+++                onCheckedChanged: {
+++                    if (showRemoveChargerConf.value !== checked)
+++                        showRemoveChargerConf.value = checked
+++                }
+++            }
+++
+++            Repeater {
+++                model: powerModel
+++                delegate: ListItem {
+++                    width: parent.width
+++                    title: text
+++                    iconName: icon
+++                    HighlightBar {
+++                        onClicked: {
+++                            pendingIndex = index
+++                            remorse.action = text
+++                            remorse.start()
+++                        }
+++                    }
++                 }
++             }
++         }
++diff --git a/src/qml/WiFiPage.qml b/src/qml/WiFiPage.qml
++index 94d7ad1..d697374 100644
++--- a/src/qml/WiFiPage.qml
+++++ b/src/qml/WiFiPage.qml
++@@ -26,11 +26,18 @@ import QtQuick
++ import org.asteroid.controls
++ import org.asteroid.utils
++ import Connman
+++import Nemo.Configuration
++ import QtQuick.VirtualKeyboard
++ 
++ Item {
++     id: root
++ 
+++    ConfigurationValue {
+++        id: wifiPowerSaveConf
+++        key: "/desktop/asteroid/power/wifi-power-save-enabled"
+++        defaultValue: true
+++    }
+++
++     NetworkTechnology {
++         id: wifiStatus
++         path: "/net/connman/technology/wifi"
++@@ -96,7 +103,7 @@ Item {
++                     //% "Connected"
++                     qsTrId("id-wifi-connected") :
++                     //% "Not connected"
++-                    qsTrId("id-wifi-disconnected")) : "")
+++                    qsTrId("id-wifi-disconnected")) : "") + (wifiPowerSaveConf.value ? "\nAuto-off on battery" : "")
++             }
++         }
++ 
+diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroidos/asteroid-launcher/default.nix
+index b4d456ca..df162632 100644
+--- a/overlay/asteroidos/asteroid-launcher/default.nix
++++ b/overlay/asteroidos/asteroid-launcher/default.nix
+@@ -101,6 +101,8 @@ stdenv.mkDerivation {
+     ./qml-boot-diagnostics.patch
+     # Ambient: WallClock.Minute so FORCE_DOZE_UPDATE presents stay once/minute.
+     ./ambient-wallclock-minute.patch
++    # Hide charger-disconnect alert by default (dconf toggle) and manage Wi-Fi power-save policy.
++    ./power-wifi-policy.patch
+   ];
+ 
+   nativeBuildInputs = [
+diff --git a/overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch b/overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch
+new file mode 100644
+index 00000000..f7a7d93a
+--- /dev/null
++++ b/overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch
+@@ -0,0 +1,585 @@
++diff --git a/lipstick/src/components/launcheritem.cpp b/lipstick/src/components/launcheritem.cpp
++index 3f8446f..85b44c6 100644
++--- a/lipstick/src/components/launcheritem.cpp
+++++ b/lipstick/src/components/launcheritem.cpp
++@@ -146,6 +146,15 @@ bool LauncherItem::isLaunching() const
++     return _isLaunching;
++ }
++ 
+++bool LauncherItem::needsWifi() const
+++{
+++    if (_desktopEntry.isNull())
+++        return false;
+++    const QString v = _desktopEntry->value(QStringLiteral("Desktop Entry"),
+++                                           QStringLiteral("X-Asteroid-NeedsWifi")).trimmed();
+++    return v.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0 || v == QStringLiteral("1");
+++}
+++
++ void LauncherItem::setIsLaunching(bool isLaunching)
++ {
++     if (isLaunching) {
++diff --git a/lipstick/src/components/launcheritem.h b/lipstick/src/components/launcheritem.h
++index 2f7d5f3..c46455c 100644
++--- a/lipstick/src/components/launcheritem.h
+++++ b/lipstick/src/components/launcheritem.h
++@@ -52,6 +52,7 @@ class LauncherItem : public QObject
++     Q_PROPERTY(bool shouldDisplay READ shouldDisplay NOTIFY itemChanged)
++     Q_PROPERTY(bool isValid READ isValid NOTIFY itemChanged)
++     Q_PROPERTY(bool isLaunching READ isLaunching WRITE setIsLaunching NOTIFY isLaunchingChanged)
+++    Q_PROPERTY(bool needsWifi READ needsWifi NOTIFY itemChanged)
++ 
++     QSharedPointer<MDesktopEntry> _desktopEntry;
++     QBasicTimer _launchingTimeout;
++@@ -81,6 +82,7 @@ public:
++     bool shouldDisplay() const;
++     bool isValid() const;
++     bool isLaunching() const;
+++    bool needsWifi() const;
++     bool isStillValid();
++ 
++     QString getOriginalIconId() const;
++diff --git a/lipstick/src/notifications/batterynotifier.cpp b/lipstick/src/notifications/batterynotifier.cpp
++index c74315a..3e3217d 100644
++--- a/lipstick/src/notifications/batterynotifier.cpp
+++++ b/lipstick/src/notifications/batterynotifier.cpp
++@@ -23,6 +23,7 @@
++ #include "batterynotifier.h"
++ #include <time.h>
++ #include <keepalive/backgroundactivity.h>
+++#include <MGConfItem>
++ 
++ // How much slack to include in keepalive wakeup ranges [s]
++ static const int HEARTBEAT_INTERVAL = 12;
++@@ -52,6 +53,7 @@ BatteryNotifier::BatteryNotifier(QObject *parent)
++     , m_mceCallState(new QMceCallState(this))
++     , m_usbModed(new QUsbModed(this))
++     , m_lowBatteryRepeatActivity(new BackgroundActivity(this))
+++    , m_showRemoveChargerNotification(new MGConfItem(QStringLiteral("/desktop/asteroid/power/show-remove-charger-notification"), this))
++ {
++     connect(m_notificationManager, &NotificationManager::NotificationClosed,
++             this, &BatteryNotifier::onNotificationClosed);
++@@ -373,6 +375,11 @@ void BatteryNotifier::evaluateNotificationTriggering(NotificationType type,
++ 
++ void BatteryNotifier::sendNotification(BatteryNotifier::NotificationType type)
++ {
+++    if (type == NotificationRemoveCharger
+++        && !m_showRemoveChargerNotification->value(false).toBool()) {
+++        return;
+++    }
+++
++     static const struct NotificationInfo {
++         QString category;
++         QString message;
++diff --git a/lipstick/src/notifications/batterynotifier.h b/lipstick/src/notifications/batterynotifier.h
++index 3d7a404..259751b 100644
++--- a/lipstick/src/notifications/batterynotifier.h
+++++ b/lipstick/src/notifications/batterynotifier.h
++@@ -32,6 +32,7 @@
++ 
++ class NotificationManager;
++ class BackgroundActivity;
+++class MGConfItem;
++ 
++ /*!
++  * Implements the configuration and state for the battery, the power save mode.
++@@ -147,5 +148,6 @@ private:
++     QMceCallState *m_mceCallState;
++     QUsbModed *m_usbModed;
++     BackgroundActivity *m_lowBatteryRepeatActivity;
+++    MGConfItem *m_showRemoveChargerNotification;
++ };
++ #endif
++diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
++index acb586b..1791d5b 100644
++--- a/src/CMakeLists.txt
+++++ b/src/CMakeLists.txt
++@@ -6,7 +6,8 @@ set(SRC
++ 	applauncher.cpp
++ 	notificationsnoozer.cpp
++ 	watchfacereloader.cpp
++-	watchfacepreviewrenderer.cpp)
+++	watchfacepreviewrenderer.cpp
+++	wifipowermanager.cpp)
++ set(HEADERS
++ 	applauncherbackground.h
++ 	firstrun.h
++@@ -14,7 +15,9 @@ set(HEADERS
++ 	applauncher.h
++ 	notificationsnoozer.h
++ 	watchfacereloader.h
++-	watchfacepreviewrenderer.h)
+++	watchfacepreviewrenderer.h
+++	wifipowerpolicy.h
+++	wifipowermanager.h)
++ 
++ add_executable(asteroid-launcher ${SRC} ${HEADERS} resources-qml.qrc)
++ 
++@@ -86,6 +89,7 @@ target_link_libraries(
++ 		lipstick
++ 		Timed::Timed
++ 		PkgConfig::mlite6
+++		PkgConfig::mce-qt6
++ )
++ 
++ install(
++diff --git a/src/main.cpp b/src/main.cpp
++index d54f409..a34cc0e 100644
++--- a/src/main.cpp
+++++ b/src/main.cpp
++@@ -47,6 +47,7 @@
++ #include "applauncher.h"
++ #include "watchfacereloader.h"
++ #include "watchfacepreviewrenderer.h"
+++#include "wifipowermanager.h"
++ 
++ int main(int argc, char **argv)
++ {
++@@ -93,6 +94,9 @@ int main(int argc, char **argv)
++     WatchfacePreviewRenderer *watchfacePreviewRenderer = new WatchfacePreviewRenderer(&app);
++     app.engine()->rootContext()->setContextProperty("watchfacePreviewRenderer", watchfacePreviewRenderer);
++ 
+++    WifiPowerManager *wifiPowerManager = new WifiPowerManager(&app);
+++    app.engine()->rootContext()->setContextProperty("wifiPowerManager", wifiPowerManager);
+++
++     qmlRegisterType<AppLauncherBackground>("org.asteroid.launcher", 1, 0, "AppLauncherBackground");
++     qmlRegisterType<GestureFilterArea>("org.asteroid.launcher", 1, 0, "GestureFilterArea");
++     qmlRegisterType<NotificationSnoozer>("org.asteroid.launcher", 1, 0, "NotificationSnoozer");
++diff --git a/src/qml/compositor/compositor.qml b/src/qml/compositor/compositor.qml
++index 4b634df..0e4ab9e 100644
++--- a/src/qml/compositor/compositor.qml
+++++ b/src/qml/compositor/compositor.qml
++@@ -241,6 +241,11 @@ Item {
++         // The current foreground application window, or null when the home
++         // screen (the persistent item underneath) is showing.
++         property Item topmostWindow
+++        onTopmostWindowChanged: {
+++            if (typeof wifiPowerManager !== "undefined" && wifiPowerManager) {
+++                wifiPowerManager.onForegroundWindowChanged(topmostWindow && topmostWindow.window ? topmostWindow.window.processId : 0)
+++            }
+++        }
++ 
++         // Only used to change blank timeout when on watchface or elsewhere
++         property bool longTimeout: homeActive
++diff --git a/src/wifipowermanager.cpp b/src/wifipowermanager.cpp
++new file mode 100644
++index 0000000..77e9f33
++--- /dev/null
+++++ b/src/wifipowermanager.cpp
++@@ -0,0 +1,233 @@
+++// SPDX-License-Identifier: GPL-3.0-or-later
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ */
+++#include "wifipowermanager.h"
+++
+++#include <MGConfItem>
+++#include <QDBusConnection>
+++#include <QDBusMessage>
+++#include <QDBusPendingCallWatcher>
+++#include <QDBusPendingReply>
+++#include <QDebug>
+++#include <QDir>
+++#include <QFile>
+++#include <QFileInfo>
+++#include <QProcess>
+++#include <QSettings>
+++#include <QStandardPaths>
+++#include <qmcechargerstate.h>
+++
+++namespace {
+++constexpr auto kConnmanService = "net.connman";
+++constexpr auto kConnmanWifiPath = "/net/connman/technology/wifi";
+++constexpr auto kConnmanTechIface = "net.connman.Technology";
+++} // namespace
+++
+++WifiPowerManager::WifiPowerManager(QObject *parent)
+++    : QObject(parent)
+++    , m_enabledConf(new MGConfItem(QStringLiteral("/desktop/asteroid/power/wifi-power-save-enabled"), this))
+++    , m_timeoutConf(new MGConfItem(QStringLiteral("/desktop/asteroid/power/wifi-idle-timeout-sec"), this))
+++    , m_chargerState(new QMceChargerState(this))
+++{
+++    m_idleTimer.setSingleShot(true);
+++    m_launchGraceTimer.setSingleShot(true);
+++    m_launchGraceTimer.setInterval(15000);
+++
+++    connect(&m_idleTimer, &QTimer::timeout, this, &WifiPowerManager::onIdleTimeout);
+++    connect(&m_launchGraceTimer, &QTimer::timeout, this, &WifiPowerManager::onLaunchGraceTimeout);
+++    connect(m_enabledConf, &MGConfItem::valueChanged, this, &WifiPowerManager::onSettingsChanged);
+++    connect(m_timeoutConf, &MGConfItem::valueChanged, this, &WifiPowerManager::onSettingsChanged);
+++    connect(m_chargerState, &QMceChargerState::validChanged, this, &WifiPowerManager::onChargerChanged);
+++    connect(m_chargerState, &QMceChargerState::chargingChanged, this, &WifiPowerManager::onChargerChanged);
+++
+++    QDBusConnection::systemBus().connect(
+++        QString::fromLatin1(kConnmanService),
+++        QString::fromLatin1(kConnmanWifiPath),
+++        QString::fromLatin1(kConnmanTechIface),
+++        QStringLiteral("PropertyChanged"),
+++        this,
+++        SLOT(onConnmanPropertyChanged(QString, QDBusVariant)));
+++
+++    refreshDesktopIndex();
+++    onSettingsChanged();
+++    queryInitialWifiPower();
+++    onChargerChanged();
+++}
+++
+++void WifiPowerManager::onSettingsChanged()
+++{
+++    const bool enabled = m_enabledConf->value(true).toBool();
+++    const int timeoutSec = m_timeoutConf->value(300).toInt();
+++    m_policy.setIdleTimeoutSec(timeoutSec);
+++    if (m_idleTimer.isActive()) {
+++        m_idleTimer.setInterval(m_policy.idleTimeoutSec() * 1000);
+++    }
+++    applyDecision(m_policy.onPolicyEnabledChanged(enabled));
+++}
+++
+++void WifiPowerManager::onChargerChanged()
+++{
+++    if (!m_chargerState->valid()) return;
+++    applyDecision(m_policy.onChargingChanged(m_chargerState->charging()));
+++}
+++
+++void WifiPowerManager::onConnmanPropertyChanged(const QString &name, const QDBusVariant &value)
+++{
+++    if (name == QStringLiteral("Powered")) {
+++        applyDecision(m_policy.onWifiPoweredChanged(value.variant().toBool()));
+++    }
+++}
+++
+++void WifiPowerManager::onIdleTimeout()
+++{
+++    applyDecision(m_policy.onIdleTimerExpired());
+++}
+++
+++void WifiPowerManager::onLaunchGraceTimeout()
+++{
+++    m_launchGraceActive = false;
+++    applyDecision(m_policy.onWifiAppActiveChanged(m_foregroundNeedsWifi));
+++}
+++
+++void WifiPowerManager::onAppLaunched(bool needsWifi)
+++{
+++    if (!needsWifi) return;
+++    m_launchGraceActive = true;
+++    m_launchGraceTimer.start();
+++    applyDecision(m_policy.onWifiAppActiveChanged(true));
+++}
+++
+++void WifiPowerManager::onForegroundWindowChanged(qint64 pid)
+++{
+++    m_foregroundNeedsWifi = (pid > 0) ? processNeedsWifi(pid) : false;
+++    if (m_foregroundNeedsWifi) {
+++        m_launchGraceActive = false;
+++        m_launchGraceTimer.stop();
+++    }
+++    applyDecision(m_policy.onWifiAppActiveChanged(m_foregroundNeedsWifi || m_launchGraceActive));
+++}
+++
+++void WifiPowerManager::queryInitialWifiPower()
+++{
+++    QDBusMessage call = QDBusMessage::createMethodCall(
+++        QString::fromLatin1(kConnmanService),
+++        QString::fromLatin1(kConnmanWifiPath),
+++        QString::fromLatin1(kConnmanTechIface),
+++        QStringLiteral("GetProperties"));
+++    auto *watcher = new QDBusPendingCallWatcher(QDBusConnection::systemBus().asyncCall(call), this);
+++    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher]() {
+++        QDBusPendingReply<QVariantMap> reply = *watcher;
+++        if (!reply.isError()) {
+++            const QVariantMap props = reply.value();
+++            if (props.contains(QStringLiteral("Powered"))) {
+++                applyDecision(m_policy.onWifiPoweredChanged(props.value(QStringLiteral("Powered")).toBool()));
+++            }
+++        }
+++        watcher->deleteLater();
+++    });
+++}
+++
+++void WifiPowerManager::applyDecision(const WifiPolicyDecision &decision)
+++{
+++    if (decision.stopIdleTimer) {
+++        m_idleTimer.stop();
+++    }
+++    if (decision.startIdleTimer) {
+++        m_idleTimer.start(m_policy.idleTimeoutSec() * 1000);
+++    }
+++    if (decision.wifiAction == WifiPolicyDecision::WifiAction::EnableWifi) {
+++        setWifiPowered(true);
+++    } else if (decision.wifiAction == WifiPolicyDecision::WifiAction::DisableWifi) {
+++        setWifiPowered(false);
+++    }
+++}
+++
+++void WifiPowerManager::setWifiPowered(bool powered)
+++{
+++    QDBusMessage call = QDBusMessage::createMethodCall(
+++        QString::fromLatin1(kConnmanService),
+++        QString::fromLatin1(kConnmanWifiPath),
+++        QString::fromLatin1(kConnmanTechIface),
+++        QStringLiteral("SetProperty"));
+++    call << QStringLiteral("Powered") << QVariant::fromValue(QDBusVariant(powered));
+++    QDBusConnection::systemBus().asyncCall(call);
+++}
+++
+++QString WifiPowerManager::normalizeExecName(const QString &raw)
+++{
+++    QString base = QFileInfo(raw.trimmed()).fileName();
+++    // Strip Nix wrapQtAppsHook wrapper prefix/suffix (".foo-wrapped" -> "foo")
+++    if (base.startsWith(QLatin1Char('.')) && base.endsWith(QStringLiteral("-wrapped"))) {
+++        base = base.mid(1, base.size() - 9);
+++    }
+++    return base;
+++}
+++
+++void WifiPowerManager::refreshDesktopIndex()
+++{
+++    m_execNeedsWifi.clear();
+++    QStringList dirs = QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
+++    const QString nixApps = QStringLiteral("/run/current-system/sw/share/applications");
+++    if (!dirs.contains(nixApps)) dirs.prepend(nixApps);
+++
+++    for (const QString &dirPath : dirs) {
+++        const QDir dir(dirPath);
+++        if (!dir.exists()) continue;
+++        for (const QString &fileName : dir.entryList({QStringLiteral("*.desktop")}, QDir::Files)) {
+++            QSettings desktop(dir.filePath(fileName), QSettings::IniFormat);
+++            desktop.beginGroup(QStringLiteral("Desktop Entry"));
+++            const QString needsStr = desktop.value(QStringLiteral("X-Asteroid-NeedsWifi")).toString().trimmed();
+++            const bool needs = (needsStr.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0
+++                                || needsStr == QStringLiteral("1"));
+++            const QString execLine = desktop.value(QStringLiteral("Exec")).toString();
+++            desktop.endGroup();
+++
+++            const QString stem = fileName.endsWith(QStringLiteral(".desktop"))
+++                ? fileName.left(fileName.size() - 8)
+++                : fileName;
+++            if (!stem.isEmpty()) {
+++                m_execNeedsWifi.insert(stem, needs);
+++            }
+++            const QStringList tokens = QProcess::splitCommand(execLine);
+++            for (const QString &tok : tokens) {
+++                if (tok.isEmpty() || tok.startsWith(QLatin1Char('-')) || tok.startsWith(QLatin1Char('%'))) {
+++                    continue;
+++                }
+++                const QString norm = normalizeExecName(tok);
+++                if (norm == QStringLiteral("invoker") || norm == QStringLiteral("env")) {
+++                    continue;
+++                }
+++                if (!norm.isEmpty()) {
+++                    m_execNeedsWifi.insert(norm, needs);
+++                }
+++            }
+++        }
+++    }
+++}
+++
+++bool WifiPowerManager::processNeedsWifi(qint64 pid)
+++{
+++    if (m_execNeedsWifi.isEmpty()) {
+++        refreshDesktopIndex();
+++    }
+++    QFile cmdlineFile(QStringLiteral("/proc/%1/cmdline").arg(pid));
+++    if (cmdlineFile.open(QIODevice::ReadOnly)) {
+++        const QList<QByteArray> parts = cmdlineFile.readAll().split('\0');
+++        for (const QByteArray &part : parts) {
+++            if (part.isEmpty() || part.startsWith('-')) continue;
+++            const QString norm = normalizeExecName(QString::fromUtf8(part));
+++            if (m_execNeedsWifi.contains(norm)) {
+++                return m_execNeedsWifi.value(norm);
+++            }
+++        }
+++    }
+++    QFile commFile(QStringLiteral("/proc/%1/comm").arg(pid));
+++    if (commFile.open(QIODevice::ReadOnly)) {
+++        const QString comm = normalizeExecName(QString::fromUtf8(commFile.readAll()).trimmed());
+++        if (m_execNeedsWifi.contains(comm)) {
+++            return m_execNeedsWifi.value(comm);
+++        }
+++    }
+++    return false;
+++}
++diff --git a/src/wifipowermanager.h b/src/wifipowermanager.h
++new file mode 100644
++index 0000000..75a9799
++--- /dev/null
+++++ b/src/wifipowermanager.h
++@@ -0,0 +1,50 @@
+++// SPDX-License-Identifier: GPL-3.0-or-later
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ */
+++#pragma once
+++
+++#include <QDBusVariant>
+++#include <QHash>
+++#include <QObject>
+++#include <QString>
+++#include <QTimer>
+++
+++#include "wifipowerpolicy.h"
+++
+++class MGConfItem;
+++class QMceChargerState;
+++
+++class WifiPowerManager : public QObject {
+++    Q_OBJECT
+++public:
+++    explicit WifiPowerManager(QObject *parent = nullptr);
+++
+++    Q_INVOKABLE void onForegroundWindowChanged(qint64 pid);
+++    Q_INVOKABLE void onAppLaunched(bool needsWifi);
+++
+++private slots:
+++    void onSettingsChanged();
+++    void onChargerChanged();
+++    void onConnmanPropertyChanged(const QString &name, const QDBusVariant &value);
+++    void onIdleTimeout();
+++    void onLaunchGraceTimeout();
+++
+++private:
+++    void queryInitialWifiPower();
+++    void applyDecision(const WifiPolicyDecision &decision);
+++    void setWifiPowered(bool powered);
+++    void refreshDesktopIndex();
+++    bool processNeedsWifi(qint64 pid);
+++    static QString normalizeExecName(const QString &raw);
+++
+++    WifiPowerPolicy m_policy;
+++    MGConfItem *m_enabledConf = nullptr;
+++    MGConfItem *m_timeoutConf = nullptr;
+++    QMceChargerState *m_chargerState = nullptr;
+++    QTimer m_idleTimer;
+++    QTimer m_launchGraceTimer;
+++    bool m_foregroundNeedsWifi = false;
+++    bool m_launchGraceActive = false;
+++    QHash<QString, bool> m_execNeedsWifi;
+++};
++diff --git a/src/wifipowerpolicy.h b/src/wifipowerpolicy.h
++new file mode 100644
++index 0000000..e9a5aad
++--- /dev/null
+++++ b/src/wifipowerpolicy.h
++@@ -0,0 +1,122 @@
+++// SPDX-License-Identifier: GPL-3.0-or-later
+++/*
+++ * Copyright (C) 2026 AsteroidOS / Matawaa
+++ *
+++ * Pure state machine for the Wi-Fi power-save policy:
+++ *  - Enabled by default.
+++ *  - Enables Wi-Fi while charging.
+++ *  - Enables Wi-Fi while an app declaring X-Asteroid-NeedsWifi=true is active.
+++ *  - On battery, shuts down Wi-Fi after an idle timeout once no Wi-Fi-needing
+++ *    app is active (including after unplugging or manual Wi-Fi enable).
+++ */
+++#pragma once
+++
+++struct WifiPolicyDecision {
+++    enum class WifiAction { None, EnableWifi, DisableWifi };
+++    WifiAction wifiAction = WifiAction::None;
+++    bool startIdleTimer = false;
+++    bool stopIdleTimer = false;
+++};
+++
+++class WifiPowerPolicy {
+++public:
+++    bool policyEnabled() const { return m_policyEnabled; }
+++    int idleTimeoutSec() const { return m_idleTimeoutSec; }
+++    bool isCharging() const { return m_charging; }
+++    bool isWifiPowered() const { return m_wifiPowered; }
+++    bool isWifiAppActive() const { return m_wifiAppActive; }
+++    bool isIdleTimerRunning() const { return m_idleTimerRunning; }
+++
+++    void setIdleTimeoutSec(int sec)
+++    {
+++        m_idleTimeoutSec = (sec < 10) ? 10 : sec;
+++    }
+++
+++    WifiPolicyDecision onPolicyEnabledChanged(bool enabled)
+++    {
+++        WifiPolicyDecision d;
+++        m_policyEnabled = enabled;
+++        if (!m_policyEnabled) {
+++            if (m_idleTimerRunning) {
+++                m_idleTimerRunning = false;
+++                d.stopIdleTimer = true;
+++            }
+++            return d;
+++        }
+++        return evaluateState();
+++    }
+++
+++    WifiPolicyDecision onChargingChanged(bool charging)
+++    {
+++        m_charging = charging;
+++        if (!m_policyEnabled) return {};
+++        return evaluateState();
+++    }
+++
+++    WifiPolicyDecision onWifiAppActiveChanged(bool active)
+++    {
+++        m_wifiAppActive = active;
+++        if (!m_policyEnabled) return {};
+++        return evaluateState();
+++    }
+++
+++    WifiPolicyDecision onWifiPoweredChanged(bool powered)
+++    {
+++        WifiPolicyDecision d;
+++        m_wifiPowered = powered;
+++        if (!m_policyEnabled) return d;
+++        if (!m_wifiPowered) {
+++            if (m_idleTimerRunning) {
+++                m_idleTimerRunning = false;
+++                d.stopIdleTimer = true;
+++            }
+++            return d;
+++        }
+++        // Wi-Fi is now on: if on battery with no Wi-Fi app active, start idle countdown.
+++        if (!m_charging && !m_wifiAppActive && !m_idleTimerRunning) {
+++            m_idleTimerRunning = true;
+++            d.startIdleTimer = true;
+++        }
+++        return d;
+++    }
+++
+++    WifiPolicyDecision onIdleTimerExpired()
+++    {
+++        WifiPolicyDecision d;
+++        m_idleTimerRunning = false;
+++        if (!m_policyEnabled || m_charging || m_wifiAppActive || !m_wifiPowered) {
+++            return d;
+++        }
+++        d.wifiAction = WifiPolicyDecision::WifiAction::DisableWifi;
+++        return d;
+++    }
+++
+++private:
+++    WifiPolicyDecision evaluateState()
+++    {
+++        WifiPolicyDecision d;
+++        if (m_charging || m_wifiAppActive) {
+++            if (m_idleTimerRunning) {
+++                m_idleTimerRunning = false;
+++                d.stopIdleTimer = true;
+++            }
+++            if (!m_wifiPowered) {
+++                d.wifiAction = WifiPolicyDecision::WifiAction::EnableWifi;
+++            }
+++            return d;
+++        }
+++        // On battery and no Wi-Fi-needing app is active.
+++        if (m_wifiPowered && !m_idleTimerRunning) {
+++            m_idleTimerRunning = true;
+++            d.startIdleTimer = true;
+++        }
+++        return d;
+++    }
+++
+++    bool m_policyEnabled = true;
+++    int m_idleTimeoutSec = 300;
+++    bool m_charging = false;
+++    bool m_wifiPowered = false;
+++    bool m_wifiAppActive = false;
+++    bool m_idleTimerRunning = false;
+++};
+diff --git a/overlay/asteroidos/browser/asteroid-browser.desktop b/overlay/asteroidos/browser/asteroid-browser.desktop
+index 6e0de5d7..dc116941 100644
+--- a/overlay/asteroidos/browser/asteroid-browser.desktop
++++ b/overlay/asteroidos/browser/asteroid-browser.desktop
+@@ -10,3 +10,4 @@ Categories=Network;WebBrowser;
+ StartupNotify=true
+ MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+ Keywords=web;browser;internet;
++X-Asteroid-NeedsWifi=true
+diff --git a/overlay/asteroidos/community-apps/default.nix b/overlay/asteroidos/community-apps/default.nix
+index b04e195b..05f98a98 100644
+--- a/overlay/asteroidos/community-apps/default.nix
++++ b/overlay/asteroidos/community-apps/default.nix
+@@ -108,6 +108,7 @@ rec {
+   # Inspired by CoMaps offline map caching and compass heading orientation: https://github.com/comaps/comaps
+   map = mkAsteroidApp {
+     name = "map";
++    needsWifi = true;
+     desc = "Touch and GPS map viewer for AsteroidOS smartwatches";
+     rev = "8263b2175843e83c32baee2eec5380559db2b735";
+     hash = "sha256-8DBicGGhgpBl5vn4n3ayOFwO0Up8yBVcUdcJkudyOTk=";
+@@ -144,6 +145,7 @@ rec {
+ 
+   weatherfetch = mkAsteroidApp {
+     name = "weatherfetch";
++    needsWifi = true;
+     owner = "beroset";
+     repo = "asteroid-weatherfetch";
+     desc = "Direct internet weather forecast fetcher for AsteroidOS";
+diff --git a/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop b/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop
+index 2293ddaa..0c9d61b9 100644
+--- a/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop
++++ b/overlay/asteroidos/extreme-battery-saver/asteroid-extreme-battery-saver.desktop
+@@ -6,3 +6,4 @@ Exec=asteroid-extreme-battery-saver
+ Icon=asteroid-extreme-battery-saver
+ Terminal=false
+ Categories=Settings;
++X-Asteroid-NeedsWifi=false
+diff --git a/overlay/asteroidos/kiwix/org.kiwix.desktop.desktop b/overlay/asteroidos/kiwix/org.kiwix.desktop.desktop
+index d977034c..92f7d50a 100644
+--- a/overlay/asteroidos/kiwix/org.kiwix.desktop.desktop
++++ b/overlay/asteroidos/kiwix/org.kiwix.desktop.desktop
+@@ -9,3 +9,4 @@ Type=Application
+ Categories=Utility;Education;Office;
+ MimeType=application/x-zim;
+ StartupNotify=true
++X-Asteroid-NeedsWifi=false
+diff --git a/overlay/asteroidos/lib/mk-asteroid-app.nix b/overlay/asteroidos/lib/mk-asteroid-app.nix
+index d479c8b0..3068f17e 100644
+--- a/overlay/asteroidos/lib/mk-asteroid-app.nix
++++ b/overlay/asteroidos/lib/mk-asteroid-app.nix
+@@ -32,6 +32,7 @@
+   postInstall ? "",
+   postFixup ? "",
+   cmakeFlags ? [ ],
++  needsWifi ? false,
+   meta ? { },
+ }:
+ 
+@@ -54,7 +55,19 @@ stdenv.mkDerivation {
+       });
+ 
+   strictDeps = true;
+-  inherit patches postBuild postInstall;
++  inherit patches postBuild;
++
++  postInstall = ''
++    if [ -d "$out/share/applications" ]; then
++      for df in "$out/share/applications"/*.desktop; do
++        [ -f "$df" ] || continue
++        if ! grep -q '^X-Asteroid-NeedsWifi=' "$df"; then
++          printf '\nX-Asteroid-NeedsWifi=%s\n' "${if needsWifi then "true" else "false"}" >> "$df"
++        fi
++      done
++    fi
++  ''
++  + postInstall;
+ 
+   postPatch = ''
+     # CMake install destinations must stay relative to CMAKE_INSTALL_PREFIX.
+diff --git a/overlay/asteroidos/telegram/asteroid-telegram.desktop b/overlay/asteroidos/telegram/asteroid-telegram.desktop
+index f3227d08..5c754f1a 100644
+--- a/overlay/asteroidos/telegram/asteroid-telegram.desktop
++++ b/overlay/asteroidos/telegram/asteroid-telegram.desktop
+@@ -7,3 +7,4 @@ Icon=asteroid-telegram
+ Terminal=false
+ Categories=Network;InstantMessaging;
+ StartupNotify=false
++X-Asteroid-NeedsWifi=true
+diff --git a/overlay/asteroidos/vela/asteroid-vela.desktop b/overlay/asteroidos/vela/asteroid-vela.desktop
+index d68b962c..b2d5c96b 100644
+--- a/overlay/asteroidos/vela/asteroid-vela.desktop
++++ b/overlay/asteroidos/vela/asteroid-vela.desktop
+@@ -10,3 +10,4 @@ Categories=Utility;Application;
+ StartupNotify=true
+ MimeType=application/x-vela-rpk;
+ Keywords=vela;quickapp;rpk;watch;
++X-Asteroid-NeedsWifi=true
+-- 
+2.56.0
+
