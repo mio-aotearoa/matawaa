@@ -1,28 +1,53 @@
-# Source and build status — 2026-11-19
+# Source and build status — 2026-11-21
 
 ## Pins
 
 | Source | Revision |
 | --- | --- |
-| nixpkgs-unstable, flake and npins | `e21fec321d73511849707a7585e4ea155ee4bf40` |
-| [meta-asteroid](https://github.com/AsteroidOS/meta-asteroid) | `20a8d379f67038208a32b8b59a3093fac8410c73` |
+| nixpkgs-unstable, flake and npins | `9996594bd38077de6a018ec17453ba3d99182787` |
+| [meta-asteroid](https://github.com/AsteroidOS/meta-asteroid) | `aa42e158032bf4abbc0d0f898c5c3595a84538ef` |
 | [meta-asteroid-community](https://github.com/AsteroidOS/meta-asteroid-community) | `5f4ed05c61ced9e48cec1e1c3aacf13607338dea` (recipe reference) |
-| Launcher [PR 314](https://github.com/AsteroidOS/asteroid-launcher/pull/314), including PR 299 | `3c72b3c79c94a61f59f73133ce38f021e51d9286` |
-| Settings [PR 153](https://github.com/AsteroidOS/asteroid-settings/pull/153) | `c32add32bf541787001135ca936b2ff228b95210` |
+| Launcher source (local PR 314/299 rotation patches retained) | `b83198f1ab809849220ddde3cb3f267e3c10a21c` |
+| Settings source (local wrist rotation patch retained) | `b1717016d481d1f1b9dbd98b59ad7d2068f11b4c` |
 
-Rechecked on 2026-11-19: the AsteroidOS layers and launcher remain current. Settings, flashlight,
-health, beatfork, and touchdown retain their newer upstream-head pins instead
-of reverting to older recipe pins. The watch retains vendored Qt 6.11.3 and
-kernel 4.14.216 (ten consecutive stable increments, .207–.216). Hardware and
-firmware pins are unchanged. The rotation PRs and MCU backend are unmerged
-upstream work, separate from the nightly recipe baseline.
+Rechecked on 2026-11-21 against the upstream Git branch heads. Both AsteroidOS
+recipe layers are already current: meta-asteroid remains at `aa42e158`, and
+meta-asteroid-community remains at `5f4ed05c`. All 14 packaged core app revisions
+match the latest nightly recipes. The meta-asteroid source archive hash was
+independently verified as `sha256-Dinl7UFk39T/NMd8qeqEA/aeQRuNSzuTMW39AWX3oMw=`.
+The launcher source and selected community apps retain their newer source pins;
+this maintenance does not downgrade them to older recipe revisions.
 
-The new nixpkgs pin needs an ARM libmad CMake correction (`and` → `AND`). Its
+Nixpkgs-unstable advanced from `e21fec32` to `9996594b` (2026-11-20).
+The flake and npins now use the same revision and source hash:
+`sha256-5q5/viwCcXSA4S2cSaKdjdYrHhk64qFbjLhCMlJnyeM=`.
+The watch retains vendored Qt 6.11.3 and kernel 4.14.216. Hardware and firmware
+pins are unchanged. The rotation PRs and MCU backend remain separate from the
+nightly recipe baseline.
+
+## Maintenance checks (2026-11-21)
+
+- The complete patch series replays to source tree
+  `36cb28938e52e7af55d2349b7964ea7d093551b2`, exactly matching the updated checkout.
+- The flake's patched source output builds successfully.
+- `nix flake check --no-build` passes on x86_64-linux, including all four
+  configured Hoki/Beluga vendor and mainline systems. The check omits the
+  aarch64-linux host output.
+- Flake and direct evaluation select the same Hoki system derivation:
+  `/nix/store/m6q9inm0a86blqa0cbl2pwax3kv2wawf-nixos-system-hoki-26.11pre-git.drv`.
+- The full Hoki system build passes:
+  `/nix/store/mwzkvrxdv2fsmfvacwnn7zbkwkxzwkn4-nixos-system-hoki-26.11pre-git`.
+  No additional compatibility patches were needed for this Nixpkgs update.
+- This maintenance build has not been deployed to the watch.
+
+## Previous build status (2026-11-19)
+
+The previous Nixpkgs pin needed an ARM libmad CMake correction (`and` → `AND`). Its
 GCC already fixes the libgomp buffer issue; duplicate local compiler patches
 and related warning/runtime overrides were removed. Legacy systemd 257 uses
 its supported unit set while preserving declared application services and timers.
 
-## Checks
+### Checks (2026-11-19)
 
 - All 45 patches replay without three-way fallback to source tree
   `0d5079b15d4ffc2763fdf9c1c7e4e61571fdcd15`.
