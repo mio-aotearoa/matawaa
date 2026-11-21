@@ -2284,12 +2284,10 @@ diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
 index ce125ea0..ecf26ad0 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
-@@ -26,6 +26,7 @@ rec {
+@@ -25,4 +25,5 @@ rec {
+   udev-droid-system = callPackage ./udev-droid-system { inherit metaAsteroidSrc; };
    swclock-offset = callPackage ./swclock-offset { };
-   kernel-timezone = callPackage ./kernel-timezone { };
-   asteroid-seconddisplay = callPackage ./asteroid-seconddisplay { inherit mlite; };
 +  asteroid-bootsplash = callPackage ./asteroid-bootsplash { };
-   extreme-battery-saver = callPackage ./extreme-battery-saver { };
    bluebinder = callPackage ./bluebinder { inherit metaAsteroidSrc; };
    ngfd = callPackage ./ngfd { inherit metaAsteroidSrc mce-dev; };
 @@ -207,7 +208,7 @@ rec {

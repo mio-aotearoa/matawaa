@@ -4,11 +4,11 @@ Date: Mon, 9 Nov 2026 10:55:57 +1100
 Subject: [PATCH] fossil-hoki-mainline: add experimental mainline target
 
 ---
- devices/fossil-hoki-mainline/README.md        |    47 +
- devices/fossil-hoki-mainline/default.nix      |   132 +
- .../fossil-hoki-mainline/kernel/default.nix   |    16 +
- devices/fossil-hoki-mainline/sda429-hoki.dts  | 11753 ++++++++++++++++
- 4 files changed, 11948 insertions(+)
+ devices/fossil-hoki-mainline/README.md          |   47
+ devices/fossil-hoki-mainline/default.nix        |  133
+ devices/fossil-hoki-mainline/kernel/default.nix |   16
+ devices/fossil-hoki-mainline/sda429-hoki.dts    |11753 +++++++++++++++++++++++
+ 4 files changed, 11949 insertions(+)
  create mode 100644 devices/fossil-hoki-mainline/README.md
  create mode 100644 devices/fossil-hoki-mainline/default.nix
  create mode 100644 devices/fossil-hoki-mainline/kernel/default.nix
@@ -69,10 +69,10 @@ index 00000000..a26227de
 +   - When using `lk2nd` secondary bootloader, flash a dummy DTBO image (`dtbo-fossil-hoki.img`) to `dtbo`.
 diff --git a/devices/fossil-hoki-mainline/default.nix b/devices/fossil-hoki-mainline/default.nix
 new file mode 100644
-index 00000000..69593422
+index 00000000..1a66c677
 --- /dev/null
 +++ b/devices/fossil-hoki-mainline/default.nix
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,133 @@
 +{
 +  config,
 +  lib,
@@ -130,7 +130,8 @@ index 00000000..69593422
 +      hasHaptics = true;
 +      aodSupport = true;
 +      stage1-pause-debug.enable = false;
-+      stage2-ssh.enable = true;
++      stage2-ssh.enable = lib.mkDefault false;
++      alwaysOnUsbNetDebug.enable = lib.mkDefault false;
 +      stage2-save-logs.enable = true;
 +    };
 +  };

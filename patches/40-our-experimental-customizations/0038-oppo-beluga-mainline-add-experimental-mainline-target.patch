@@ -4,20 +4,20 @@ Date: Mon, 9 Nov 2026 10:55:57 +1100
 Subject: [PATCH] oppo-beluga-mainline: add experimental mainline target
 
 ---
- devices/oppo-beluga-mainline/default.nix      |   115 +
- .../oppo-beluga-mainline/kernel/default.nix   |    19 +
- .../oppo-beluga-mainline/msm8909w-beluga.dts  | 10257 ++++++++++++++++
- 3 files changed, 10391 insertions(+)
+ devices/oppo-beluga-mainline/default.nix         |  116
+ devices/oppo-beluga-mainline/kernel/default.nix  |   19
+ devices/oppo-beluga-mainline/msm8909w-beluga.dts |10257 ++++++++++++++++++++++
+ 3 files changed, 10392 insertions(+)
  create mode 100644 devices/oppo-beluga-mainline/default.nix
  create mode 100644 devices/oppo-beluga-mainline/kernel/default.nix
  create mode 100644 devices/oppo-beluga-mainline/msm8909w-beluga.dts
 
 diff --git a/devices/oppo-beluga-mainline/default.nix b/devices/oppo-beluga-mainline/default.nix
 new file mode 100644
-index 00000000..3f12cc13
+index 00000000..34739108
 --- /dev/null
 +++ b/devices/oppo-beluga-mainline/default.nix
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,116 @@
 +{
 +  config,
 +  lib,
@@ -60,7 +60,8 @@ index 00000000..3f12cc13
 +      hasHaptics = true;
 +      aodSupport = true;
 +      stage1-pause-debug.enable = false;
-+      stage2-ssh.enable = true;
++      stage2-ssh.enable = lib.mkDefault false;
++      alwaysOnUsbNetDebug.enable = lib.mkDefault false;
 +      stage2-save-logs.enable = true;
 +    };
 +  };

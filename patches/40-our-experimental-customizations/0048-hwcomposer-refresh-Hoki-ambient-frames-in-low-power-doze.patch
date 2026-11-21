@@ -7,17 +7,17 @@ Keep AsteroidOS meta-hoki QPA_HWC2_FORCE_DOZE_UPDATE as the device default
 (lipstick wakes ambient once per minute). Ship an opt-in QPA_HWC2_DOZE_UPDATE
 plugin path for low-power presents without switching the default.
 ---
- devices/fossil-hoki/default.nix               | 21 ++++
- .../ambient-doze-update.patch                 | 97 +++++++++++++++++++
- .../qt6-qpa-hwcomposer-plugin/default.nix     |  2 +
- 3 files changed, 120 insertions(+)
+ devices/fossil-hoki/default.nix                    |   29 ++++++
+ .../ambient-doze-update.patch                      |   97 ++++++++++++++++++++
+ .../qt6-qpa-hwcomposer-plugin/default.nix          |    2
+ 3 files changed, 128 insertions(+)
  create mode 100644 overlay/asteroidos/qt6-qpa-hwcomposer-plugin/ambient-doze-update.patch
 
 diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
 index 1d7f7e96..eb3de32f 100644
 --- a/devices/fossil-hoki/default.nix
 +++ b/devices/fossil-hoki/default.nix
-@@ -396,6 +396,27 @@ in
+@@ -396,6 +396,35 @@ in
      ''} ./var/lib/environment/compositor/qt6-hidpi.conf
    '';
  
@@ -31,10 +31,18 @@ index 1d7f7e96..eb3de32f 100644
 +      Type = "oneshot";
 +      RemainAfterExit = true;
 +      ExecStart = pkgs.writeShellScript "hoki-clear-sticky-doze-update" ''
-+        conf=/var/lib/environment/compositor/20-device.conf
-+        if [ -f "$conf" ] && grep -q '^QPA_HWC2_DOZE_UPDATE=' "$conf"; then
-+          sed -i '/^QPA_HWC2_DOZE_UPDATE=/d' "$conf"
++        confdir=/var/lib/environment/compositor
++        # Strip experimental DOZE_UPDATE from any compositor env drop-in; that
++        # flag wins over FORCE_DOZE_UPDATE in the HWC plugin and caused ~1 Hz flashes.
++        if [ -d "$confdir" ]; then
++          for conf in "$confdir"/*.conf; do
++            [ -f "$conf" ] || continue
++            if grep -q '^QPA_HWC2_DOZE_UPDATE=' "$conf"; then
++              sed -i '/^QPA_HWC2_DOZE_UPDATE=/d' "$conf"
++            fi
++          done
 +        fi
++        conf=$confdir/20-device.conf
 +        if [ -f "$conf" ] && ! grep -q '^QPA_HWC2_FORCE_DOZE_UPDATE=' "$conf"; then
 +          printf '%s\n' 'QPA_HWC2_FORCE_DOZE_UPDATE=1' >> "$conf"
 +        fi

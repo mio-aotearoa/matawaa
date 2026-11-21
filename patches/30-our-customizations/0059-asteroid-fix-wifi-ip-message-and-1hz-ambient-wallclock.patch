@@ -5,15 +5,17 @@ Subject: [PATCH] asteroid: fix WiFi IP undefined message and stop 1Hz ambient
  wallClock ticks
 
 ---
- overlay/asteroidos/apps/default.nix           | 13 +++++---
- .../ambient-wallclock-minute.patch            | 33 ++++++++++++++++++-
- 2 files changed, 41 insertions(+), 5 deletions(-)
+ overlay/asteroidos/apps/default.nix                |   33 ++++++++++-----
+ .../ambient-wallclock-minute.patch                 |   44 ++++++++++++++++++++
+ overlay/asteroidos/asteroid-launcher/default.nix   |    2 +
+ 3 files changed, 69 insertions(+), 10 deletions(-)
+ create mode 100644 overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch
 
 diff --git a/overlay/asteroidos/apps/default.nix b/overlay/asteroidos/apps/default.nix
-index 805bbfcc..8d393526 100644
+index 805bbfcc..a0ac383e 100644
 --- a/overlay/asteroidos/apps/default.nix
 +++ b/overlay/asteroidos/apps/default.nix
-@@ -50,7 +50,10 @@
+@@ -50,7 +50,11 @@
          --replace-fail \
            'layerStack.push(errorPopup, {networkService: modelData, text: qsTrId("id-wifi-connectionError")})' \
            '//% "Connection failed"
@@ -21,45 +23,65 @@ index 805bbfcc..8d393526 100644
 +            layerStack.push(errorPopup, {networkService: modelData, text: qsTrId("id-wifi-connectionError")})' \
 +        --replace-fail \
 +          'text: "IP: " + modelData.ipv4["Address"]' \
-+          'text: (modelData.ipv4 && modelData.ipv4["Address"]) ? qsTrId("id-wifi-ip-address").arg(modelData.ipv4["Address"]) : qsTrId("id-wifi-getting-ip")'
++          '//% "IP: %1"
++            text: (modelData.ipv4 && modelData.ipv4["Address"]) ? qsTrId("id-wifi-ip-address").arg(modelData.ipv4["Address"]) : qsTrId("id-wifi-getting-ip")'
  
        # Upstream ships empty/unfinished entries for this ID in every locale.
        for f in i18n/asteroid-settings.*.ts; do
-@@ -61,11 +64,13 @@
-         if ! grep -q 'id="id-connected"' "$f"; then
-           conn_tr="Connected"
-           disc_tr="Not connected"
-+          ip_tr="IP: %1"
-+          getting_ip_tr="Getting IP address..."
-           case "$f" in
+@@ -58,15 +62,24 @@
+           s|<source></source>|<source>Connection failed</source>|
+           s|<translation type="unfinished"></translation>|<translation>Connection failed</translation>|
+         }' "$f"
+-        if ! grep -q 'id="id-connected"' "$f"; then
+-          conn_tr="Connected"
+-          disc_tr="Not connected"
+-          case "$f" in
 -            *zh_Hant*) conn_tr="已連線"; disc_tr="未連線" ;;
 -            *zh_Hans*) conn_tr="已连接"; disc_tr="未连接" ;;
-+            *zh_Hant*) conn_tr="已連線"; disc_tr="未連線"; getting_ip_tr="正在取得 IP 位址..." ;;
-+            *zh_Hans*) conn_tr="已连接"; disc_tr="未连接"; getting_ip_tr="正在获取 IP 地址..." ;;
-           esac
+-          esac
 -          sed -i "s|</context>|    <message id=\"id-connected\"><source>Connected</source><translation>$conn_tr</translation></message>\n    <message id=\"id-disconnected\"><source>Not connected</source><translation>$disc_tr</translation></message>\n</context>|" "$f"
-+          sed -i "s|</context>|    <message id=\"id-connected\"><source>Connected</source><translation>$conn_tr</translation></message>\n    <message id=\"id-disconnected\"><source>Not connected</source><translation>$disc_tr</translation></message>\n    <message id=\"id-wifi-ip-address\"><source>IP: %1</source><translation>$ip_tr</translation></message>\n    <message id=\"id-wifi-getting-ip\"><source>Getting IP address...</source><translation>$getting_ip_tr</translation></message>\n</context>|" "$f"
-         fi
+-        fi
++        conn_tr="Connected"
++        disc_tr="Not connected"
++        ip_tr="IP: %1"
++        getting_ip_tr="Getting IP address..."
++        case "$f" in
++          *zh_Hant*) conn_tr="已連線"; disc_tr="未連線"; getting_ip_tr="正在取得 IP 位址..." ;;
++          *zh_Hans*) conn_tr="已连接"; disc_tr="未连接"; getting_ip_tr="正在获取 IP 地址..." ;;
++        esac
++        for entry in \
++          "id-connected|Connected|$conn_tr" \
++          "id-disconnected|Not connected|$disc_tr" \
++          "id-wifi-ip-address|IP: %1|$ip_tr" \
++          "id-wifi-getting-ip|Getting IP address...|$getting_ip_tr"; do
++          IFS='|' read -r msg_id msg_src msg_tr <<< "$entry"
++          if ! grep -q "id=\"$msg_id\"" "$f"; then
++            sed -i "s|</context>|    <message id=\"$msg_id\"><source>$msg_src</source><translation>$msg_tr</translation></message>\n</context>|" "$f"
++          fi
++        done
        done
      '';
+     extraBuildInputs = [
 diff --git a/overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch b/overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch
-index 72f2c868..3715c63f 100644
---- a/overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch
+new file mode 100644
+index 00000000..3715c63f
+--- /dev/null
 +++ b/overlay/asteroidos/asteroid-launcher/ambient-wallclock-minute.patch
-@@ -3,11 +3,42 @@
- @@ -198,7 +198,9 @@ Item {
-      WallClock {
-          id: wallClock
--         enabled: desktop.visible
+@@ -0,0 +1,44 @@
++--- a/src/qml/MainScreen.qml
+++++ b/src/qml/MainScreen.qml
++@@ -198,7 +198,9 @@ Item {
++     WallClock {
++         id: wallClock
 +-        enabled: desktop.visible
- -        updateFrequency: WallClock.Second
++-        updateFrequency: WallClock.Second
 ++        enabled: desktop.visible && !displayAmbient
- +        // Ambient is woken once per minute by lipstick. Keeping Second here
- +        // with QPA_HWC2_FORCE_DOZE_UPDATE caused ~1 Hz full-ON present flashes.
- +        updateFrequency: displayAmbient ? WallClock.Minute : WallClock.Second
-      }
-  
-      MceChargerType {
+++        // Ambient is woken once per minute by lipstick. Keeping Second here
+++        // with QPA_HWC2_FORCE_DOZE_UPDATE caused ~1 Hz full-ON present flashes.
+++        updateFrequency: displayAmbient ? WallClock.Minute : WallClock.Second
++     }
++ 
++     MceChargerType {
 +@@ -214,7 +216,10 @@ Item {
 +     Timer {
 +         id: wallClockAmbientTimeout
@@ -90,6 +112,19 @@ index 72f2c868..3715c63f 100644
 +             wallClockAmbientTimeout.start();
 +         }
 +     }
+diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroidos/asteroid-launcher/default.nix
+index 04736a1f..b1c5d773 100644
+--- a/overlay/asteroidos/asteroid-launcher/default.nix
++++ b/overlay/asteroidos/asteroid-launcher/default.nix
+@@ -90,6 +90,8 @@ stdenv.mkDerivation {
+     # screen with a live render loop) names the failing Loader instead of
+     # leaving only "update from item" chatter in the log.
+     ./qml-boot-diagnostics.patch
++    # Ambient: WallClock.Minute so FORCE_DOZE_UPDATE presents stay once/minute.
++    ./ambient-wallclock-minute.patch
+   ];
+ 
+   nativeBuildInputs = [
 -- 
 2.56.0
 

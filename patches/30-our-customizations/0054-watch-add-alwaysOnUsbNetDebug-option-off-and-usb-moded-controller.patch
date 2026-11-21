@@ -5,20 +5,18 @@ Subject: [PATCH] watch: add alwaysOnUsbNetDebug option (off) and usb-moded
  controller
 
 ---
- devices/families/asteroidos.nix               |  27 ++-
- devices/fossil-hoki-mainline/default.nix      |   3 +-
- devices/fossil-hoki/default.nix               |   3 +-
- devices/oppo-beluga-mainline/default.nix      |   3 +-
- examples/asteroid/asteroid-desktop.nix        |  37 ++-
- modules/hardware-watch.nix                    |  10 +
- overlay/asteroidos/default.nix                |   1 +
- overlay/asteroidos/usb-moded/CMakeLists.txt   |  21 ++
- .../usb-moded/com.meego.usb_moded.conf        |  17 ++
- overlay/asteroidos/usb-moded/default.nix      |  68 ++++++
- .../asteroidos/usb-moded/usb-moded-switch.sh  | 143 ++++++++++++
- .../asteroidos/usb-moded/usbmodedservice.cpp  | 218 ++++++++++++++++++
- .../asteroidos/usb-moded/usbmodedservice.h    |  64 +++++
- 13 files changed, 595 insertions(+), 20 deletions(-)
+ devices/families/asteroidos.nix                    |   27 +-
+ devices/fossil-hoki/default.nix                    |    3
+ examples/asteroid/asteroid-desktop.nix             |   37 +++
+ modules/hardware-watch.nix                         |   10 +
+ overlay/asteroidos/default.nix                     |    1
+ overlay/asteroidos/usb-moded/CMakeLists.txt        |   21 ++
+ .../asteroidos/usb-moded/com.meego.usb_moded.conf  |   17 ++
+ overlay/asteroidos/usb-moded/default.nix           |   68 ++++++
+ overlay/asteroidos/usb-moded/usb-moded-switch.sh   |  143 +++++++++++++
+ overlay/asteroidos/usb-moded/usbmodedservice.cpp   |  218 ++++++++++++++++++++
+ overlay/asteroidos/usb-moded/usbmodedservice.h     |   64 ++++++
+ 11 files changed, 591 insertions(+), 18 deletions(-)
  create mode 100644 overlay/asteroidos/usb-moded/CMakeLists.txt
  create mode 100644 overlay/asteroidos/usb-moded/com.meego.usb_moded.conf
  create mode 100644 overlay/asteroidos/usb-moded/default.nix
@@ -90,39 +88,11 @@ index 35afae13..68998881 100644
  
    systemd.services.usb-gadget-network = mkIf debugNetwork {
      description = "USB Gadget Ethernet (NCM) Setup";
-diff --git a/devices/fossil-hoki-mainline/default.nix b/devices/fossil-hoki-mainline/default.nix
-index 69593422..1a66c677 100644
---- a/devices/fossil-hoki-mainline/default.nix
-+++ b/devices/fossil-hoki-mainline/default.nix
-@@ -55,7 +55,8 @@
-       hasHaptics = true;
-       aodSupport = true;
-       stage1-pause-debug.enable = false;
--      stage2-ssh.enable = true;
-+      stage2-ssh.enable = lib.mkDefault false;
-+      alwaysOnUsbNetDebug.enable = lib.mkDefault false;
-       stage2-save-logs.enable = true;
-     };
-   };
 diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
 index eba4ee1c..a470e332 100644
 --- a/devices/fossil-hoki/default.nix
 +++ b/devices/fossil-hoki/default.nix
 @@ -94,7 +94,8 @@ in
-       hasHaptics = true;
-       aodSupport = true;
-       stage1-pause-debug.enable = false;
--      stage2-ssh.enable = true;
-+      stage2-ssh.enable = lib.mkDefault false;
-+      alwaysOnUsbNetDebug.enable = lib.mkDefault false;
-       stage2-save-logs.enable = true;
-     };
-   };
-diff --git a/devices/oppo-beluga-mainline/default.nix b/devices/oppo-beluga-mainline/default.nix
-index 3f12cc13..34739108 100644
---- a/devices/oppo-beluga-mainline/default.nix
-+++ b/devices/oppo-beluga-mainline/default.nix
-@@ -40,7 +40,8 @@
        hasHaptics = true;
        aodSupport = true;
        stage1-pause-debug.enable = false;

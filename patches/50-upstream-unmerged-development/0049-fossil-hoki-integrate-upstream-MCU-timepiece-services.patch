@@ -201,12 +201,13 @@ diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
 index 23ee6288..e3b2f74f 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
-@@ -23,6 +23,9 @@ rec {
+@@ -23,7 +23,10 @@ rec {
    # Device features shipped by upstream meta-hoki (IMAGE_INSTALL) and asteroid-image.
    udev-droid-system = callPackage ./udev-droid-system { inherit metaAsteroidSrc; };
    swclock-offset = callPackage ./swclock-offset { };
 +  kernel-timezone = callPackage ./kernel-timezone { };
 +  asteroid-seconddisplay = callPackage ./asteroid-seconddisplay { inherit mlite; };
+   asteroid-bootsplash = callPackage ./asteroid-bootsplash { };
 +  extreme-battery-saver = callPackage ./extreme-battery-saver { };
    bluebinder = callPackage ./bluebinder { inherit metaAsteroidSrc; };
    ngfd = callPackage ./ngfd { inherit metaAsteroidSrc mce-dev; };
