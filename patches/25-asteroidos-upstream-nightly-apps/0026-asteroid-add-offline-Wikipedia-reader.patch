@@ -65,7 +65,7 @@ new file mode 100644
 index 00000000..714b9bc7
 --- /dev/null
 +++ b/overlay/asteroidos/kiwix/CMakeLists.txt
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,67 @@
 +cmake_minimum_required(VERSION 3.16)
 +project(asteroid-kiwix LANGUAGES CXX)
 +
@@ -114,6 +114,15 @@ index 00000000..714b9bc7
 +install(FILES org.kiwix.desktop.desktop
 +    DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
 +    RENAME asteroid-kiwix.desktop
++)
++
++install(FILES kiwix.svg
++    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/asteroid
++)
++
++install(FILES kiwix.svg
++    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/asteroid
++    RENAME asteroid-kiwix.svg
 +)
 +
 +install(FILES kiwix.svg

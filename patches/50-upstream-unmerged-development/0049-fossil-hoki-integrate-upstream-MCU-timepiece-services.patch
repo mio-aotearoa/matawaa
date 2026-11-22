@@ -217,7 +217,7 @@ new file mode 100644
 index 00000000..dabd29e9
 --- /dev/null
 +++ b/overlay/asteroidos/extreme-battery-saver/CMakeLists.txt
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,21 @@
 +cmake_minimum_required(VERSION 3.16)
 +project(asteroid-extreme-battery-saver LANGUAGES CXX)
 +set(CMAKE_CXX_STANDARD 17)
@@ -229,6 +229,7 @@ index 00000000..dabd29e9
 +target_link_libraries(asteroid-extreme-battery-saver PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::DBus)
 +install(TARGETS asteroid-extreme-battery-saver RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 +install(FILES asteroid-extreme-battery-saver.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
++install(FILES asteroid-extreme-battery-saver.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/asteroid)
 +install(FILES asteroid-extreme-battery-saver.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
 +option(BUILD_TESTING "Build controller tests against a mock timepiece service" OFF)
 +if(BUILD_TESTING)
