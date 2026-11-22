@@ -4,11 +4,11 @@
 
 | Source | Revision |
 | --- | --- |
-| `nixpkgs-unstable` (flake & npins) | `9996594bd38077de6a018ec17453ba3d99182787` |
+| `nixpkgs-unstable` (flake & npins) | `93a9ed0a866099a230ed5146a5bb7d16fd5c9b14` |
 | [meta-asteroid](https://github.com/AsteroidOS/meta-asteroid) | `aa42e158032bf4abbc0d0f898c5c3595a84538ef` |
 | [meta-asteroid-community](https://github.com/AsteroidOS/meta-asteroid-community) | `5f4ed05c61ced9e48cec1e1c3aacf13607338dea` |
-| Launcher (with PR 314/299 rotation patches) | `b83198f1ab809849220ddde3cb3f267e3c10a21c` |
-| Settings (with wrist rotation patch) | `b1717016d481d1f1b9dbd98b59ad7d2068f11b4c` |
+| Launcher (with PR 314/299 rotation patches) | `854e0e0bbd5bdeed2f1240887d86f2b2a274642d` |
+| Settings (with wrist rotation patch) | `94ea0b2538ee3cabdbbb1c2926f76b80433077b2` |
 
 ## Build
 

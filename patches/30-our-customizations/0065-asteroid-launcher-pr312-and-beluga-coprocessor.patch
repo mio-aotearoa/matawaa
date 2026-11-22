@@ -31,8 +31,8 @@ index eea23a56..b4d456ca 100644
      repo = "asteroid-launcher";
 -    rev = "29f4257ec9835ead090c8157e46948c769081ed2";
 -    hash = "sha256-o+x4/2/ctZgrRN+TyebUfccxGsErpxobbC7rjrXl+rA=";
-+    rev = "b83198f1ab809849220ddde3cb3f267e3c10a21c";
-+    hash = "sha256-yhhiVvY6SSnjOXzdg+uy5OWjJWEidJSShIvZu/42ytY=";
++    rev = "854e0e0bbd5bdeed2f1240887d86f2b2a274642d";
++    hash = "sha256-Ur/h4fw7DTaqHf8kIAXqJ5Lceqta095Urq4T8YQv+rg=";
    };
  
    strictDeps = true;
