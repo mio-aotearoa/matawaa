@@ -16,8 +16,10 @@ Root cause identified and fixed on 2026-11-22:
   flashing began at ~37s during boot (`nfcd` startup) and persisted even with
   `asteroid-launcher` and `composer@2.1-service` paused (`SIGSTOP`).
 - **Fix**: Removed `wantedBy = [ "multi-user.target" ]` from
-  `systemd.services.nfcd` (matching upstream). Stopping `nfcd` on Hoki
-  immediately eliminated flashing both on battery and on the charger.
+  `systemd.services.nfcd` (matching upstream). Verified on a clean reboot of
+  `/nix/store/gj4cvsyqimx9vmwvddhwx75g0j17svzx-nixos-system-hoki-26.11pre-git`
+  (`4.14.216`, `nfcd=inactive`, `asteroid-launcher=active`): no flashing on
+  battery or on charger.
 - **Prior trials ruled out**: kernel `4.14.216` backports (tested on `4.14.206`),
   duplicate `composer@2.1-service`, `asteroid-launcher` / `WallClock` / HWC
   commits, `bg-wear` / `asteroid-seconddisplayd`, `underclock-hoki` (`lpm_levels`

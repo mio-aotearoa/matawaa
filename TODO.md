@@ -58,7 +58,7 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 ---
 
 ### 1.5a Fossil Hoki Ambient ~1 Hz Flash
-* **Open again, 2026-11-18:** Bright flashes roughly once per second still reported after deploying 4.14.216. See [the investigation record](docs/hoki-display.md#open-issue-periodic-bright-flashes-after-414216-deployment). The new report's cause is not confirmed.
+* **Resolved, 2026-11-22:** The 2026-11-18 ~1 Hz flashing report was caused by `nfcd.service` auto-starting (`wantedBy = [ "multi-user.target" ]`) and polling `pn544` in active display mode, unlike upstream (`SYSTEMD_AUTO_ENABLE = "disable"`). Fixed in `0040` and verified on a clean reboot on battery and charger. See [the investigation record](docs/hoki-display.md#resolved-issue-periodic-bright-flashes-1-hz-in-active-display-mode).
 * **Earlier mechanism:** `QPA_HWC2_FORCE_DOZE_UPDATE` briefly brings the panel to full ON for each ambient present; `WallClock.Second` (or sticky `QPA_HWC2_DOZE_UPDATE`) drove presents every second.
 * **Fix in tree:** default `FORCE_DOZE_UPDATE` + sticky `DOZE_UPDATE` clearer (`0048`); ambient `WallClock.Minute` (`0050`). Lipstick still wakes ambient once per minute.
 * **Verify on device:** compositor env has `FORCE_DOZE_UPDATE=1` and no `DOZE_UPDATE`; ambient face updates on the minute without flashing each second.
