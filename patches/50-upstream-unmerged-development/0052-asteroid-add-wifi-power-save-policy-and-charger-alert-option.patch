@@ -75,7 +75,7 @@ new file mode 100644
 index 00000000..ab150a05
 --- /dev/null
 +++ b/overlay/asteroidos/apps/settings-power-wifi-policy.patch
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,165 @@
 +diff --git a/src/qml/PowerPage.qml b/src/qml/PowerPage.qml
 +index a185f3f..1b0e745 100644
 +--- a/src/qml/PowerPage.qml
@@ -124,7 +124,7 @@ index 00000000..ab150a05
 +     ListModel {
 +         id: powerModel
 +         //% "Power Off"
-+@@ -35,26 +65,67 @@ Item {
++@@ -35,26 +65,66 @@ Item {
 +         ListElement { text: qsTrId("id-reboot-page"); icon: "ios-sync" }
 +         //% "Bootloader"
 +         ListElement { text: qsTrId("id-reboot-bootloader-page"); icon: "ios-bootloader-outline" }
@@ -174,8 +174,7 @@ index 00000000..ab150a05
 ++                visible: wifiPowerSaveConf.value
 ++                width: parent.width
 ++                //% "Wi-Fi idle timeout"
-++                title: qsTrId("id-wifi-idle-timeout")
-++                value: formatTimeout(wifiIdleTimeoutConf.value)
+++                title: qsTrId("id-wifi-idle-timeout") + ": " + formatTimeout(wifiIdleTimeoutConf.value)
 ++                iconName: "ios-timer-outline"
 ++                HighlightBar {
 ++                    onClicked: wifiIdleTimeoutConf.value = nextWifiTimeout(wifiIdleTimeoutConf.value)
