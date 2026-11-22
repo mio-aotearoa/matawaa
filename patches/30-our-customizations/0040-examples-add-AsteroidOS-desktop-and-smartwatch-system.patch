@@ -621,12 +621,12 @@ index 00000000..ad47f319
 +        };
 +      };
 +
-+      # Upstream meta-hoki IMAGE_INSTALL: nfcd + nfcd-binder-plugin + nfcd-mce-plugin.
++      # Upstream meta-asteroid nfcd_git.bb sets SYSTEMD_AUTO_ENABLE = "disable".
 +      # Provides org.sailfishos.nfc.daemon over D-Bus and talks to the Android
 +      # hardware.nxp.nfc@1.0 / android.hardware.nfc@1.1 HIDL HAL via libgbinder.
 +      systemd.services.nfcd = mkIf isLegacy {
 +        description = "NFC daemon";
-+        wantedBy = [ "multi-user.target" ];
++        # Disabled by default (matching upstream); PN544 polling flashes Hoki's AMOLED.
 +        requires = [ "dbus.service" ];
 +        after = [
 +          "dbus.service"

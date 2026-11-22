@@ -1,62 +1,32 @@
 # Hoki display and Extreme battery saver
 
-## Open issue: periodic bright flashes after 4.14.216 deployment
+## Resolved issue: periodic bright flashes (~1 Hz) in active display mode
 
-Recorded 2026-11-18: the user still sees a brighter flash roughly once per
-second. Cause unresolved; the existing minute-update workaround is not a
-verified fix for this report.
+Root cause identified and fixed on 2026-11-22:
 
-- Running image: `/nix/store/zg6vkq9hw91a41ipl5vcc2ih60dj37bq-nixos-system-hoki-26.11pre-git`.
-- Kernel and Wi-Fi module: 4.14.216. Boot ID: `ed47b743-9f2d-405b-9a56-f5ef439f707f`.
-- Compositor: zero restarts; no kernel oops found in the collected log.
-- Environment: `QPA_HWC2_FORCE_DOZE_UPDATE=1`; experimental `QPA_HWC2_DOZE_UPDATE` absent.
-- HWC logs show ambient presents switching briefly to ON, then DOZE_SUSPEND.
-  A fresh 18-second capture did not establish a repeating one-second transition.
-- Temporary `mcetool --unblank-screen` / `--blank-prevent` reached ON. Whether
-  that stops the visible flashing is unconfirmed. No permanent setting changed.
-- Wi-Fi disappeared intermittently while idle. Suspend stats recorded six
-  successes and eight failures, including wcnss-wlan failures. SensorFW repeatedly
-  failed `hw_get_module()` and restarted; its connection to flashing is unknown.
-
-Last SSH address: `root@192.168.8.183` over Wi-Fi.
-Logs: `/tmp/hoki-216-debug` on the development host (temporary). Previous boot
-image: `/var/lib/hoki-kernel-debug/pre-216-boot.img` on the watch.
-
-Updated 2026-11-20 (on `/nix/store/d5dy0gcr3dxgp67scy0m6d2zzn7ahfm4-nixos-system-hoki-26.11pre-git`):
-- **Where & when it happens**:
-  - **Charger plugged in**: **no flashing**.
-  - **On battery (`Discharging`)**: active Main UI (`ON` mode, watchface and
-    Settings) and late `bootanimation` (`~37s+`) flash bright ~1 Hz.
-  - **Always-On Display (`LPM_ON`, `DOZE_SUSPEND`)** and early `bootanimation`
-    (`0–37s`): **no flashing**.
-- **Ruled out**:
-  - `asteroid-launcher` / `WallClock` / QML / `qt6-qpa-hwcomposer-plugin` and
-    `composer@2.1-service` active commits (`SIGSTOP` on `asteroid-launcher` and
-    both `composer@2.1-service` instances did not stop flashing).
-  - `bg-wear` / Blackghost co-processor and `asteroid-seconddisplayd` (flashed
-    with `asteroid-seconddisplayd` masked and with `sidekickgraphics-hal-1-2`
-    disabled so `subsys4` stayed `OFFLINING`).
-  - `QPA_HWC_SYNC_BEFORE_SET=1`, `esd_check_enabled=N`,
-    `msm_cmd_autorefresh_en=1`, `te_tear_check_en=0`, and brightness level
-    (flashed at both 10% and 100%; `lcd-backlight/brightness` stayed steady).
-  - AP-side display/clock/bus activity while paused: `ftrace` (`mdss:*`,
-    `clk:*`, `regulator:*`, `i2c:*`, `spi:*`, `workqueue:*`) showed zero MDP
-    commits, `dsi0` clocks off, and zero display regulator/I2C/SPI events.
-- The active panel or its power supply on battery remains a hypothesis. The
-  traces do not measure the panel supply voltage or optical output.
-- On 2026-11-21, Hoki booted the system built from `5eb8ee6`. During an
-  18-second battery capture, sensorlogd stayed at 0% CPU. With the screen
-  held on and automatic brightness disabled, the user observed flashing on
-  battery and a steady screen on the charger at the same brightness setting.
-  Preventing deep CPU idle also failed to stop the flash (CPU0 C1 entries
-  stayed flat during a sampled battery interval). In a separate trial the
-  watch logged three consecutive discharging samples with ConnMan Wi-Fi
-  powered off, and the user again reported flashing until docking.
+- **Cause**: `nfcd.service` was auto-started via `wantedBy = [ "multi-user.target" ]`
+  in `examples/asteroid/asteroid-desktop.nix`, whereas upstream AsteroidOS
+  (`meta-asteroid/recipes-nemomobile/nfcd/nfcd_git.bb`) explicitly sets
+  `SYSTEMD_AUTO_ENABLE:${PN} = "disable"`.
+- With `nfcd` running, `nfcd-mce-plugin` powered on the `pn544` NFC controller
+  whenever MCE reported the display `ON` (and powered it off in AOD/`LPM_ON`).
+  PN544's autonomous ~1 Hz RF polling bursts caused the active AMOLED panel to
+  flash whenever battery/rail voltage was not held up by active charging (both
+  while discharging and after charge termination at `Full`), and explained why
+  flashing began at ~37s during boot (`nfcd` startup) and persisted even with
+  `asteroid-launcher` and `composer@2.1-service` paused (`SIGSTOP`).
+- **Fix**: Removed `wantedBy = [ "multi-user.target" ]` from
+  `systemd.services.nfcd` (matching upstream). Stopping `nfcd` on Hoki
+  immediately eliminated flashing both on battery and on the charger.
+- **Prior trials ruled out**: kernel `4.14.216` backports (tested on `4.14.206`),
+  duplicate `composer@2.1-service`, `asteroid-launcher` / `WallClock` / HWC
+  commits, `bg-wear` / `asteroid-seconddisplayd`, `underclock-hoki` (`lpm_levels`
+  and secondary cores), CPU frequency scaling, CPU0 deep idle, `wlan` module /
+  ConnMan, `esd_check_enabled`, `msm_cmd_autorefresh_en`, `te_tear_check_en`,
+  and brightness / auto-brightness settings.
 - **Side note**: `logcat` also showed two `android.hardware.graphics.composer@2.1-service`
   instances racing at boot (`android-hwcomposer.service` and Android `init`'s
-  `vendor.hwcomposer-2-1`).
-- A known-good software baseline on this same watch would distinguish a
-  regression from a fault that persists across systems.
+  `vendor.hwcomposer-2-1`), which is separate from the flashing issue.
 
 ## Normal ambient mode
 
