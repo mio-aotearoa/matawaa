@@ -4,53 +4,20 @@ Date: Mon, 9 Nov 2026 10:55:57 +1100
 Subject: [PATCH] examples: add AsteroidOS desktop and smartwatch system
 
 ---
- devices/fossil-hoki/mce-keep-aod.patch |  25 +
- examples/asteroid/asteroid-desktop.nix | 996 +++++++++++++++++++++++++
+ examples/asteroid/asteroid-desktop.nix | 994 +++++++++++++++++++++++++
  examples/asteroid/configuration.nix    |  43 ++
  examples/asteroid/default.nix          |  15 +
- 4 files changed, 1079 insertions(+)
- create mode 100644 devices/fossil-hoki/mce-keep-aod.patch
+ 3 files changed, 1052 insertions(+)
  create mode 100644 examples/asteroid/asteroid-desktop.nix
  create mode 100644 examples/asteroid/configuration.nix
  create mode 100644 examples/asteroid/default.nix
 
-diff --git a/devices/fossil-hoki/mce-keep-aod.patch b/devices/fossil-hoki/mce-keep-aod.patch
-new file mode 100644
-index 00000000..3c172f7a
---- /dev/null
-+++ b/devices/fossil-hoki/mce-keep-aod.patch
-@@ -0,0 +1,25 @@
-+From: Matawaa <noreply@localhost>
-+Subject: [PATCH] mce: let Hoki remain in AOD until woken
-+
-+Hoki has no proximity sensor to trigger an LPM_OFF -> LPM_ON transition.
-+Treat a negative LPM_ON timeout as disabled, and use that setting only for
-+Fossil Hoki so the display does not drop to a black panel after five seconds
-+in AOD. Other AsteroidOS devices retain the upstream five-second timeout.
-+
-+--- a/modules/display.h
-++++ b/modules/display.h
-+@@ -380 +380 @@
-+-# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   5
-++# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   -1
-+--- a/modules/display.c
-++++ b/modules/display.c
-+@@ -4310,2 +4310,9 @@ static void mdy_blanking_schedule_lpm_off(void)
-+     if( mdy_disp_never_blank )
-+         goto EXIT;
-++
-++    /* A negative timeout disables proximity blanking while in AOD. */
-++    if( timeout < 0 ) {
-++        mce_log(LL_DEBUG, "LPM-BLANK timer disabled");
-++        goto EXIT;
-++    }
-++
 diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid-desktop.nix
 new file mode 100644
 index 00000000..ad47f319
 --- /dev/null
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -0,0 +1,996 @@
+@@ -0,0 +1,994 @@
 +{
 +  config,
 +  lib,
@@ -71,12 +38,10 @@ index 00000000..ad47f319
 +
 +  isLegacy = config.mobile.hardware.watch.kernel != "modern";
 +
-+  # Fossil Hoki has no proximity sensor. Keep MCE in its low-power ON state
-+  # after entering AOD instead of timing out to a black LPM_OFF screen.
++  # Keep MCE proximity input uncovered on Hoki, which has no proximity sensor.
 +  mcePackage =
 +    if config.mobile.device.name == "fossil-hoki" then
 +      pkgs.asteroid.mce.overrideAttrs (old: {
-+        patches = (old.patches or [ ]) ++ [ ../../devices/fossil-hoki/mce-keep-aod.patch ];
 +        # Synthetic proximity samples can report CLOSED and block waking the
 +        # screen. Hoki has no proximity sensor; keep its MCE input uncovered.
 +        postInstall = (old.postInstall or "") + ''

@@ -10,16 +10,14 @@ Subject: [PATCH] asteroid: restore upstream launch cache and reuse recipe
  overlay/asteroidos/libconnman-qt/default.nix       |  109 +++---------------
  overlay/asteroidos/mapplauncherd-qt/default.nix    |   92 +++++++++++++++
  overlay/asteroidos/mce-qt6/default.nix             |   74 ++++--------
- overlay/asteroidos/mce/default.nix                 |    5 +
- .../0008-restore-upstream-ambient-timeouts.patch   |   16 +++
+ overlay/asteroidos/mce/default.nix                 |    1 +
  overlay/asteroidos/mlite/CMakeLists.txt            |  122 --------------------
  overlay/asteroidos/mlite/default.nix               |   44 ++++++-
  overlay/asteroidos/ngf-qt6/default.nix             |   80 +++++--------
  overlay/asteroidos/qml-asteroid/default.nix        |   78 +++----------
  .../0009-reject-negative-timeout-intervals.patch   |   64 ++++++++++
- 12 files changed, 321 insertions(+), 407 deletions(-)
+ 11 files changed, 301 insertions(+), 407 deletions(-)
  create mode 100644 overlay/asteroidos/mapplauncherd-qt/default.nix
- create mode 100644 overlay/asteroidos/mce/patches/0008-restore-upstream-ambient-timeouts.patch
  delete mode 100644 overlay/asteroidos/mlite/CMakeLists.txt
  create mode 100644 overlay/asteroidos/mce/patches/0009-reject-negative-timeout-intervals.patch
 
@@ -474,40 +472,14 @@ diff --git a/overlay/asteroidos/mce/default.nix b/overlay/asteroidos/mce/default
 index 00a69c32..129f9bfc 100644
 --- a/overlay/asteroidos/mce/default.nix
 +++ b/overlay/asteroidos/mce/default.nix
-@@ -58,6 +58,11 @@ stdenv.mkDerivation {
+@@ -58,6 +58,7 @@ stdenv.mkDerivation {
      "${metaAsteroidSrc}/recipes-nemomobile/mce/mce/0005-Ambient-Mode-Wait-for-compositor-when-sending-enable.patch"
      "${metaAsteroidSrc}/recipes-nemomobile/mce/mce/0006-Ambient-Mode-Exit-ambient-mode-when-touch-is-detecte.patch"
      "${metaAsteroidSrc}/recipes-nemomobile/mce/mce/0007-powerkey-Also-suspend-on-palm-reports.patch"
-+    # The ambient-mode patch changes these AsteroidOS upstream defaults from
-+    # five seconds to one. Restore upstream timing so LPM_ON does not immediately
-+    # fall through to a fully blank display on Hoki.
-+    ./patches/0008-restore-upstream-ambient-timeouts.patch
 +    ./patches/0009-reject-negative-timeout-intervals.patch
    ];
  
    postPatch = ''
-diff --git a/overlay/asteroidos/mce/patches/0008-restore-upstream-ambient-timeouts.patch b/overlay/asteroidos/mce/patches/0008-restore-upstream-ambient-timeouts.patch
-new file mode 100644
-index 00000000..4d19c9f1
---- /dev/null
-+++ b/overlay/asteroidos/mce/patches/0008-restore-upstream-ambient-timeouts.patch
-@@ -0,0 +1,16 @@
-+From: Matawaa <noreply@localhost>
-+Subject: [PATCH] mce: restore upstream ambient display timeouts
-+
-+AsteroidOS sets five seconds for both transitions around LPM_OFF. Its
-+ambient-mode patch reduces them to one second, which makes the Hoki display
-+drop out of ambient mode almost immediately after entering it. Keep the
-+upstream five-second interval.
-+
-+--- a/modules/display.h
-++++ b/modules/display.h
-+@@ -386 +386 @@
-+-# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   1
-++# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_ON_TIMEOUT   5
-+@@ -394 +394 @@
-+-# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_OFF_TIMEOUT  1
-++# define MCE_DEFAULT_DISPLAY_BLANK_FROM_LPM_OFF_TIMEOUT  5
 diff --git a/overlay/asteroidos/mlite/CMakeLists.txt b/overlay/asteroidos/mlite/CMakeLists.txt
 deleted file mode 100644
 index b82207f8..00000000
