@@ -90,27 +90,52 @@ int main(int argc, char **argv)
                 // 10-minute mid-sleep arousal (shorter than 60-min HDCZA gap merge -> stays inside SPT as WASO)
                 angleDeg = 30.0 * std::sin(ep * 0.9);
             } else {
-                // Quiet sleep: < 0.2 deg drift
-                angleDeg = 12.0 + 0.1 * std::sin(ep * 0.05);
+                // Quiet worn sleep: < 5 deg range over 5 min, with realistic subtle wrist micro-motion
+                // (> 50 mg range / > 13 mg SD over 60 min on >= 2 axes so van Hees 2013 distinguishes from table non-wear)
+                angleDeg = 12.0 + 1.6 * std::sin(ep * 0.015);
             }
             const double rad = angleDeg * M_PI / 180.0;
             const double scale = (ep % 2 == 0) ? 9.80665 : 1.0;
-            CHECK(det.addSample(sec, scale * std::cos(rad), 0.0, scale * std::sin(rad)));
+            const double yMicro = 0.03 * std::sin(ep * 0.23);
+            CHECK(det.addSample(sec, scale * std::cos(rad), scale * yMicro, scale * std::sin(rad)));
         }
         // Invalid, zero-vector, and reversed samples are rejected
         CHECK(!det.addSample(t0 + 8 * 3600, std::numeric_limits<double>::quiet_NaN(), 0.0, 9.8));
         CHECK(!det.addSample(t0 + 8 * 3600, 0.0, 0.0, 0.0));
         CHECK(!det.addSample(t0, 1.0, 0.0, 0.0));
         CHECK(det.invalidSampleCount() == 3);
+
+        // Non-mutating analyze() snapshot must not duplicate/mutate epochs when called mid-bucket
+        const qint64 epochsBeforeAnalyze = det.epochCount();
+        const SleepAnalysisResult snapRes = det.analyze();
+        CHECK(det.epochCount() == epochsBeforeAnalyze);
+        CHECK(snapRes.valid);
+
         det.flushCurrentEpoch();
 
         const SleepAnalysisResult res = det.analyze();
         CHECK(res.valid);
+        CHECK(res.nonWearMinutes == 0);
         CHECK(res.hdczaThreshold >= SleepDetector::kHdczaMinThreshold);
         CHECK(res.hdczaThreshold <= SleepDetector::kHdczaMaxThreshold);
         // Expected ~360 min sleep (two 3h blocks) and ~10 min awake inside SPT
         CHECK(res.sleepMinutes >= 340 && res.sleepMinutes <= 370);
         CHECK(res.awakeMinutes >= 5 && res.awakeMinutes <= 20);
+
+        // 3b. van Hees (2013) / GGIR non-wear: stationary watch on table for 8h (both m/s^2 and g units)
+        for (double scale : {9.80665, 1.0}) {
+            SleepDetector nwDet;
+            for (int ep = 0; ep < 8 * 720; ++ep) {
+                const qint64 sec = t0 + ep * 5;
+                // Flat stationary sensor with tiny sensor floor noise (< 1 mg)
+                const double noise = 0.0005 * std::sin(ep * 0.7);
+                CHECK(nwDet.addSample(sec, scale * (0.01 + noise), scale * (-0.01 - noise), scale * (1.0 + noise)));
+            }
+            const SleepAnalysisResult nwRes = nwDet.analyze();
+            CHECK(!nwRes.valid);
+            CHECK(nwRes.sleepMinutes == 0);
+            CHECK(nwRes.nonWearMinutes >= 420);
+        }
 
         // Write validated 2-field log and verify SleepDataLoader reads it cleanly
         QFile file(fileNameForDate(day, "sleepMonitor"));
