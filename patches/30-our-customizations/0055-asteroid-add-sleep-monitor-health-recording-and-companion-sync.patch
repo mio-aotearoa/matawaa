@@ -8,8 +8,8 @@ Subject: [PATCH] asteroid: add bounded health recording, manual history and
  examples/asteroid/asteroid-desktop.nix        |   14 +
  overlay/asteroidos/community-apps/default.nix |    8 +
  .../community-apps/health-sleep-monitor.patch |  951 ++++++++
- .../sensorlogd-sleep-monitor.patch            | 2154 +++++++++++++++++
- 4 files changed, 3127 insertions(+)
+ .../sensorlogd-sleep-monitor.patch            | 2184 +++++++++++++++++
+ 4 files changed, 3157 insertions(+)
  create mode 100644 overlay/asteroidos/community-apps/health-sleep-monitor.patch
  create mode 100644 overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
 
@@ -1040,7 +1040,7 @@ new file mode 100644
 index 00000000..ea3babe3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
-@@ -0,0 +1,2154 @@
+@@ -0,0 +1,2184 @@
 +diff --git a/common.cpp b/common.cpp
 +index 71524dc..e9f8f26 100644
 +--- a/common.cpp
@@ -1804,7 +1804,7 @@ index 00000000..ea3babe3
 ++        }
 ++    }
 ++
-++    std::vector<double> rollMed(N, 0.0);
+++    std::vector<double> rollMed(N, std::numeric_limits<double>::quiet_NaN());
 ++    std::vector<double> validRollMed;
 ++    validRollMed.reserve(N);
 ++    constexpr size_t kRollDiffs = static_cast<size_t>(kHdczaRollEpochs - 1);
@@ -2057,7 +2057,7 @@ index 00000000..ea3babe3
 +index 0000000..de3d371
 +--- /dev/null
 ++++ b/daemon/sensorPlugins/sleepMonitor.cpp
-+@@ -0,0 +1,175 @@
++@@ -0,0 +1,204 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -2076,6 +2076,15 @@ index 00000000..ea3babe3
 ++#include <QJsonObject>
 ++#include <QSaveFile>
 ++#include <QSettings>
+++#include <sys/timerfd.h>
+++#include <unistd.h>
+++
+++static qint64 bootMilliseconds()
+++{
+++    timespec now{};
+++    if (clock_gettime(CLOCK_BOOTTIME, &now) != 0) return -1;
+++    return now.tv_sec * qint64(1000) + now.tv_nsec / 1000000;
+++}
 ++
 ++SleepMonitorPlugin::SleepMonitorPlugin(QObject *parent, qint64 until)
 ++    : QObject(parent), m_until(until)
@@ -2084,7 +2093,6 @@ index 00000000..ea3babe3
 ++    m_sensor.setDataRate(5);
 ++    m_sensor.setAlwaysOn(true);
 ++    m_periodicAnalyze.setInterval(15 * 60 * 1000);
-++    m_deadline.setSingleShot(true);
 ++    m_firstSample.setSingleShot(true);
 ++    m_firstSample.setTimerType(Qt::PreciseTimer);
 ++
@@ -2097,9 +2105,6 @@ index 00000000..ea3babe3
 ++    });
 ++    connect(&m_firstSample, &QTimer::timeout, this, [this] {
 ++        finish(QStringLiteral("no-samples"));
-++    });
-++    connect(&m_deadline, &QTimer::timeout, this, [this] {
-++        finish(QStringLiteral("complete"));
 ++    });
 ++}
 ++
@@ -2119,7 +2124,21 @@ index 00000000..ea3babe3
 ++    }
 ++    m_started = true;
 ++    m_startSec = now;
-++    m_elapsed.start();
+++    m_startBootMs = bootMilliseconds();
+++    m_deadlineFd = timerfd_create(CLOCK_BOOTTIME, TFD_NONBLOCK | TFD_CLOEXEC);
+++    itimerspec deadline{};
+++    const qint64 endMs = m_startBootMs + remaining * 1000;
+++    deadline.it_value.tv_sec = endMs / 1000;
+++    deadline.it_value.tv_nsec = (endMs % 1000) * 1000000;
+++    if (m_startBootMs < 0 || m_deadlineFd < 0 ||
+++        timerfd_settime(m_deadlineFd, TFD_TIMER_ABSTIME, &deadline, nullptr) != 0) {
+++        finish(QStringLiteral("clock-unavailable"));
+++        return;
+++    }
+++    m_deadline = new QSocketNotifier(m_deadlineFd, QSocketNotifier::Read, this);
+++    connect(m_deadline, &QSocketNotifier::activated, this, [this] {
+++        finish(QStringLiteral("complete"));
+++    });
 ++    m_lastSampleSec = now;
 ++    m_detector.reset();
 ++    setupFilePath(QStringLiteral("sleepMonitor"));
@@ -2128,7 +2147,6 @@ index 00000000..ea3babe3
 ++    settings.remove("sleepCapture/lastError");
 ++
 ++    persistAnalysis(QStringLiteral("recording"));
-++    m_deadline.start(static_cast<int>(remaining * 1000));
 ++    m_firstSample.start(10000);
 ++    m_periodicAnalyze.start();
 ++    // BackgroundActivity holds MCE's CPU wakelock only during this explicit session.
@@ -2138,10 +2156,17 @@ index 00000000..ea3babe3
 ++void SleepMonitorPlugin::sample()
 ++{
 ++    if (const auto *r = m_sensor.reading()) {
-++        // Monotonic offset from session start prevents NTP/CTS wall-clock jumps from dropping samples.
-++        const qint64 nowSec = m_elapsed.isValid()
-++            ? (m_startSec + m_elapsed.elapsed() / 1000)
-++            : QDateTime::currentSecsSinceEpoch();
+++        if (!m_deadline || !m_deadline->isEnabled()) return;
+++        const qint64 nowMs = bootMilliseconds();
+++        if (nowMs < m_startBootMs) {
+++            finish(QStringLiteral("clock-unavailable"));
+++            return;
+++        }
+++        const qint64 nowSec = m_startSec + (nowMs - m_startBootMs) / 1000;
+++        if (nowSec >= m_until) {
+++            finish(QStringLiteral("complete"));
+++            return;
+++        }
 ++        if (m_detector.addSample(nowSec, r->x(), r->y(), r->z())) {
 ++            m_lastSampleSec = nowSec;
 ++            m_firstSample.start(10000);
@@ -2214,7 +2239,11 @@ index 00000000..ea3babe3
 ++void SleepMonitorPlugin::finish(const QString &status, bool clearSetting)
 ++{
 ++    m_periodicAnalyze.stop();
-++    m_deadline.stop();
+++    if (m_deadline) m_deadline->setEnabled(false);
+++    if (m_deadlineFd >= 0) {
+++        close(m_deadlineFd);
+++        m_deadlineFd = -1;
+++    }
 ++    m_firstSample.stop();
 ++    m_sensor.stop();
 ++    m_activity.stop();
@@ -2238,11 +2267,11 @@ index 00000000..ea3babe3
 +index 0000000..22dfdd2
 +--- /dev/null
 ++++ b/daemon/sensorPlugins/sleepMonitor.h
-+@@ -0,0 +1,42 @@
++@@ -0,0 +1,43 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++#pragma once
 ++
-++#include <QElapsedTimer>
+++#include <QSocketNotifier>
 ++#include <QObject>
 ++#include <QTimer>
 ++#include <QtSensors/QAccelerometer>
@@ -2273,9 +2302,10 @@ index 00000000..ea3babe3
 ++    BackgroundActivity m_activity;
 ++    SleepDetector m_detector;
 ++    QTimer m_periodicAnalyze;
-++    QTimer m_deadline;
+++    QSocketNotifier *m_deadline = nullptr;
+++    int m_deadlineFd = -1;
 ++    QTimer m_firstSample;
-++    QElapsedTimer m_elapsed;
+++    qint64 m_startBootMs = 0;
 ++    qint64 m_until;
 ++    qint64 m_startSec = 0;
 ++    qint64 m_lastSampleSec = 0;

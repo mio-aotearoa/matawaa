@@ -136,6 +136,20 @@ int main(int argc, char **argv)
         CHECK(sparseNonWear.epochCount() == 720);
         CHECK(sparseNonWear.analyze().nonWearMinutes == 0);
 
+        // Isolated readings on either side of a well-observed hour must leave
+        // both sleep-window boundaries at the edges of that hour.
+        SleepDetector gapped;
+        for (int ep = 0; ep < 2160; ++ep) {
+            const bool continuous = ep >= 720 && ep < 1440;
+            if (continuous || ep % 73 == 0) {
+                gapped.addEpoch(t0 + ep * 5, continuous ? 12.0 : 30.0 * std::sin(ep));
+            }
+        }
+        const auto gappedResult = gapped.analyze();
+        CHECK(gappedResult.valid);
+        CHECK(gappedResult.sptStartSec == t0 + 3600);
+        CHECK(gappedResult.sptEndSec == t0 + 7200);
+
         SleepDetector interrupted;
         const qint64 sparseMinute = t0 + 4 * 3600;
         for (int ep = 0; ep < 8 * 720; ++ep) {
