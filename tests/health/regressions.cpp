@@ -10,6 +10,7 @@
 #include <limits>
 
 #include "common.h"
+#include "daemon/sleepWindow.h"
 #include "daemon/sensorPlugins/sleepDetector.h"
 #include "qmlplugin/loggerSettings.h"
 #include "qmlplugin/periodDataLoader.h"
@@ -35,6 +36,25 @@ int main(int argc, char **argv)
     settings.setValue("sleepMonitor/enabled", true);
     settings.sync();
     LoggerSettings recordingSettings;
+    CHECK(recordingSettings.nightlyEnabled());
+    CHECK(recordingSettings.sleepStart() == "22:00");
+    CHECK(recordingSettings.sleepEnd() == "10:00");
+    CHECK(!recordingSettings.saveSleepSchedule(true, "25:00", "10:00"));
+    CHECK(!recordingSettings.saveSleepSchedule(true, "22:00", "22:00"));
+    CHECK(recordingSettings.saveSleepSchedule(false, "23:15", "09:45"));
+    CHECK(!recordingSettings.nightlyEnabled());
+    CHECK(recordingSettings.sleepEnd() == "09:45");
+
+    const QTimeZone zone("Australia/Sydney");
+    for (const auto date : {QDate(2026, 4, 5), QDate(2026, 10, 4)}) {
+        const QDateTime morning(date, QTime(8, 0), zone);
+        const auto night = SleepWindow::currentOrNext(morning, QTime(22, 0), QTime(10, 0));
+        CHECK(night.start.date() == date.addDays(-1));
+        CHECK(night.end == QDateTime(date, QTime(10, 0), zone));
+        CHECK(night.start.secsTo(night.end) == (date.month() == 4 ? 13 : 11) * 3600);
+        CHECK(SleepWindow::currentOrNext(night.end, QTime(22, 0), QTime(10, 0)).start.date() == date);
+        CHECK(SleepWindow::currentOrNext(night.start, QTime(22, 0), QTime(10, 0)).start == night.start);
+    }
     CHECK(!recordingSettings.getSleepMonitorEnabled());
     recordingSettings.setSleepMonitorEnabled(true);
     CHECK(recordingSettings.getSleepMonitorEnabled());
@@ -73,6 +93,18 @@ int main(int argc, char **argv)
     settings.setValue("sleepMonitor/interval", 600000);
     settings.sync();
     CHECK(legacy == loader.getSleepSummary(day).toMap());
+
+    // Awake observations at the edges are outside the estimated sleep times.
+    {
+        QFile file(fileNameForDate(day, "sleepMonitor"));
+        CHECK(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QTextStream out(&file);
+        out << dayBaseSec << ":0\n" << dayBaseSec + 60 << ":1\n"
+            << dayBaseSec + 120 << ":1\n" << dayBaseSec + 180 << ":0\n";
+    }
+    const auto observed = loader.getSleepSummary(day).toMap();
+    CHECK(observed["onsetSec"].toLongLong() == dayBaseSec + 60);
+    CHECK(observed["wakeSec"].toLongLong() == dayBaseSec + 180);
 
     // 3. van Hees (2015, 2018) / GGIR SleepDetector:
     //    Synthetic 8-hour recording: 1h active -> 3h still sleep -> 10m awake arousal -> 3h still sleep -> 50m active

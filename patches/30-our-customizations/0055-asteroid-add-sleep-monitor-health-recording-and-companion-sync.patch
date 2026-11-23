@@ -7,9 +7,9 @@ Subject: [PATCH] asteroid: add bounded health recording, manual history and
 ---
  examples/asteroid/asteroid-desktop.nix        |   14 +
  overlay/asteroidos/community-apps/default.nix |    8 +
- .../community-apps/health-sleep-monitor.patch |  956 ++++++++
- .../sensorlogd-sleep-monitor.patch            | 2192 +++++++++++++++++
- 4 files changed, 3170 insertions(+)
+ .../community-apps/health-sleep-monitor.patch |  1002 ++++++++
+ .../sensorlogd-sleep-monitor.patch            | 2300 +++++++++++++++++
+ 4 files changed, 3324 insertions(+)
  create mode 100644 overlay/asteroidos/community-apps/health-sleep-monitor.patch
  create mode 100644 overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
 
@@ -83,7 +83,7 @@ new file mode 100644
 index 00000000..280194b3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/health-sleep-monitor.patch
-@@ -0,0 +1,956 @@
+@@ -0,0 +1,1002 @@
 +diff --git a/i18n/asteroid-health.de.ts b/i18n/asteroid-health.de.ts
 +index 983a422..d2bbc1a 100644
 +--- a/i18n/asteroid-health.de.ts
@@ -817,12 +817,13 @@ index 00000000..280194b3
 +         key: "/org/asteroidos/health/ui/weight/showpreview"
 +diff --git a/src/sleep/SleepDetailPage.qml b/src/sleep/SleepDetailPage.qml
 +new file mode 100644
-+index 0000000..e6a19b0
++index 0000000..61bf69c
 +--- /dev/null
 ++++ b/src/sleep/SleepDetailPage.qml
-+@@ -0,0 +1,152 @@
++@@ -0,0 +1,198 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++import QtQuick
+++import QtQuick.Controls as Controls
 ++import org.asteroid.controls
 ++import org.asteroid.sensorlogd
 ++
@@ -904,14 +905,13 @@ index 00000000..280194b3
 ++                wrapMode: Text.WordWrap
 ++                font.pixelSize: app.height * 0.048
 ++                color: "#B0BEC5"
-++                text: formatEpochTime(summary.onsetSec) + " → " + formatEpochTime(summary.wakeSec)
+++                text: qsTr("Estimated sleep: %1–%2").arg(formatEpochTime(summary.onsetSec)).arg(formatEpochTime(summary.wakeSec))
 ++                      + (summary.awakeMinutes > 0 ? (" · " + summary.awakeMinutes + "m awake") : "")
 ++            }
 ++            Label {
 ++                width: parent.width
 ++                wrapMode: Text.WordWrap
-++                //% "Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery."
-++                text: qsTrId("id-motion-recording-explanation")
+++                text: qsTr("Motion estimates sleep within the recording window. Sleep may begin earlier or end later. Recording uses more battery.")
 ++                font.pixelSize: app.height * 0.045
 ++            }
 ++            Label {
@@ -933,7 +933,53 @@ index 00000000..280194b3
 ++            LabeledSwitch {
 ++                width: parent.width
 ++                height: app.height * 0.25
-++                text: qsTrId("id-motion-recording")
+++                text: qsTr("Nightly recording")
+++                checked: settings.nightlyEnabled()
+++                onClicked: {
+++                    settings.saveSleepSchedule(!settings.nightlyEnabled(), settings.sleepStart(), settings.sleepEnd())
+++                    checked = settings.nightlyEnabled()
+++                    root.refresh()
+++                }
+++            }
+++            Label { text: qsTr("Recording window (24-hour)") }
+++            Row {
+++                width: parent.width
+++                Controls.TextField {
+++                    id: startTime
+++                    width: parent.width * 0.37
+++                    text: settings.sleepStart()
+++                    inputMask: "99:99"
+++                    inputMethodHints: Qt.ImhDigitsOnly
+++                    Accessible.name: qsTr("Recording start")
+++                }
+++                Controls.TextField {
+++                    id: endTime
+++                    width: parent.width * 0.37
+++                    text: settings.sleepEnd()
+++                    inputMask: "99:99"
+++                    inputMethodHints: Qt.ImhDigitsOnly
+++                    Accessible.name: qsTr("Recording end")
+++                }
+++                IconButton {
+++                    iconName: "ios-checkmark"
+++                    width: parent.width * 0.26
+++                    onClicked: {
+++                        errorLabel.visible = !settings.saveSleepSchedule(settings.nightlyEnabled(), startTime.text, endTime.text)
+++                        root.refresh()
+++                    }
+++                }
+++            }
+++            Label {
+++                id: errorLabel
+++                visible: false
+++                width: parent.width
+++                wrapMode: Text.WordWrap
+++                text: qsTr("Enter two different times from 00:00 to 23:59.")
+++            }
+++            LabeledSwitch {
+++                width: parent.width
+++                height: app.height * 0.25
+++                text: qsTr("Record now")
 ++                checked: !!summary.captureEnabled
 ++                onClicked: {
 ++                    settings.sleepMonitorEnabled = !summary.captureEnabled;
@@ -1045,7 +1091,7 @@ new file mode 100644
 index 00000000..ea3babe3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
-@@ -0,0 +1,2192 @@
+@@ -0,0 +1,2300 @@
 +diff --git a/common.cpp b/common.cpp
 +index 71524dc..e9f8f26 100644
 +--- a/common.cpp
@@ -1105,10 +1151,10 @@ index 00000000..ea3babe3
 + install(
 +     FILES systemd/asteroid-sensorlogd.service
 +diff --git a/daemon/logger.cpp b/daemon/logger.cpp
-+index e9fefdb..c131349 100644
++index e9fefdb..a1b00d7 100644
 +--- a/daemon/logger.cpp
 ++++ b/daemon/logger.cpp
-+@@ -18,6 +18,11 @@
++@@ -18,24 +18,41 @@
 + #include <QTimer>
 + #include <QDebug>
 + #include <QStandardPaths>
@@ -1119,8 +1165,9 @@ index 00000000..ea3babe3
 ++#include <QMap>
 + 
 + #include "logger.h"
+++#include "sleepWindow.h"
 + #include "../common.h"
-+@@ -25,31 +30,46 @@
++
 + #include "sensorPlugins/stepCounter.h"
 + #include "sensorPlugins/heartrateSensor.h"
 + #include "sensorPlugins/barometerSensor.h"
@@ -1133,6 +1180,7 @@ index 00000000..ea3babe3
 ++    m_iface = new QDBusInterface("com.nokia.mce", "/com/nokia/mce/signal", "com.nokia.mce.signal", QDBusConnection::systemBus(), this);
 ++    settings = new QSettings(this);
 ++    connect(m_iface, SIGNAL(display_status_ind(QString)), this, SLOT(displayOn(QString)));
+++    connect(&sleepSchedule, &BackgroundActivity::running, this, &Logger::updateSleep);
 +     this->setup();
 + }
 + 
@@ -1140,8 +1188,6 @@ index 00000000..ea3babe3
 +-    m_iface = new QDBusInterface("com.nokia.mce","/com/nokia/mce/signal", "com.nokia.mce.signal", QDBusConnection::systemBus());
 +-    settings = new QSettings;
 ++    // QObject ownership also tears down each plugin's timers and sensor subscriptions.
-++    delete m_sleepMonitor;
-++    m_sleepMonitor = nullptr;
 ++    delete m_heartrateSensor;
 ++    m_heartrateSensor = nullptr;
 ++    delete m_stepCounter;
@@ -1152,10 +1198,7 @@ index 00000000..ea3babe3
 +     daemonFresh = getDaemonFresh();
 + 
 +     heartrateSensorEnabled = this->settings->value("heartrateSensor/enabled",true).toBool();
-+     stepCounterEnabled = this->settings->value("stepCounter/enabled",true).toBool();
-+     barometerEnabled = this->settings->value("barometer/enabled",true).toBool();
-++    sleepMonitorEnabled = this->settings->value("sleepCapture/enabled",false).toBool() && settings->value("sleepCapture/until", 0).toLongLong() > QDateTime::currentSecsSinceEpoch();
-+ 
++@@ -45,11 +62,13 @@ void Logger::setup() {
 + //intialise HRM
 +     if (heartrateSensorEnabled) {
 +         m_heartrateSensor = new HeartrateSensorPlugin(this,settings->value("heartrateSensor/interval",600000).toInt());
@@ -1169,15 +1212,11 @@ index 00000000..ea3babe3
 +     }
 + 
 + //initialise barometer
-+@@ -57,13 +77,16 @@ void Logger::setup() {
++@@ -57,13 +76,12 @@ void Logger::setup() {
 +         m_barometerSensor = new BarometerSensorPlugin(this,settings->value("barometer/interval",600000).toInt());
 +     }
 + 
-++//initialise sleep monitor
-++    if (sleepMonitorEnabled) {
-++        m_sleepMonitor = new SleepMonitorPlugin(this, settings->value("sleepCapture/until").toLongLong());
-++        connect(m_sleepMonitor, &SleepMonitorPlugin::recordWritten, this, &Logger::syncHealthSummary);
-++    }
+++    updateSleep();
 ++
 +     if(!m_iface->isValid()) {
 + 	    qDebug() << "interface is not valid";
@@ -1189,7 +1228,7 @@ index 00000000..ea3babe3
 +     qDebug() << "sensorlogd setup complete";
 +     this->triggerRecording();
 + }
-+@@ -89,6 +112,10 @@ void Logger::displayOn(QString displayState) {
++@@ -89,6 +107,10 @@ void Logger::displayOn(QString displayState) {
 +     if (barometerEnabled) {
 +         m_barometerSensor->timeUpdate();
 +     }
@@ -1200,12 +1239,59 @@ index 00000000..ea3babe3
 + }
 + 
 + void Logger::triggerRecording() {
-+@@ -103,6 +130,101 @@ void Logger::triggerRecording() {
++@@ -103,6 +125,148 @@ void Logger::triggerRecording() {
 +     if (barometerEnabled) {
 +         m_barometerSensor->triggerRecording();
 +     }
 ++
 ++    if (sleepMonitorEnabled && m_sleepMonitor) {
+++        m_sleepMonitor->triggerRecording();
+++    }
+++}
+++
+++void Logger::updateSleep() {
+++    settings->sync();
+++    sleepSchedule.stop();
+++    const QDateTime now = QDateTime::currentDateTime();
+++    const QTime from = QTime::fromString(settings->value("sleepSchedule/start", "22:00").toString(), "HH:mm");
+++    const QTime to = QTime::fromString(settings->value("sleepSchedule/end", "10:00").toString(), "HH:mm");
+++    qint64 owned = settings->value("sleepSchedule/ownedUntil", 0).toLongLong();
+++    qint64 until = settings->value("sleepCapture/until", 0).toLongLong();
+++    bool active = settings->value("sleepCapture/enabled", false).toBool() && until > now.toSecsSinceEpoch();
+++    qint64 scheduledEnd = 0;
+++    if (settings->value("sleepSchedule/enabled", true).toBool() && from.isValid() && to.isValid() && from != to) {
+++        const auto window = SleepWindow::currentOrNext(now, from, to);
+++        const bool inside = now >= window.start && now < window.end;
+++        if (inside) scheduledEnd = window.end.toSecsSinceEpoch();
+++        // libkeepalive schedules through the system wakeup service even when suspended.
+++        const int delay = qMax<qint64>(1, now.secsTo(inside ? window.end : window.start));
+++        sleepSchedule.wait(delay, delay + 1);
+++    }
+++    if (owned && until == owned && owned != scheduledEnd) {
+++        active = false;
+++        until = 0;
+++    }
+++    if (scheduledEnd && scheduledEnd != settings->value("sleepSchedule/attemptedUntil", 0).toLongLong()) {
+++        settings->setValue("sleepSchedule/attemptedUntil", scheduledEnd);
+++        if (!active || until < scheduledEnd || until == owned) {
+++            active = true;
+++            until = scheduledEnd;
+++            owned = until;
+++        }
+++    }
+++    settings->setValue("sleepSchedule/ownedUntil", active && until == owned ? owned : 0);
+++    settings->setValue("sleepCapture/enabled", active);
+++    settings->setValue("sleepCapture/until", active ? until : 0);
+++    settings->sync();
+++    sleepMonitorEnabled = active;
+++    if (!active || until != captureDeadline) {
+++        delete m_sleepMonitor;
+++        m_sleepMonitor = nullptr;
+++    }
+++    captureDeadline = active ? until : 0;
+++    if (active && !m_sleepMonitor) {
+++        m_sleepMonitor = new SleepMonitorPlugin(this, until);
+++        connect(m_sleepMonitor, &SleepMonitorPlugin::recordWritten, this, &Logger::syncHealthSummary);
 ++        m_sleepMonitor->triggerRecording();
 ++    }
 ++}
@@ -1303,10 +1389,16 @@ index 00000000..ea3babe3
 + 
 + bool Logger::getDaemonFresh() {
 +diff --git a/daemon/logger.h b/daemon/logger.h
-+index 69affda..cbb3427 100644
++index 69affda..ebd3b0f 100644
 +--- a/daemon/logger.h
 ++++ b/daemon/logger.h
-+@@ -23,6 +23,7 @@
++@@ -18,11 +18,13 @@
++ #include <QTimer>
++ #include <QString>
++ #include <QSettings>
+++#include <keepalive/backgroundactivity.h>
++ #include <QDBusAbstractAdaptor>
++
 + #include "sensorPlugins/stepCounter.h"
 + #include "sensorPlugins/heartrateSensor.h"
 + #include "sensorPlugins/barometerSensor.h"
@@ -1314,7 +1406,7 @@ index 00000000..ea3babe3
 + 
 + class Logger : public QObject
 + {
-+@@ -36,17 +37,20 @@ public slots:
++@@ -36,17 +38,23 @@ public slots:
 +     void triggerRecording();
 + private slots:
 +     void displayOn(QString displayState);
@@ -1332,6 +1424,9 @@ index 00000000..ea3babe3
 +     bool barometerEnabled = false;
 +-    BarometerSensorPlugin *m_barometerSensor;
 ++    BarometerSensorPlugin *m_barometerSensor = nullptr;
+++    void updateSleep();
+++    BackgroundActivity sleepSchedule;
+++    qint64 captureDeadline = 0;
 ++    bool sleepMonitorEnabled = false;
 ++    SleepMonitorPlugin *m_sleepMonitor = nullptr;
 +     bool daemonFresh;
@@ -2059,7 +2154,7 @@ index 00000000..ea3babe3
 ++};
 +diff --git a/daemon/sensorPlugins/sleepMonitor.cpp b/daemon/sensorPlugins/sleepMonitor.cpp
 +new file mode 100644
-+index 0000000..de3d371
++index 0000000..ea2bc38
 +--- /dev/null
 ++++ b/daemon/sensorPlugins/sleepMonitor.cpp
 +@@ -0,0 +1,212 @@
@@ -2131,7 +2226,7 @@ index 00000000..ea3babe3
 ++    if (m_started) return;
 ++    const qint64 now = QDateTime::currentSecsSinceEpoch();
 ++    const qint64 remaining = m_until - now;
-++    if (remaining <= 0 || remaining > 12 * 3600) {
+++    if (remaining <= 0 || remaining > 25 * 3600) {
 ++        finish(QStringLiteral("expired"));
 ++        return;
 ++    }
@@ -2456,7 +2551,7 @@ index 00000000..ea3babe3
 +     URI org.asteroid.sensorlogd
 +     VERSION 1.0
 +diff --git a/qmlplugin/loggerSettings.cpp b/qmlplugin/loggerSettings.cpp
-+index d7849c5..8ae05e7 100644
++index d7849c5..1e3d928 100644
 +--- a/qmlplugin/loggerSettings.cpp
 ++++ b/qmlplugin/loggerSettings.cpp
 +@@ -9,13 +9,14 @@
@@ -2483,7 +2578,7 @@ index 00000000..ea3babe3
 +     m_iface->call("resetup");
 + }
 + 
-+@@ -86,3 +88,16 @@ void LoggerSettings::setStepGoalTarget(int value)
++@@ -86,3 +88,41 @@ void LoggerSettings::setStepGoalTarget(int value)
 + {
 +     this->m_settings->setValue("stepCounter/goal0/target", value);
 + }
@@ -2500,8 +2595,33 @@ index 00000000..ea3babe3
 ++    m_settings->setValue("sleepCapture/enabled", value);
 ++    m_settings->setValue("sleepCapture/until", value ? QDateTime::currentSecsSinceEpoch() + 8 * 3600 : 0);
 ++}
+++
+++QString LoggerSettings::sleepStart() const {
+++    return m_settings->value("sleepSchedule/start", "22:00").toString();
+++}
+++
+++QString LoggerSettings::sleepEnd() const {
+++    return m_settings->value("sleepSchedule/end", "10:00").toString();
+++}
+++
+++bool LoggerSettings::nightlyEnabled() const {
+++    return m_settings->value("sleepSchedule/enabled", true).toBool();
+++}
+++
+++bool LoggerSettings::saveSleepSchedule(bool enabled, QString start, QString end) {
+++    if (!QTime::fromString(start, "HH:mm").isValid() || !QTime::fromString(end, "HH:mm").isValid() || start == end)
+++        return false;
+++    if (enabled != nightlyEnabled() || start != sleepStart() || end != sleepEnd()) {
+++        m_settings->remove("sleepSchedule/attemptedUntil");
+++        m_settings->setValue("sleepSchedule/enabled", enabled);
+++        m_settings->setValue("sleepSchedule/start", start);
+++        m_settings->setValue("sleepSchedule/end", end);
+++        reInitLogger();
+++    }
+++    return true;
+++}
 +diff --git a/qmlplugin/loggerSettings.h b/qmlplugin/loggerSettings.h
-+index 6649756..e33285f 100644
++index 6649756..7060078 100644
 +--- a/qmlplugin/loggerSettings.h
 ++++ b/qmlplugin/loggerSettings.h
 +@@ -26,6 +26,8 @@ class LoggerSettings : public QObject {
@@ -2513,10 +2633,14 @@ index 00000000..ea3babe3
 + public:
 +     explicit LoggerSettings();
 + 
-+@@ -46,6 +48,9 @@ public slots:
++@@ -46,6 +48,13 @@ public slots:
 +     int getStepGoalTarget();
 +     void setStepGoalTarget(int value);
 + 
+++    QString sleepStart() const;
+++    QString sleepEnd() const;
+++    bool nightlyEnabled() const;
+++    bool saveSleepSchedule(bool enabled, QString start, QString end);
 ++    bool getSleepMonitorEnabled();
 ++    void setSleepMonitorEnabled(bool value);
 ++
@@ -3045,7 +3169,7 @@ index 00000000..ea3babe3
 + }
 +diff --git a/qmlplugin/sleepDataLoader.cpp b/qmlplugin/sleepDataLoader.cpp
 +new file mode 100644
-+index 0000000..6975bfc
++index 0000000..e6bd348
 +--- /dev/null
 ++++ b/qmlplugin/sleepDataLoader.cpp
 +@@ -0,0 +1,144 @@
@@ -3127,9 +3251,9 @@ index 00000000..ea3babe3
 ++        }
 ++        const qint64 ts = m.value(QStringLiteral("timestamp")).toLongLong();
 ++        const int state = m.value(QStringLiteral("state")).toInt();
-++        if (onsetSec == 0 || ts < onsetSec) onsetSec = ts;
-++        if (ts + 60 > wakeSec) wakeSec = ts + 60;
 ++        if (state == 1) {
+++            if (onsetSec == 0 || ts < onsetSec) onsetSec = ts;
+++            if (ts + 60 > wakeSec) wakeSec = ts + 60;
 ++            ++sleepMinutes;
 ++        } else if (state == 0) {
 ++            ++awakeMinutes;
@@ -3238,6 +3362,36 @@ index 00000000..ea3babe3
 ++};
 ++
 ++#endif // SLEEPDATALOADER_H
++diff --git a/daemon/sleepWindow.h b/daemon/sleepWindow.h
++new file mode 100644
++index 0000000..8b2eb75
++--- /dev/null
+++++ b/daemon/sleepWindow.h
++@@ -0,0 +1,24 @@
+++// SPDX-License-Identifier: GPL-3.0-or-later
+++#pragma once
+++
+++#include <QDateTime>
+++#include <QTimeZone>
+++
+++// A half-open interval in watch-local civil time. Construct both dates separately
+++// so the saved end time also applies on daylight-saving transition nights.
+++struct SleepWindow {
+++    QDateTime start;
+++    QDateTime end;
+++
+++    static SleepWindow currentOrNext(QDateTime now, QTime from, QTime to) {
+++        QDate day = now.date();
+++        if (now.time() < from) day = day.addDays(-1);
+++        auto windowFor = [&](QDate date) -> SleepWindow {
+++            return {QDateTime(date, from, now.timeZone()),
+++                    QDateTime(date.addDays(to <= from ? 1 : 0), to, now.timeZone())};
+++        };
+++        SleepWindow window = windowFor(day);
+++        if (now >= window.end) window = windowFor(day.addDays(1));
+++        return window;
+++    }
+++};
 -- 
 2.56.0
 
