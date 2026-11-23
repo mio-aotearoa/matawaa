@@ -7,9 +7,9 @@ Subject: [PATCH] asteroid: add bounded health recording, manual history and
 ---
  examples/asteroid/asteroid-desktop.nix        |   14 +
  overlay/asteroidos/community-apps/default.nix |    8 +
- .../community-apps/health-sleep-monitor.patch |  951 ++++++++
+ .../community-apps/health-sleep-monitor.patch |  956 ++++++++
  .../sensorlogd-sleep-monitor.patch            | 2192 +++++++++++++++++
- 4 files changed, 3165 insertions(+)
+ 4 files changed, 3170 insertions(+)
  create mode 100644 overlay/asteroidos/community-apps/health-sleep-monitor.patch
  create mode 100644 overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
 
@@ -83,7 +83,7 @@ new file mode 100644
 index 00000000..280194b3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/health-sleep-monitor.patch
-@@ -0,0 +1,951 @@
+@@ -0,0 +1,956 @@
 +diff --git a/i18n/asteroid-health.de.ts b/i18n/asteroid-health.de.ts
 +index 983a422..d2bbc1a 100644
 +--- a/i18n/asteroid-health.de.ts
@@ -96,7 +96,7 @@ index 00000000..280194b3
 ++<message id="id-motion-recording"><source>Recording motion</source><translation>Recording motion</translation></message>
 ++<message id="id-no-motion-recordings"><source>No motion recordings</source><translation>No motion recordings</translation></message>
 ++<message id="id-recorded-minutes"><source>%1 minutes of motion recorded</source><translation>%1 minutes of motion recorded</translation></message>
-++<message id="id-motion-recording-explanation"><source>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</source><translation>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</translation></message>
+++<message id="id-motion-recording-explanation"><source>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</source><translation>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</translation></message>
 ++<message id="id-motion-gaps"><source>Interrupted motion data; analysis may be unavailable.</source><translation>Interrupted motion data; analysis may be unavailable.</translation></message>
 ++<message id="id-period-save-error"><source>Could not save period history</source><translation>Could not save period history</translation></message>
 ++<message id="id-motion-recording-error"><source>Motion recording failed. Check the sensor and free storage.</source><translation>Motion recording failed. Check the sensor and free storage.</translation></message>
@@ -115,7 +115,7 @@ index 00000000..280194b3
 ++<message id="id-motion-recording"><source>Recording motion</source><translation>Recording motion</translation></message>
 ++<message id="id-no-motion-recordings"><source>No motion recordings</source><translation>No motion recordings</translation></message>
 ++<message id="id-recorded-minutes"><source>%1 minutes of motion recorded</source><translation>%1 minutes of motion recorded</translation></message>
-++<message id="id-motion-recording-explanation"><source>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</source><translation>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</translation></message>
+++<message id="id-motion-recording-explanation"><source>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</source><translation>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</translation></message>
 ++<message id="id-motion-gaps"><source>Interrupted motion data; analysis may be unavailable.</source><translation>Interrupted motion data; analysis may be unavailable.</translation></message>
 ++<message id="id-period-save-error"><source>Could not save period history</source><translation>Could not save period history</translation></message>
 ++<message id="id-motion-recording-error"><source>Motion recording failed. Check the sensor and free storage.</source><translation>Motion recording failed. Check the sensor and free storage.</translation></message>
@@ -134,7 +134,7 @@ index 00000000..280194b3
 ++<message id="id-motion-recording"><source>Recording motion</source><translation>Recording motion</translation></message>
 ++<message id="id-no-motion-recordings"><source>No motion recordings</source><translation>No motion recordings</translation></message>
 ++<message id="id-recorded-minutes"><source>%1 minutes of motion recorded</source><translation>%1 minutes of motion recorded</translation></message>
-++<message id="id-motion-recording-explanation"><source>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</source><translation>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</translation></message>
+++<message id="id-motion-recording-explanation"><source>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</source><translation>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</translation></message>
 ++<message id="id-motion-gaps"><source>Interrupted motion data; analysis may be unavailable.</source><translation>Interrupted motion data; analysis may be unavailable.</translation></message>
 ++<message id="id-period-save-error"><source>Could not save period history</source><translation>Could not save period history</translation></message>
 ++<message id="id-motion-recording-error"><source>Motion recording failed. Check the sensor and free storage.</source><translation>Motion recording failed. Check the sensor and free storage.</translation></message>
@@ -153,7 +153,7 @@ index 00000000..280194b3
 ++<message id="id-motion-recording"><source>Recording motion</source><translation>Recording motion</translation></message>
 ++<message id="id-no-motion-recordings"><source>No motion recordings</source><translation>No motion recordings</translation></message>
 ++<message id="id-recorded-minutes"><source>%1 minutes of motion recorded</source><translation>%1 minutes of motion recorded</translation></message>
-++<message id="id-motion-recording-explanation"><source>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</source><translation>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</translation></message>
+++<message id="id-motion-recording-explanation"><source>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</source><translation>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</translation></message>
 ++<message id="id-motion-gaps"><source>Interrupted motion data; analysis may be unavailable.</source><translation>Interrupted motion data; analysis may be unavailable.</translation></message>
 ++<message id="id-period-save-error"><source>Could not save period history</source><translation>Could not save period history</translation></message>
 ++<message id="id-motion-recording-error"><source>Motion recording failed. Check the sensor and free storage.</source><translation>Motion recording failed. Check the sensor and free storage.</translation></message>
@@ -173,7 +173,7 @@ index 00000000..280194b3
 ++<message id="id-motion-recording"><source>Recording motion</source><translation>Recording motion</translation></message>
 ++<message id="id-no-motion-recordings"><source>No motion recordings</source><translation>No motion recordings</translation></message>
 ++<message id="id-recorded-minutes"><source>%1 minutes of motion recorded</source><translation>%1 minutes of motion recorded</translation></message>
-++<message id="id-motion-recording-explanation"><source>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</source><translation>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</translation></message>
+++<message id="id-motion-recording-explanation"><source>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</source><translation>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</translation></message>
 ++<message id="id-motion-gaps"><source>Interrupted motion data; analysis may be unavailable.</source><translation>Interrupted motion data; analysis may be unavailable.</translation></message>
 ++<message id="id-period-save-error"><source>Could not save period history</source><translation>Could not save period history</translation></message>
 ++<message id="id-motion-recording-error"><source>Motion recording failed. Check the sensor and free storage.</source><translation>Motion recording failed. Check the sensor and free storage.</translation></message>
@@ -407,7 +407,7 @@ index 00000000..280194b3
 ++<message id="id-motion-recording"><source>Recording motion</source><translation>記錄動作</translation></message>
 ++<message id="id-no-motion-recordings"><source>No motion recordings</source><translation>尚無動作記錄</translation></message>
 ++<message id="id-recorded-minutes"><source>%1 minutes of motion recorded</source><translation>已記錄 %1 分鐘動作</translation></message>
-++<message id="id-motion-recording-explanation"><source>Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery.</source><translation>記錄最多 8 小時動作供睡眠分析。手錶會保持喚醒，耗電量較高。</translation></message>
+++<message id="id-motion-recording-explanation"><source>Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery.</source><translation>請在每晚睡前開啟動作記錄。記錄會在 8 小時後停止。記錄期間手錶會保持喚醒，耗電量較高。</translation></message>
 ++<message id="id-motion-gaps"><source>Interrupted motion data; analysis may be unavailable.</source><translation>動作資料中斷，可能無法分析。</translation></message>
 ++<message id="id-period-save-error"><source>Could not save period history</source><translation>無法儲存生理期記錄</translation></message>
 ++<message id="id-motion-recording-error"><source>Motion recording failed. Check the sensor and free storage.</source><translation>動作記錄失敗。請檢查感測器及儲存空間。</translation></message>
@@ -820,7 +820,7 @@ index 00000000..280194b3
 +index 0000000..e6a19b0
 +--- /dev/null
 ++++ b/src/sleep/SleepDetailPage.qml
-+@@ -0,0 +1,147 @@
++@@ -0,0 +1,152 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++import QtQuick
 ++import org.asteroid.controls
@@ -892,6 +892,11 @@ index 00000000..280194b3
 ++                font.pixelSize: app.height * 0.085
 ++                font.bold: true
 ++                text: summary.hasData ? formatDuration(summary.sleepMinutes) : qsTrId("id-no-motion-recordings")
+++                visible: !summary.captureEnabled || currentDate.toDateString() !== new Date().toDateString()
+++            }
+++            Label {
+++                visible: summary.captureEnabled && currentDate.toDateString() === new Date().toDateString()
+++                text: summary.isRecording ? qsTrId("id-motion-recording") : qsTrId("id-motion-waiting")
 ++            }
 ++            Label {
 ++                visible: summary.hasData
@@ -905,7 +910,7 @@ index 00000000..280194b3
 ++            Label {
 ++                width: parent.width
 ++                wrapMode: Text.WordWrap
-++                //% "Records motion for up to 8 hours for sleep analysis. Keeps the watch awake and uses more battery."
+++                //% "Turn on motion recording before bed each night. It stops after 8 hours. Recording keeps the watch awake and uses more battery."
 ++                text: qsTrId("id-motion-recording-explanation")
 ++                font.pixelSize: app.height * 0.045
 ++            }
