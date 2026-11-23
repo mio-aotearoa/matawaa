@@ -1,0 +1,90 @@
+Subject: [PATCH] asteroid-launcher: prepare Find Phone for AsteroidOS upstream
+
+The embedded find-phone.patch targets asteroid-launcher. The outer patch wires
+it into Matawaa packaging while the change is prepared for submission.
+
+---
+ overlay/asteroidos/asteroid-launcher/default.nix   |    2 +
+ .../asteroidos/asteroid-launcher/find-phone.patch  |   60 ++++++++++++++++++++
+ 2 files changed, 62 insertions(+)
+ create mode 100644 overlay/asteroidos/asteroid-launcher/find-phone.patch
+
+diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroidos/asteroid-launcher/default.nix
+index d4d3123..04736a1 100644
+--- a/overlay/asteroidos/asteroid-launcher/default.nix
++++ b/overlay/asteroidos/asteroid-launcher/default.nix
+@@ -62,6 +62,8 @@ stdenv.mkDerivation {
+   # AsteroidOS wayland compositor & shell
+   # Upstream repository: https://github.com/AsteroidOS/asteroid-launcher
+   patches = [
++    # QuickPanel quick-toggle button to trigger the find-phone alarm on the companion phone
++    ./find-phone.patch
+     # Tip for first-time tutorial indicating long press skips the guide
+     # Upstream PR: https://github.com/AsteroidOS/asteroid-launcher/pull/310
+     (fetchpatch {
+diff --git a/overlay/asteroidos/asteroid-launcher/find-phone.patch b/overlay/asteroidos/asteroid-launcher/find-phone.patch
+new file mode 100644
+index 0000000..cb02550
+--- /dev/null
++++ b/overlay/asteroidos/asteroid-launcher/find-phone.patch
+@@ -0,0 +1,60 @@
++--- a/src/qml/quickpanel/QuickPanel.qml
+++++ b/src/qml/quickpanel/QuickPanel.qml
++@@ -191,7 +191,7 @@
++     ConfigurationValue {
++         id: sliderToggles
++         key: "/desktop/asteroid/quickpanel/slider"
++-        defaultValue: ["brightnessToggle", "bluetoothToggle", "hapticsToggle", "wifiToggle", "soundToggle", "cinemaToggle", "aodToggle", "powerOffToggle", "rebootToggle", "musicButton", "flashlightButton"]
+++        defaultValue: ["brightnessToggle", "bluetoothToggle", "findPhoneToggle", "hapticsToggle", "wifiToggle", "soundToggle", "cinemaToggle", "aodToggle", "powerOffToggle", "rebootToggle", "musicButton", "flashlightButton"]
++     }
++ 
++     ConfigurationValue {
++@@ -207,6 +207,7 @@
++             "soundToggle": true,
++             "cinemaToggle": true,
++             "aodToggle": true,
+++            "findPhoneToggle": true,
++             "powerOffToggle": true,
++             "rebootToggle": true,
++             "musicButton": false,
++@@ -368,6 +369,7 @@
++             "cinemaToggle": cinemaToggleComponent,
++             "aodToggle": aodToggleComponent,
++             "powerOffToggle": powerOffToggleComponent,
+++            "findPhoneToggle": findPhoneToggleComponent,
++             "rebootToggle": rebootToggleComponent,
++             "musicButton": musicButtonComponent,
++             "flashlightButton": flashlightButtonComponent
++@@ -971,6 +973,32 @@
++             }
++         }
++     }
+++
+++    Component {
+++        id: findPhoneToggleComponent
+++        QuickPanelToggle {
+++            id: findPhoneToggle
+++            icon: "ios-phone-portrait"
+++            checkable: true
+++            checked: findPhoneDbus.isRinging
+++
+++            DBusInterface {
+++                id: findPhoneDbus
+++                service: "org.asteroidos.btsyncd"
+++                path: "/org/asteroidos/btsyncd/findphone"
+++                iface: "org.asteroidos.btsyncd.FindPhone"
+++                bus: DBus.SystemBus
+++                property bool isRinging: false
+++            }
+++
+++            onClicked: {
+++                findPhoneDbus.call("toggleRing", undefined)
+++                findPhoneDbus.call("isRinging", undefined, function(res) {
+++                    findPhoneDbus.isRinging = res
+++                })
+++            }
+++        }
+++    }
++ 
++     Component {
++         id: powerOffToggleComponent

@@ -5,19 +5,17 @@ Subject: [PATCH] asteroid: package launcher and Nemo QML plugins
 
 ---
  .../asteroid-launcher/circlemask-qrc.patch    |  15 ++
- .../asteroidos/asteroid-launcher/default.nix  | 151 ++++++++++++++++++
+ .../asteroidos/asteroid-launcher/default.nix  | 149 ++++++++++++++++++
  .../display-on-startup.patch                  |  44 +++++
- .../asteroid-launcher/find-phone.patch        |  60 +++++++
  .../org.nemomobile.compositor.conf            |  28 ++++
  .../qml-boot-diagnostics.patch                | 109 +++++++++++++
  .../splash-no-opacitymask.patch               |  54 +++++++
  overlay/asteroidos/default.nix                |  18 +++
  .../nemo-qml-plugin-dbus/default.nix          |  49 ++++++
- 9 files changed, 528 insertions(+)
+ 8 files changed, 466 insertions(+)
  create mode 100644 overlay/asteroidos/asteroid-launcher/circlemask-qrc.patch
  create mode 100644 overlay/asteroidos/asteroid-launcher/default.nix
  create mode 100644 overlay/asteroidos/asteroid-launcher/display-on-startup.patch
- create mode 100644 overlay/asteroidos/asteroid-launcher/find-phone.patch
  create mode 100644 overlay/asteroidos/asteroid-launcher/org.nemomobile.compositor.conf
  create mode 100644 overlay/asteroidos/asteroid-launcher/qml-boot-diagnostics.patch
  create mode 100644 overlay/asteroidos/asteroid-launcher/splash-no-opacitymask.patch
@@ -46,10 +44,10 @@ index 00000000..d8a0670d
 + }
 diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroidos/asteroid-launcher/default.nix
 new file mode 100644
-index 00000000..04736a1f
+index 0000000..d4d3123
 --- /dev/null
 +++ b/overlay/asteroidos/asteroid-launcher/default.nix
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,149 @@
 +{
 +  lib,
 +  stdenv,
@@ -114,8 +112,6 @@ index 00000000..04736a1f
 +  # AsteroidOS wayland compositor & shell
 +  # Upstream repository: https://github.com/AsteroidOS/asteroid-launcher
 +  patches = [
-+    # QuickPanel quick-toggle button to trigger the find-phone alarm on the companion phone
-+    ./find-phone.patch
 +    # Tip for first-time tutorial indicating long press skips the guide
 +    # Upstream PR: https://github.com/AsteroidOS/asteroid-launcher/pull/310
 +    (fetchpatch {
@@ -251,72 +247,6 @@ index 00000000..6d842685
 +     } else if (state == QMceDisplay::DisplayOff) {
 +         QCoreApplication::postEvent(this, new QTouchEvent(QEvent::TouchCancel));
 +         emit displayOff();
-diff --git a/overlay/asteroidos/asteroid-launcher/find-phone.patch b/overlay/asteroidos/asteroid-launcher/find-phone.patch
-new file mode 100644
-index 00000000..cb025507
---- /dev/null
-+++ b/overlay/asteroidos/asteroid-launcher/find-phone.patch
-@@ -0,0 +1,60 @@
-+--- a/src/qml/quickpanel/QuickPanel.qml
-++++ b/src/qml/quickpanel/QuickPanel.qml
-+@@ -191,7 +191,7 @@
-+     ConfigurationValue {
-+         id: sliderToggles
-+         key: "/desktop/asteroid/quickpanel/slider"
-+-        defaultValue: ["brightnessToggle", "bluetoothToggle", "hapticsToggle", "wifiToggle", "soundToggle", "cinemaToggle", "aodToggle", "powerOffToggle", "rebootToggle", "musicButton", "flashlightButton"]
-++        defaultValue: ["brightnessToggle", "bluetoothToggle", "findPhoneToggle", "hapticsToggle", "wifiToggle", "soundToggle", "cinemaToggle", "aodToggle", "powerOffToggle", "rebootToggle", "musicButton", "flashlightButton"]
-+     }
-+ 
-+     ConfigurationValue {
-+@@ -207,6 +207,7 @@
-+             "soundToggle": true,
-+             "cinemaToggle": true,
-+             "aodToggle": true,
-++            "findPhoneToggle": true,
-+             "powerOffToggle": true,
-+             "rebootToggle": true,
-+             "musicButton": false,
-+@@ -368,6 +369,7 @@
-+             "cinemaToggle": cinemaToggleComponent,
-+             "aodToggle": aodToggleComponent,
-+             "powerOffToggle": powerOffToggleComponent,
-++            "findPhoneToggle": findPhoneToggleComponent,
-+             "rebootToggle": rebootToggleComponent,
-+             "musicButton": musicButtonComponent,
-+             "flashlightButton": flashlightButtonComponent
-+@@ -971,6 +973,32 @@
-+             }
-+         }
-+     }
-++
-++    Component {
-++        id: findPhoneToggleComponent
-++        QuickPanelToggle {
-++            id: findPhoneToggle
-++            icon: "ios-phone-portrait"
-++            checkable: true
-++            checked: findPhoneDbus.isRinging
-++
-++            DBusInterface {
-++                id: findPhoneDbus
-++                service: "org.asteroidos.btsyncd"
-++                path: "/org/asteroidos/btsyncd/findphone"
-++                iface: "org.asteroidos.btsyncd.FindPhone"
-++                bus: DBus.SystemBus
-++                property bool isRinging: false
-++            }
-++
-++            onClicked: {
-++                findPhoneDbus.call("toggleRing", undefined)
-++                findPhoneDbus.call("isRinging", undefined, function(res) {
-++                    findPhoneDbus.isRinging = res
-++                })
-++            }
-++        }
-++    }
-+ 
-+     Component {
-+         id: powerOffToggleComponent
 diff --git a/overlay/asteroidos/asteroid-launcher/org.nemomobile.compositor.conf b/overlay/asteroidos/asteroid-launcher/org.nemomobile.compositor.conf
 new file mode 100644
 index 00000000..b8271665
