@@ -24,7 +24,7 @@ index d4d3123..04736a1 100644
      (fetchpatch {
 diff --git a/overlay/asteroidos/asteroid-launcher/find-phone.patch b/overlay/asteroidos/asteroid-launcher/find-phone.patch
 new file mode 100644
-index 0000000..cb02550
+index 0000000..a1e3bde
 --- /dev/null
 +++ b/overlay/asteroidos/asteroid-launcher/find-phone.patch
 @@ -0,0 +1,60 @@
@@ -73,7 +73,7 @@ index 0000000..cb02550
 ++                service: "org.asteroidos.btsyncd"
 ++                path: "/org/asteroidos/btsyncd/findphone"
 ++                iface: "org.asteroidos.btsyncd.FindPhone"
-++                bus: DBus.SystemBus
+++                bus: DBus.SessionBus
 ++                property bool isRinging: false
 ++            }
 ++
