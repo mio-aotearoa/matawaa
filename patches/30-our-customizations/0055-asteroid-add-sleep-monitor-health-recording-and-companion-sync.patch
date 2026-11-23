@@ -8,8 +8,8 @@ Subject: [PATCH] asteroid: add bounded health recording, manual history and
  examples/asteroid/asteroid-desktop.nix        |   14 +
  overlay/asteroidos/community-apps/default.nix |    8 +
  .../community-apps/health-sleep-monitor.patch |  951 ++++++++
- .../sensorlogd-sleep-monitor.patch            | 2184 +++++++++++++++++
- 4 files changed, 3157 insertions(+)
+ .../sensorlogd-sleep-monitor.patch            | 2192 +++++++++++++++++
+ 4 files changed, 3165 insertions(+)
  create mode 100644 overlay/asteroidos/community-apps/health-sleep-monitor.patch
  create mode 100644 overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
 
@@ -1040,7 +1040,7 @@ new file mode 100644
 index 00000000..ea3babe3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
-@@ -0,0 +1,2184 @@
+@@ -0,0 +1,2192 @@
 +diff --git a/common.cpp b/common.cpp
 +index 71524dc..e9f8f26 100644
 +--- a/common.cpp
@@ -2057,7 +2057,7 @@ index 00000000..ea3babe3
 +index 0000000..de3d371
 +--- /dev/null
 ++++ b/daemon/sensorPlugins/sleepMonitor.cpp
-+@@ -0,0 +1,204 @@
++@@ -0,0 +1,212 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -2089,7 +2089,7 @@ index 00000000..ea3babe3
 ++SleepMonitorPlugin::SleepMonitorPlugin(QObject *parent, qint64 until)
 ++    : QObject(parent), m_until(until)
 ++{
-++    // 5 Hz is sufficient for 5-second mean wrist-elevation angle (van Hees 2015).
+++    // Request 5 Hz from the watch sensor. The detector averages readings in 5-second epochs.
 ++    m_sensor.setDataRate(5);
 ++    m_sensor.setAlwaysOn(true);
 ++    m_periodicAnalyze.setInterval(15 * 60 * 1000);
@@ -2104,7 +2104,15 @@ index 00000000..ea3babe3
 ++        persistAnalysis(QStringLiteral("recording"));
 ++    });
 ++    connect(&m_firstSample, &QTimer::timeout, this, [this] {
-++        finish(QStringLiteral("no-samples"));
+++        // The watchdog and the boot-time deadline can both be ready on resume.
+++        const qint64 nowMs = bootMilliseconds();
+++        if (nowMs < m_startBootMs) {
+++            finish(QStringLiteral("clock-unavailable"));
+++        } else if (nowMs - m_startBootMs >= (m_until - m_startSec) * 1000) {
+++            finish(QStringLiteral("complete"));
+++        } else {
+++            finish(QStringLiteral("no-samples"));
+++        }
 ++    });
 ++}
 ++
