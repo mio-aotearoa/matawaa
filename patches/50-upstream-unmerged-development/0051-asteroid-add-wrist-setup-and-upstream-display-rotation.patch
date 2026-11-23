@@ -94,7 +94,7 @@ diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroid
 index b1c5d773..eea23a56 100644
 --- a/overlay/asteroidos/asteroid-launcher/default.nix
 +++ b/overlay/asteroidos/asteroid-launcher/default.nix
-@@ -62,6 +62,9 @@ stdenv.mkDerivation {
+@@ -62,4 +62,7 @@ stdenv.mkDerivation {
    # AsteroidOS wayland compositor & shell
    # Upstream repository: https://github.com/AsteroidOS/asteroid-launcher
    patches = [
@@ -102,8 +102,6 @@ index b1c5d773..eea23a56 100644
 +    ./wrist-rotation.patch
 +    ./first-run-wrist.patch
      # QuickPanel quick-toggle button to trigger the find-phone alarm on the companion phone
-     ./find-phone.patch
-     # Tip for first-time tutorial indicating long press skips the guide
 diff --git a/overlay/asteroidos/asteroid-launcher/first-run-wrist.patch b/overlay/asteroidos/asteroid-launcher/first-run-wrist.patch
 new file mode 100644
 index 00000000..6d2b5920
