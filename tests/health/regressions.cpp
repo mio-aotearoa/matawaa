@@ -122,6 +122,36 @@ int main(int argc, char **argv)
         CHECK(res.sleepMinutes >= 340 && res.sleepMinutes <= 370);
         CHECK(res.awakeMinutes >= 5 && res.awakeMinutes <= 20);
 
+        SleepDetector sparseNonWear;
+        for (int block = 0; block < 4; ++block) {
+            const qint64 start = t0 + block * 900;
+            for (int sample = 0; sample < 180; ++sample) {
+                CHECK(sparseNonWear.addSample(start, 0.0, 0.0, 1.0));
+            }
+            sparseNonWear.flushCurrentEpoch();
+            for (int epoch = 1; epoch < 180; ++epoch) {
+                sparseNonWear.addEpoch(start + epoch * 5, 90.0);
+            }
+        }
+        CHECK(sparseNonWear.epochCount() == 720);
+        CHECK(sparseNonWear.analyze().nonWearMinutes == 0);
+
+        SleepDetector interrupted;
+        const qint64 sparseMinute = t0 + 4 * 3600;
+        for (int ep = 0; ep < 8 * 720; ++ep) {
+            const qint64 sec = t0 + ep * 5;
+            if (sec > sparseMinute && sec < sparseMinute + 60) continue;
+            const bool active = ep < 720 || ep >= 7 * 720;
+            interrupted.addEpoch(sec, active ? 35.0 * std::sin(ep * 0.7) : 12.0);
+        }
+        const SleepAnalysisResult interruptedResult = interrupted.analyze();
+        CHECK(interruptedResult.valid);
+        CHECK(interruptedResult.sptStartSec < sparseMinute);
+        CHECK(interruptedResult.sptEndSec > sparseMinute + 60);
+        for (const auto &minute : interruptedResult.minutes) {
+            CHECK(minute.timestampSec != sparseMinute);
+        }
+
         // 3b. van Hees (2013) / GGIR non-wear: stationary watch on table for 8h (both m/s^2 and g units)
         for (double scale : {9.80665, 1.0}) {
             SleepDetector nwDet;

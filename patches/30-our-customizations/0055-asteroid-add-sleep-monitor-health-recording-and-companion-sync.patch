@@ -7,9 +7,9 @@ Subject: [PATCH] asteroid: add bounded health recording, manual history and
 ---
  examples/asteroid/asteroid-desktop.nix        |   14 +
  overlay/asteroidos/community-apps/default.nix |    8 +
- .../community-apps/health-sleep-monitor.patch |  942 ++++++++
- .../sensorlogd-sleep-monitor.patch            | 1955 +++++++++++++++++
- 4 files changed, 2919 insertions(+)
+ .../community-apps/health-sleep-monitor.patch |  951 ++++++++
+ .../sensorlogd-sleep-monitor.patch            | 2154 +++++++++++++++++
+ 4 files changed, 3127 insertions(+)
  create mode 100644 overlay/asteroidos/community-apps/health-sleep-monitor.patch
  create mode 100644 overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
 
@@ -1040,7 +1040,7 @@ new file mode 100644
 index 00000000..ea3babe3
 --- /dev/null
 +++ b/overlay/asteroidos/community-apps/sensorlogd-sleep-monitor.patch
-@@ -0,0 +1,2143 @@
+@@ -0,0 +1,2154 @@
 +diff --git a/common.cpp b/common.cpp
 +index 71524dc..e9f8f26 100644
 +--- a/common.cpp
@@ -1458,7 +1458,7 @@ index 00000000..ea3babe3
 +index 0000000..d31ff23
 +--- /dev/null
 ++++ b/daemon/sensorPlugins/sleepDetector.cpp
-+@@ -0,0 +1,449 @@
++@@ -0,0 +1,455 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -1580,6 +1580,10 @@ index 00000000..ea3babe3
 ++    const double unitScale = (mag > 4.0) ? kStandardGravity : 1.0;
 ++    const qint64 nwKey = (utcSec / kNonWearBlockSec) * kNonWearBlockSec;
 ++    auto &nwBlock = m_nonWearBlocks[nwKey];
+++    if (nwBlock.lastCoveredEpoch != bucket) {
+++        nwBlock.lastCoveredEpoch = bucket;
+++        ++nwBlock.coveredEpochs;
+++    }
 ++    nwBlock.axes[0].add(x / unitScale);
 ++    nwBlock.axes[1].add(y / unitScale);
 ++    nwBlock.axes[2].add(z / unitScale);
@@ -1643,7 +1647,8 @@ index 00000000..ea3babe3
 ++        bool complete = true;
 ++        for (int k = 0; k < kNonWearWindowBlocks; ++k) {
 ++            auto found = m_nonWearBlocks.find(startKey + static_cast<qint64>(k) * kNonWearBlockSec);
-++            if (found == m_nonWearBlocks.end() || found->second.axes[0].count < 2) {
+++            // Require 80% of five-second bins in each block before inferring non-wear.
+++            if (found == m_nonWearBlocks.end() || found->second.coveredEpochs < kMinNonWearBlockEpochs) {
 ++                complete = false;
 ++                break;
 ++            }
@@ -1895,7 +1900,8 @@ index 00000000..ea3babe3
 ++    }
 ++
 ++    for (const auto &kv : perMinute) {
-++        if (kv.second.validCount <= 0) continue;
+++        // Leave minutes with less than 75% coverage out of both sleep and awake totals.
+++        if (kv.second.validCount < kMinMinuteEpochs) continue;
 ++        const int state = (kv.second.sibCount * 2 >= kv.second.validCount) ? 1 : 0;
 ++        res.minutes.push_back(SleepMinuteRecord{kv.first, state});
 ++        if (state == 1) {
@@ -1913,7 +1919,7 @@ index 00000000..ea3babe3
 +index 0000000..291a32e
 +--- /dev/null
 ++++ b/daemon/sensorPlugins/sleepDetector.h
-+@@ -0,0 +1,127 @@
++@@ -0,0 +1,132 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -2024,7 +2030,12 @@ index 00000000..ea3babe3
 ++        }
 ++    };
 ++
+++    static constexpr int kMinNonWearBlockEpochs = kNonWearBlockSec / kEpochSec * 4 / 5;
+++    static constexpr int kMinMinuteEpochs = 60 / kEpochSec * 3 / 4;
+++
 ++    struct NonWearBlock {
+++        qint64 lastCoveredEpoch = -1;
+++        int coveredEpochs = 0;
 ++        std::array<AxisStats, 3> axes;
 ++    };
 ++
