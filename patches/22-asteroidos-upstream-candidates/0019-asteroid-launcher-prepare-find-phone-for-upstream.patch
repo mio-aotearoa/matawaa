@@ -12,10 +12,10 @@ index d4d3123..2a89e24 100644
    # AsteroidOS wayland compositor & shell
    # Upstream repository: https://github.com/AsteroidOS/asteroid-launcher
    patches = [
-+    # QuickPanel quick-toggle button to trigger the find-phone alarm on the companion phone
++    # Find Phone button rings the paired phone on each tap
 +    (fetchpatch {
 +      url = "https://github.com/AsteroidOS/asteroid-launcher/pull/315.diff";
-+      hash = "sha256-KidMV7R8QLE2rcxFwLRzCPgmGq5kidO6Rrp12mtu5w4=";
++      hash = "sha256-c61SEFD9PbCDf4HsCZzy02y60pmKwX9IYemFvrry6Tg=";
 +    })
      # Tip for first-time tutorial indicating long press skips the guide
      # Upstream PR: https://github.com/AsteroidOS/asteroid-launcher/pull/310

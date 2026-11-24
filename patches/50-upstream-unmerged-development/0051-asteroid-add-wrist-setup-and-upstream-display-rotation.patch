@@ -101,7 +101,7 @@ index b1c5d773..eea23a56 100644
 +    # Whole-scene rotation and rotated input mapping (PR #314, includes #299).
 +    ./wrist-rotation.patch
 +    ./first-run-wrist.patch
-     # QuickPanel quick-toggle button to trigger the find-phone alarm on the companion phone
+     # Find Phone button rings the paired phone on each tap
 diff --git a/overlay/asteroidos/asteroid-launcher/first-run-wrist.patch b/overlay/asteroidos/asteroid-launcher/first-run-wrist.patch
 new file mode 100644
 index 00000000..6d2b5920
