@@ -37,18 +37,20 @@ index a0ac383e..a3ea891b 100644
      ];
      rev = "94ea0b2538ee3cabdbbb1c2926f76b80433077b2";
      hash = "sha256-VG74egztedAqvl/E58YrwUCp7/eOQqzQdvYFS6kIbao=";
-@@ -66,15 +68,21 @@
+@@ -66,15 +68,25 @@
          disc_tr="Not connected"
          ip_tr="IP: %1"
          getting_ip_tr="Getting IP address..."
 +        wifi_ps_tr="Wi-Fi power save"
 +        wifi_to_tr="Wi-Fi idle timeout"
 +        remcha_tr="Disconnect charger alert"
++        wifi_forget_title_tr="Forget network?"
++        wifi_forget_body_tr="You will need to re-enter the password to reconnect."
          case "$f" in
 -          *zh_Hant*) conn_tr="已連線"; disc_tr="未連線"; getting_ip_tr="正在取得 IP 位址..." ;;
 -          *zh_Hans*) conn_tr="已连接"; disc_tr="未连接"; getting_ip_tr="正在获取 IP 地址..." ;;
-+          *zh_Hant*) conn_tr="已連線"; disc_tr="未連線"; getting_ip_tr="正在取得 IP 位址..."; wifi_ps_tr="Wi-Fi 省電模式"; wifi_to_tr="Wi-Fi 閒置關閉時間"; remcha_tr="拔除充電器提醒" ;;
-+          *zh_Hans*) conn_tr="已连接"; disc_tr="未连接"; getting_ip_tr="正在获取 IP 地址..."; wifi_ps_tr="Wi-Fi 省电模式"; wifi_to_tr="Wi-Fi 空闲关闭时间"; remcha_tr="拔除充电器提醒" ;;
++          *zh_Hant*) conn_tr="已連線"; disc_tr="未連線"; getting_ip_tr="正在取得 IP 位址..."; wifi_ps_tr="Wi-Fi 省電模式"; wifi_to_tr="Wi-Fi 閒置關閉時間"; remcha_tr="拔除充電器提醒"; wifi_forget_title_tr="忘記此網路？"; wifi_forget_body_tr="重新連線時需要再次輸入密碼。" ;;
++          *zh_Hans*) conn_tr="已连接"; disc_tr="未连接"; getting_ip_tr="正在获取 IP 地址..."; wifi_ps_tr="Wi-Fi 省电模式"; wifi_to_tr="Wi-Fi 空闲关闭时间"; remcha_tr="拔除充电器提醒"; wifi_forget_title_tr="忘记此网络？"; wifi_forget_body_tr="重新连接时需要再次输入密码。" ;;
          esac
          for entry in \
            "id-connected|Connected|$conn_tr" \
@@ -58,7 +60,9 @@ index a0ac383e..a3ea891b 100644
 +          "id-wifi-getting-ip|Getting IP address...|$getting_ip_tr" \
 +          "id-wifi-power-save|Wi-Fi power save|$wifi_ps_tr" \
 +          "id-wifi-idle-timeout|Wi-Fi idle timeout|$wifi_to_tr" \
-+          "id-show-remove-charger-alert|Disconnect charger alert|$remcha_tr"; do
++          "id-show-remove-charger-alert|Disconnect charger alert|$remcha_tr" \
++          "id-wifi-forget-confirm-title|Forget network?|$wifi_forget_title_tr" \
++          "id-wifi-forget-confirm-body|You will need to re-enter the password to reconnect.|$wifi_forget_body_tr"; do
            IFS='|' read -r msg_id msg_src msg_tr <<< "$entry"
            if ! grep -q "id=\"$msg_id\"" "$f"; then
              sed -i "s|</context>|    <message id=\"$msg_id\"><source>$msg_src</source><translation>$msg_tr</translation></message>\n</context>|" "$f"
@@ -75,7 +79,7 @@ new file mode 100644
 index 00000000..ab150a05
 --- /dev/null
 +++ b/overlay/asteroidos/apps/settings-power-wifi-policy.patch
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,277 @@
 +diff --git a/src/qml/PowerPage.qml b/src/qml/PowerPage.qml
 +index a185f3f..1b0e745 100644
 +--- a/src/qml/PowerPage.qml
@@ -241,6 +245,118 @@ index 00000000..ab150a05
 +             }
 +         }
 + 
++diff --git a/src/qml/WiFiConnectionDialog.qml b/src/qml/WiFiConnectionDialog.qml
++index ee539aa..6c9a21e 100644
++--- a/src/qml/WiFiConnectionDialog.qml
+++++ b/src/qml/WiFiConnectionDialog.qml
++@@ -236,10 +236,10 @@ Item {
++                 //% "Forget network"
++                 text: qsTrId("id-wifi-removenetwork")
++                 icon: "ios-trash-circle"
++-                onClicked: {
++-                    modelData.remove()
++-                    layerStack.pop(layerStack.currentLayer)
++-                }
+++                onClicked: layerStack.push(forgetConfirmDialog, {
+++                    networkService: modelData,
+++                    parentDialog: dialogItem
+++                })
++             }
++
++             Label {
++@@ -308,4 +308,92 @@ Item {
++
++         }
++     }
+++
+++    Component {
+++        id: forgetConfirmDialog
+++
+++        Item {
+++            id: confirmPage
+++            property int depth
+++            property var pop
+++            property NetworkService networkService
+++            property Item parentDialog
+++            property bool active: true
+++
+++            Component.onDestruction: active = false
+++
+++            Column {
+++                anchors.centerIn: parent
+++                width: parent.width * 0.78
+++                spacing: Dims.h(3)
+++
+++                Icon {
+++                    name: "ios-trash-circle"
+++                    width: Dims.w(18)
+++                    height: width
+++                    anchors.horizontalCenter: parent.horizontalCenter
+++                }
+++
+++                Label {
+++                    width: parent.width
+++                    //% "Forget network?"
+++                    text: qsTrId("id-wifi-forget-confirm-title")
+++                    font.pixelSize: Dims.l(6.5)
+++                    font.bold: true
+++                    wrapMode: Text.WordWrap
+++                    horizontalAlignment: Text.AlignHCenter
+++                }
+++
+++                Label {
+++                    width: parent.width
+++                    text: (confirmPage.networkService && confirmPage.networkService.name
+++                           ? confirmPage.networkService.name
+++                           : qsTrId("id-wifi-hiddennetwork"))
+++                          + "\n"
+++                          //% "You will need to re-enter the password to reconnect."
+++                          + qsTrId("id-wifi-forget-confirm-body")
+++                    font.pixelSize: Dims.l(4.5)
+++                    opacity: 0.85
+++                    wrapMode: Text.WordWrap
+++                    horizontalAlignment: Text.AlignHCenter
+++                }
+++
+++                Row {
+++                    anchors.horizontalCenter: parent.horizontalCenter
+++                    spacing: Dims.w(14)
+++
+++                    IconButton {
+++                        iconName: "ios-close-circle-outline"
+++                        width: Dims.w(20)
+++                        height: width
+++                        onClicked: layerStack.pop(layerStack.currentLayer)
+++                    }
+++
+++                    IconButton {
+++                        iconName: "ios-trash-circle"
+++                        width: Dims.w(20)
+++                        height: width
+++                        onClicked: forgetRemorse.start()
+++                    }
+++                }
+++            }
+++
+++            RemorseTimer {
+++                id: forgetRemorse
+++                duration: 3000
+++                action: qsTrId("id-wifi-removenetwork")
+++                //% "Tap to cancel"
+++                cancelText: qsTrId("id-tap-to-cancel")
+++                onTriggered: {
+++                    if (!confirmPage.active)
+++                        return
+++                    if (confirmPage.networkService)
+++                        confirmPage.networkService.remove()
+++                    layerStack.pop(layerStack.currentLayer)
+++                    if (layerStack.currentLayer === confirmPage.parentDialog)
+++                        layerStack.pop(layerStack.currentLayer)
+++                }
+++            }
+++        }
+++    }
++ }
 diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroidos/asteroid-launcher/default.nix
 index b4d456ca..df162632 100644
 --- a/overlay/asteroidos/asteroid-launcher/default.nix
