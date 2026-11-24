@@ -35,8 +35,8 @@ index a0ac383e..a3ea891b 100644
        ./settings-bluetooth-labels.patch
 +      ./settings-power-wifi-policy.patch
      ];
-     rev = "94ea0b2538ee3cabdbbb1c2926f76b80433077b2";
-     hash = "sha256-VG74egztedAqvl/E58YrwUCp7/eOQqzQdvYFS6kIbao=";
+     rev = "d8a50606b5686a98a00a33a9534d9c1f887b1f5a";
+     hash = "sha256-CGFck8uSLps2Io5+wlUvHVqohRX5/vdGI1D7nGn65WU=";
 @@ -66,15 +68,25 @@
          disc_tr="Not connected"
          ip_tr="IP: %1"

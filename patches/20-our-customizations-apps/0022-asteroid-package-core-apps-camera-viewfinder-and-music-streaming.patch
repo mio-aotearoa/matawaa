@@ -955,8 +955,8 @@ index 00000000..d8ce80b9
 +      ./settings-input.patch
 +      ./settings-bluetooth-labels.patch
 +    ];
-+    rev = "94ea0b2538ee3cabdbbb1c2926f76b80433077b2";
-+    hash = "sha256-VG74egztedAqvl/E58YrwUCp7/eOQqzQdvYFS6kIbao=";
++    rev = "d8a50606b5686a98a00a33a9534d9c1f887b1f5a";
++    hash = "sha256-CGFck8uSLps2Io5+wlUvHVqohRX5/vdGI1D7nGn65WU=";
 +    postPatch = ''
 +      # Restore engineering English for the connect-failure StatusPage.
 +      substituteInPlace src/qml/WiFiConnectionDialog.qml \
@@ -1003,8 +1003,8 @@ index 00000000..d8ce80b9
 +  compass = mkAsteroidApp {
 +    name = "compass";
 +    desc = "Sensor-driven compass application for smartwatches";
-+    rev = "7d3151cfd9a54856850c7cd9a6e33476221cb302";
-+    hash = "sha256-+J8LPKTJqGK04rCqM6XHPMTGBUEOznS8/6KlK+ADY2M=";
++    rev = "58d4114c1709e5c3d7edd876a05930d326b353a0";
++    hash = "sha256-FgV/klLSB0mjcn24sVmLxE7oDnnjrzFjtr9+8n6e4Kg=";
 +  };
 +
 +  flashlight = mkAsteroidApp {

@@ -31,9 +31,9 @@ index 8a487595..a9aa4d9e 100644
 +      },
 +      "branch": "nixpkgs-unstable",
 +      "submodules": false,
-+      "revision": "93a9ed0a866099a230ed5146a5bb7d16fd5c9b14",
-+      "url": "https://github.com/NixOS/nixpkgs/archive/93a9ed0a866099a230ed5146a5bb7d16fd5c9b14.tar.gz",
-+      "hash": "sha256-8JDgyVvWUZg5m9hNlL8Ge9aT647ng3Ukc8NPMiKNTPQ="
++      "revision": "619c39f6eac5d1ed6b8f073a9414baf7034b2356",
++      "url": "https://github.com/NixOS/nixpkgs/archive/619c39f6eac5d1ed6b8f073a9414baf7034b2356.tar.gz",
++      "hash": "sha256-oa2P5WZer1A4wuhatl92JyHHEjrrOdIyuvTuI5LUi9Q="
      }
    },
    "version": 8

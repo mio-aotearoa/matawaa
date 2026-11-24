@@ -677,8 +677,8 @@ index 00000000..835aa49f
 +    src = fetchFromGitHub {
 +      owner = "moWerk";
 +      repo = "asteroid-docking-bay";
-+      rev = "7f21296f16a73d4a7f1f81b0ef069998ba7b86a8";
-+      hash = "sha256-Hu6WnvQNnP7PGTn5o2iPzsw1aowPAyd3cR0jg1W350Q=";
++      rev = "0c4659a3d5328fb618e23bbd29914be083075136";
++      hash = "sha256-n+RFHDA5HtKA2nYeECbvvpKP/GNsJuE2fmygIWY3PC8=";
 +    };
 +
 +    postPatch = ''
