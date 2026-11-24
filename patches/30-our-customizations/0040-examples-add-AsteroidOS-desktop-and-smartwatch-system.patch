@@ -17,7 +17,7 @@ new file mode 100644
 index 00000000..ad47f319
 --- /dev/null
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -0,0 +1,994 @@
+@@ -0,0 +1,998 @@
 +{
 +  config,
 +  lib,
@@ -38,15 +38,19 @@ index 00000000..ad47f319
 +
 +  isLegacy = config.mobile.hardware.watch.kernel != "modern";
 +
-+  # Keep MCE proximity input uncovered on Hoki, which has no proximity sensor.
++  # Keep MCE proximity input uncovered on Hoki (no proximity sensor) and
++  # disable autosuspend while on charger so Wi-Fi/SSH stay reliable docked.
 +  mcePackage =
 +    if config.mobile.device.name == "fossil-hoki" then
 +      pkgs.asteroid.mce.overrideAttrs (old: {
 +        # Synthetic proximity samples can report CLOSED and block waking the
 +        # screen. Hoki has no proximity sensor; keep its MCE input uncovered.
++        # Autosuspend policy 3 = SUSPEND_POLICY_DISABLE_ON_CHARGER.
 +        postInstall = (old.postInstall or "") + ''
 +          printf '%s\n' '/system/osso/dsm/proximity/ps_enabled=false' \
 +            > "$out/etc/mce/90-hoki-proximity.conf"
++          printf '%s\n' '/system/osso/dsm/display/autosuspend_policy=3' \
++            > "$out/etc/mce/90-hoki-power.conf"
 +        '';
 +      })
 +    else

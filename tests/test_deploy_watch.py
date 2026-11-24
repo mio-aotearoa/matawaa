@@ -28,9 +28,29 @@ class DeployCopyTests(unittest.TestCase):
 
     def test_boot_stages_profile_and_uses_requested_ssh_port(self):
         copy, ssh = self.deploy("boot")
-        self.assertIn("-p 2222", copy.kwargs["env"]["NIX_SSHOPTS"])
+        self.assertIn("ssh://root@watch:2222", copy.args[0])
         self.assertIn("nix-env -p /nix/var/nix/profiles/system --set", ssh.args[3])
         self.assertIn("/bin/switch-to-configuration boot", ssh.args[3])
+
+    def test_build_defaults_to_flake_even_when_worktree_exists(self):
+        with (
+            patch.object(Path, "is_dir", return_value=True),
+            patch.object(deploy_watch, "run_build_cmd", return_value="/nix/store/system") as build,
+        ):
+            deploy_watch.build_asteroid_toplevel(Path("/repo"), "fossil-hoki")
+            cmd = build.call_args.args[0]
+            self.assertEqual(cmd[:2], ["nix", "build"])
+            self.assertIn("/repo#nixosConfigurations.fossil-hoki.config.system.build.toplevel", cmd)
+
+    def test_build_uses_worktree_only_when_explicitly_requested(self):
+        with (
+            patch.object(Path, "is_dir", return_value=True),
+            patch.object(deploy_watch, "run_build_cmd", return_value="/nix/store/system") as build,
+        ):
+            deploy_watch.build_asteroid_toplevel(Path("/repo"), "fossil-hoki", use_worktree=True)
+            cmd = build.call_args.args[0]
+            self.assertEqual(cmd[0], "nix-build")
+            self.assertEqual(cmd[1], "/repo/work/mobile-nixos/examples/asteroid")
 
     def test_test_action_neither_flashes_nor_changes_default_profile(self):
         _, ssh = self.deploy("test")

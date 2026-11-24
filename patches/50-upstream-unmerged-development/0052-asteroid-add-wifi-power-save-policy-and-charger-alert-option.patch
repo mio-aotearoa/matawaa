@@ -259,7 +259,7 @@ new file mode 100644
 index 00000000..f7a7d93a
 --- /dev/null
 +++ b/overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch
-@@ -0,0 +1,694 @@
+@@ -0,0 +1,699 @@
 +diff --git a/lipstick/src/components/launcheritem.cpp b/lipstick/src/components/launcheritem.cpp
 +index 3f8446f..85b44c6 100644
 +--- a/lipstick/src/components/launcheritem.cpp
@@ -427,7 +427,7 @@ index 00000000..f7a7d93a
 +index 0000000..77e9f33
 +--- /dev/null
 ++++ b/src/wifipowermanager.cpp
-+@@ -0,0 +1,233 @@
++@@ -0,0 +1,238 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -499,18 +499,22 @@ index 00000000..f7a7d93a
 ++void WifiPowerManager::onChargerChanged()
 ++{
 ++    if (!m_chargerState->valid()) return;
+++    qInfo() << "WifiPowerManager: charging=" << m_chargerState->charging();
 ++    applyDecision(m_policy.onChargingChanged(m_chargerState->charging()));
 ++}
 ++
 ++void WifiPowerManager::onConnmanPropertyChanged(const QString &name, const QDBusVariant &value)
 ++{
 ++    if (name == QStringLiteral("Powered")) {
-++        applyDecision(m_policy.onWifiPoweredChanged(value.variant().toBool()));
+++        const bool powered = value.variant().toBool();
+++        qInfo() << "WifiPowerManager: connman Powered=" << powered;
+++        applyDecision(m_policy.onWifiPoweredChanged(powered));
 ++    }
 ++}
 ++
 ++void WifiPowerManager::onIdleTimeout()
 ++{
+++    qInfo() << "WifiPowerManager: idle timer expired";
 ++    applyDecision(m_policy.onIdleTimerExpired());
 ++}
 ++
@@ -575,6 +579,7 @@ index 00000000..f7a7d93a
 ++
 ++void WifiPowerManager::setWifiPowered(bool powered)
 ++{
+++    qInfo() << "WifiPowerManager: setting ConnMan Wi-Fi Powered=" << powered;
 ++    QDBusMessage call = QDBusMessage::createMethodCall(
 ++        QString::fromLatin1(kConnmanService),
 ++        QString::fromLatin1(kConnmanWifiPath),

@@ -7,6 +7,7 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 * **Fscrypt home-directory provisioning:** `modules/fscrypt.nix` exposes `user` and `policy`, but does not provision an encrypted home. Design and validate login, recovery, existing-data migration, and filesystem handling before enabling it on a device.
 * **SensorFW upstream qmake build:** The pinned source provides qmake projects, but the current Nix cross setup fails their `qtConfig()` checks. Keep the working local CMake build until a cross-compilation setup can build the upstream project and its plugins correctly.
 * **Cross-built QML module discovery:** Check the remaining target-tool discovery warnings against the installed QML modules on Fossil Hoki. Confirm actual imports on device before treating a warning as a missing module.
+* **`deployWatch.py` stale `work/mobile-nixos` trap (fixed 2026-11-24):** `scripts/deployWatch.py` previously preferred `work/mobile-nixos/examples/asteroid` whenever that directory existed on disk, silently deploying stale worktree commits instead of flake `HEAD`. Now builds from the flake by default and requires explicit `--use-worktree` to build `work/mobile-nixos`.
 
 ---
 
@@ -92,6 +93,55 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
   * Confirm plugins load (`lib*-qt6.so`); on-wrist `asteroid-hrm` BPM; `test_sensors` for SpO2/sleep type IDs.
   * Add hybrisspo2 / hybrissleep SensorFW+Qt adaptors once IDs known; optional python-ssc demo package for SpO2.
   * Expect proprietary LifeQ limits without Wellness glue; sleep needs more SSC RE.
+
+---
+
+### 1.7 Fossil Hoki WCNSS Wi-Fi Firmware Self-Symlink Loop & `wlan_mac.bin` Boot Timeout
+* **Observed on:** Fossil Gen 6 (`fossil-hoki`), 2026-11-24
+* **Symptoms:**
+  * `/vendor/firmware/wlan/prima/{WCNSS_qcom_cfg.ini,WCNSS_qcom_wlan_nv.bin,WCNSS_wlan_dictionary.dat}` became self-referential symlink loops (`Too many levels of symbolic links`).
+  * `dmesg` shows a ~62 s boot stall during `modprobe wlan`:
+    ```
+    firmware wlan!prima!wlan_mac.bin: _request_firmware_load: firmware state wait timeout: rc = -110
+    ```
+* **Root cause:**
+  * In `patches/30-our-customizations/0031-fossil-hoki-add-Gen-6-hardware-firmware-audio-and-family-variants.patch`, `link-dynamic-firmware` symlinks `/lib/firmware/wlan -> /vendor/firmware/wlan`.
+  * `wlan-firmware-hoki.sh` then runs `ln_force "/vendor/firmware/wlan/prima/$f" "/lib/firmware/wlan/prima/$f"`, which resolves through `/lib/firmware/wlan` to the same path and overwrites the original links in `/vendor/firmware/wlan/prima/` with links pointing to themselves.
+  * The actual target files remain intact at `/vendor/etc/wifi/WCNSS_qcom_cfg.ini` and `/mnt/vendor/persist/{WCNSS_qcom_wlan_nv.bin,WCNSS_wlan_dictionary.dat}`.
+* **Fix in tree (2026-11-24):**
+  * Updated `0031` so `android-init` skips symlinking `/vendor/firmware/wlan` into `/lib/firmware/wlan`, and `wlan-firmware-hoki.sh` replaces any legacy `/lib/firmware/wlan` symlink with a real directory, links canonical `/vendor/etc/wifi/WCNSS_qcom_cfg.ini` and `/mnt/vendor/persist/{WCNSS_qcom_wlan_nv.bin,WCNSS_wlan_dictionary.dat}`, and heals broken self-symlinks in `/vendor/firmware/wlan/prima/`.
+  * Patched `wlan-prima` (`0031` `wlan.nix`) to call `request_firmware_direct` for optional `wlan/prima/wlan_mac.bin` so its absence fails immediately instead of stalling `modprobe wlan` for 60 s.
+* **Verified on Hoki (2026-11-24):**
+  * After clean reboot into the updated build, `/lib/firmware/wlan` is a real directory, `/lib/firmware/wlan/prima/*` and `/vendor/firmware/wlan/prima/*` resolve cleanly to their canonical targets, and `modprobe wlan` completed in ~4.4 s (`[35.49s]` → `[39.90s]`) with no `wlan_mac.bin` timeout.
+
+---
+
+### 1.8 Fossil Hoki Kernel Deep Suspend Breaks Wi-Fi (`wlan-prima`) & Runs While Charging
+* **Observed on:** Fossil Gen 6 (`fossil-hoki`), 2026-11-24 (after `edd9c8a` restored upstream MCE ambient timeouts and enabled `/sys/power/autosleep = mem`)
+* **Symptoms:**
+  * When the display blanks—even while on the charger at 100% / `Full`—Wi-Fi drops and stays unreachable even after waking the watch until Wi-Fi is re-triggered in Settings.
+  * Kernel `suspend_stats` recorded `success: 42`, `fail: 32` (`failed_freeze: 14`, `failed_suspend: 18`), with `last_failed_dev: a000000.qcom,wcnss-wlan` and `alarmtimer`.
+* **Root cause (verified from logs & `wlan-prima` source):**
+  * Ruled out `WifiPowerManager`: MCE kept `Charger state: on` at `Full`/100% and ConnMan kept `Powered = True`.
+  * Instead, MCE allows `/sys/power/autosleep = mem` while charging. On suspend entry, Linux `cfg80211` disconnects `wlan0` (`wpa_supplicant: CTRL-EVENT-DISCONNECTED ... reason=0 locally_generated=1`, no WoWLAN configured), then `wlan-prima`'s `wlan_suspend()` (`CORE/HDD/src/wlan_hdd_dev_pwr.c`) returns `-EPERM` (`-1`, *"not in IMPS/BMPS"*), aborting suspend.
+  * ConnMan immediately retries association; ~0.2 s later the next kernel autosleep attempt interrupts the 4-way handshake (`WPA: 4-Way Handshake failed ... reason=WRONG_KEY`, `Interface wlan0 [ wifi ] state is failure`), leaving Wi-Fi stuck disconnected after wake.
+  * Note: the missing/looped `WCNSS_qcom_cfg.ini` (see 1.7) also prevented prima from loading its vendor power-save/BMPS/IMPS config.
+* **Fix in tree (2026-11-24):**
+  * Added `/etc/mce/90-hoki-power.conf` (`0040`) setting `/system/osso/dsm/display/autosuspend_policy=3` (`SUSPEND_POLICY_DISABLE_ON_CHARGER`) so docked charging keeps Wi-Fi/SSH awake without suspend-abort storms.
+  * Added lightweight `qInfo()` logs to `WifiPowerManager` (`0052`) for charging/Wi-Fi/timer transitions.
+* **Verified on Hoki (2026-11-24):**
+  * With `mcetool --set-suspend-policy=disable_on_charger` active on the dock, `/sys/power/autosleep` remained `off` with `Display state: off` and Wi-Fi/SSH stayed responsive.
+* **Remaining Verification & Resolution Steps:**
+  * Re-test on-battery suspend with the fixed `WCNSS_qcom_cfg.ini` (1.7) so prima's `gEnableImps`/`gEnableBmps`/`gEnableSuspend` settings actually apply, and verify whether on-battery suspend still needs `wlan-prima` / `cfg80211` WoWLAN or Wi-Fi power-off ordering to avoid `WRONG_KEY` / ConnMan `failure`.
+  * Verify whether PM660 charge-termination hysteresis (100% → 98%) can flip `Charger state` to `off` while still physically docked (`Charger cable: connected`, `usb/online: 0`), and if so whether `WifiPowerManager` / MCE should also check cable state.
+
+---
+
+### 1.9 Fossil Hoki `asteroid-seconddisplay-sync-time.service` Hits `start-limit-hit`
+* **Observed on:** Fossil Gen 6 (`fossil-hoki`), 2026-11-24
+* **Symptom:** User journal repeatedly logs `asteroid-seconddisplay-sync-time.service: Start request repeated too quickly` / `Failed with result 'start-limit-hit'` across suspend/resume cycles.
+* **Fix in tree (2026-11-24):** Set `StartLimitIntervalSec = 0` on `systemd.user.services.asteroid-seconddisplay-sync-time` in `0049` so clock-change wake bursts across suspend/resume do not trip systemd's start rate limit.
+* **Verified on Hoki (2026-11-24):** `systemctl --user show asteroid-seconddisplay-sync-time.service` reports `StartLimitIntervalUSec=0` and `Result=success`. Continue monitoring across on-battery suspend/resume cycles.
 
 ---
 

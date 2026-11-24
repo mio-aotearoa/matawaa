@@ -110,7 +110,7 @@ new file mode 100644
 index 00000000..5cb81dee
 --- /dev/null
 +++ b/devices/fossil-hoki/android-init.nix
-@@ -0,0 +1,233 @@
+@@ -0,0 +1,239 @@
 +{
 +  lib,
 +  pkgs,
@@ -284,6 +284,12 @@ index 00000000..5cb81dee
 +            for f in "$dir"/*; do
 +              [ -e "$f" ] || continue
 +              name=$(${pkgs.coreutils}/bin/basename "$f")
++              # wlan/prima is managed by wlan-firmware-hoki.sh; symlinking the
++              # directory itself would make wlan-firmware-hoki.sh overwrite the
++              # vendor entries with self-referential symlinks.
++              if [ "$name" = "wlan" ] && [ -d "$f" ]; then
++                continue
++              fi
 +              ln_force "$f" /lib/firmware/"$name"
 +            done
 +          fi
@@ -1352,7 +1358,7 @@ new file mode 100644
 index 00000000..95d80bb2
 --- /dev/null
 +++ b/devices/fossil-hoki/wlan-firmware-hoki.sh
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,72 @@
 +#!/bin/sh
 +# SPDX-License-Identifier: MIT
 +# Symlink stock vendor WCNSS firmware/calibration data into the path the
@@ -1363,6 +1369,9 @@ index 00000000..95d80bb2
 +ln_force() {
 +	target="$1"
 +	link="$2"
++	if [ "$target" = "$link" ]; then
++		return 0
++	fi
 +	if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
 +		return 0
 +	fi
@@ -1371,13 +1380,40 @@ index 00000000..95d80bb2
 +	ln -sfn "$target" "$link"
 +}
 +
++# Replace any legacy /lib/firmware/wlan -> /vendor/firmware/wlan symlink
++# so linking into /lib/firmware/wlan/prima never mutates /vendor.
++if [ -L /lib/firmware/wlan ]; then
++	rm -f /lib/firmware/wlan
++fi
 +mkdir -p /lib/firmware/wlan/prima
 +
-+for f in WCNSS_qcom_cfg.ini WCNSS_qcom_wlan_nv.bin WCNSS_wlan_dictionary.dat; do
-+	if [ -e "/vendor/firmware/wlan/prima/$f" ]; then
-+		ln_force "/vendor/firmware/wlan/prima/$f" "/lib/firmware/wlan/prima/$f"
-+	fi
-+done
++# Link canonical vendor/persist sources and heal any broken self-symlinks
++# left in /vendor/firmware/wlan/prima by earlier boots.
++link_prima_file() {
++	name="$1"
++	shift
++	for src in "$@"; do
++		if [ -f "$src" ]; then
++			ln_force "$src" "/lib/firmware/wlan/prima/$name"
++			if [ -L "/vendor/firmware/wlan/prima/$name" ] && [ ! -e "/vendor/firmware/wlan/prima/$name" ]; then
++				ln_force "$src" "/vendor/firmware/wlan/prima/$name" 2>/dev/null || true
++			fi
++			return 0
++		fi
++	done
++}
++
++link_prima_file WCNSS_qcom_cfg.ini \
++	/vendor/etc/wifi/WCNSS_qcom_cfg.ini \
++	/vendor/firmware/wlan/prima/WCNSS_qcom_cfg.ini
++link_prima_file WCNSS_qcom_wlan_nv.bin \
++	/mnt/vendor/persist/WCNSS_qcom_wlan_nv.bin \
++	/persist/WCNSS_qcom_wlan_nv.bin \
++	/vendor/firmware/wlan/prima/WCNSS_qcom_wlan_nv.bin
++link_prima_file WCNSS_wlan_dictionary.dat \
++	/mnt/vendor/persist/WCNSS_wlan_dictionary.dat \
++	/persist/WCNSS_wlan_dictionary.dat \
++	/vendor/firmware/wlan/prima/WCNSS_wlan_dictionary.dat
 +
 +# The PIL firmware loader requests /lib/firmware/wcnss.mdt and the
 +# wcnss.b00..b09 segments, not the /vendor path, so link those too.
@@ -1400,7 +1436,7 @@ new file mode 100644
 index 00000000..0df4a572
 --- /dev/null
 +++ b/devices/fossil-hoki/wlan.nix
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,146 @@
 +{
 +  config,
 +  lib,
@@ -1436,9 +1472,13 @@ index 00000000..0df4a572
 +    # back to advertising NL80211_FEATURE_SAE. ConnMan then picks WPA3-SAE on
 +    # WPA2/WPA3 transition networks, and every connect fails with -EINVAL
 +    # ("Association request to the driver failed"). WPA2-PSK works.
++    # Use request_firmware_direct for optional wlan_mac.bin so its absence does
++    # not stall modprobe for 60 s waiting on the userspace firmware helper.
 +    postPatch = ''
 +      substituteInPlace CORE/HDD/inc/wlan_hdd_cfg.h \
 +        --replace-fail '#define CFG_IS_SAE_ENABLED_DEFAULT (1)' '#define CFG_IS_SAE_ENABLED_DEFAULT (0)'
++      substituteInPlace CORE/VOSS/src/vos_nvitem.c \
++        --replace-fail 'status = request_firmware(&pHddCtx->fw, pfileName, pHddCtx->parent_dev);' 'status = request_firmware_direct(&pHddCtx->fw, pfileName, pHddCtx->parent_dev);'
 +    '';
 +
 +    nativeBuildInputs =

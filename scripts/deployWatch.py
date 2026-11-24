@@ -142,10 +142,15 @@ def run_build_cmd(
     return stdout_lines[-1]
 
 
-def build_asteroid_toplevel(repo_root: Path, device: str) -> str:
+def build_asteroid_toplevel(repo_root: Path, device: str, use_worktree: bool = False) -> str:
     log(f"Building full AsteroidOS UI desktop toplevel for '{device}'...")
     examples_path = repo_root / "work" / "mobile-nixos" / "examples" / "asteroid"
-    if examples_path.is_dir():
+    if use_worktree:
+        if not examples_path.is_dir():
+            raise FileNotFoundError(
+                f"--use-worktree requested, but {examples_path} does not exist"
+            )
+        log_warn(f"Building from local worktree {examples_path} instead of flake HEAD.")
         cmd = [
             "nix-build",
             str(examples_path),
@@ -192,8 +197,9 @@ def deploy_copy(
     action: str,
     dry_run: bool,
     reboot: bool,
+    use_worktree: bool = False,
 ) -> None:
-    toplevel = build_asteroid_toplevel(repo_root, device)
+    toplevel = build_asteroid_toplevel(repo_root, device, use_worktree=use_worktree)
 
     if dry_run:
         log("Dry run requested. Closures built successfully; skipping transmission and activation.")
@@ -375,6 +381,11 @@ Examples:
         help="Deployment method (default: copy)",
     )
     parser.add_argument(
+        "--use-worktree",
+        action="store_true",
+        help="Build from local work/mobile-nixos/examples/asteroid instead of the flake (only for --method copy)",
+    )
+    parser.add_argument(
         "-n",
         "--dry-run",
         action="store_true",
@@ -404,6 +415,8 @@ Examples:
         parser.error("deploy-rs uses the hostname and SSH user configured in flake.nix")
     if args.method == "nixos-rebuild" and args.port != 22:
         parser.error("--port is supported only by --method copy")
+    if args.use_worktree and args.method != "copy":
+        parser.error("--use-worktree is supported only by --method copy")
     repo_root = get_repo_root()
 
     print("=" * 60)
@@ -432,6 +445,7 @@ Examples:
             action=args.action,
             dry_run=args.dry_run,
             reboot=args.reboot,
+            use_worktree=args.use_worktree,
         )
     elif args.method == "nixos-rebuild":
         deploy_nixos_rebuild(
