@@ -375,7 +375,7 @@ new file mode 100644
 index 00000000..f7a7d93a
 --- /dev/null
 +++ b/overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch
-@@ -0,0 +1,699 @@
+@@ -0,0 +1,721 @@
 +diff --git a/lipstick/src/components/launcheritem.cpp b/lipstick/src/components/launcheritem.cpp
 +index 3f8446f..85b44c6 100644
 +--- a/lipstick/src/components/launcheritem.cpp
@@ -543,7 +543,7 @@ index 00000000..f7a7d93a
 +index 0000000..77e9f33
 +--- /dev/null
 ++++ b/src/wifipowermanager.cpp
-+@@ -0,0 +1,238 @@
++@@ -0,0 +1,257 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -595,6 +595,14 @@ index 00000000..f7a7d93a
 ++        this,
 ++        SLOT(onConnmanPropertyChanged(QString, QDBusVariant)));
 ++
+++    QDBusConnection::systemBus().connect(
+++        QString::fromLatin1(kConnmanService),
+++        QStringLiteral("/"),
+++        QStringLiteral("net.connman.Manager"),
+++        QStringLiteral("TechnologyAdded"),
+++        this,
+++        SLOT(onConnmanTechnologyAdded(QDBusObjectPath, QVariantMap)));
+++
 ++    refreshDesktopIndex();
 ++    onSettingsChanged();
 ++    queryInitialWifiPower();
@@ -625,6 +633,17 @@ index 00000000..f7a7d93a
 ++        const bool powered = value.variant().toBool();
 ++        qInfo() << "WifiPowerManager: connman Powered=" << powered;
 ++        applyDecision(m_policy.onWifiPoweredChanged(powered));
+++    }
+++}
+++
+++void WifiPowerManager::onConnmanTechnologyAdded(const QDBusObjectPath &path, const QVariantMap &properties)
+++{
+++    if (path.path() != QLatin1String(kConnmanWifiPath)) return;
+++    const bool powered = properties.value(QStringLiteral("Powered"), false).toBool();
+++    qInfo() << "WifiPowerManager: Wi-Fi technology added Powered=" << powered;
+++    applyDecision(m_policy.onWifiPoweredChanged(powered));
+++    if (m_chargerState->valid()) {
+++        applyDecision(m_policy.onChargingChanged(m_chargerState->charging()));
 ++    }
 ++}
 ++
@@ -787,18 +806,20 @@ index 00000000..f7a7d93a
 +index 0000000..75a9799
 +--- /dev/null
 ++++ b/src/wifipowermanager.h
-+@@ -0,0 +1,50 @@
++@@ -0,0 +1,53 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
 ++ */
 ++#pragma once
 ++
+++#include <QDBusObjectPath>
 ++#include <QDBusVariant>
 ++#include <QHash>
 ++#include <QObject>
 ++#include <QString>
 ++#include <QTimer>
+++#include <QVariantMap>
 ++
 ++#include "wifipowerpolicy.h"
 ++
@@ -817,6 +838,7 @@ index 00000000..f7a7d93a
 ++    void onSettingsChanged();
 ++    void onChargerChanged();
 ++    void onConnmanPropertyChanged(const QString &name, const QDBusVariant &value);
+++    void onConnmanTechnologyAdded(const QDBusObjectPath &path, const QVariantMap &properties);
 ++    void onIdleTimeout();
 ++    void onLaunchGraceTimeout();
 ++

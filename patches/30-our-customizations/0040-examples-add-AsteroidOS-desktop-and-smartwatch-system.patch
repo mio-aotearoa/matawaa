@@ -17,7 +17,7 @@ new file mode 100644
 index 00000000..ad47f319
 --- /dev/null
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -0,0 +1,998 @@
+@@ -0,0 +1,1008 @@
 +{
 +  config,
 +  lib,
@@ -503,7 +503,17 @@ index 00000000..ad47f319
 +
 +      # Upstream meta-hoki IMAGE_INSTALL: udev-droid-system.
 +      # Android-style /dev/block/platform/.../by-name links for the vendor HALs.
-+      services.udev.packages = lib.optionals isLegacy [ pkgs.asteroid.udev-droid-system ];
++      # Also override NixOS wpa_supplicant.nix's 99-local.rules wlan restart
++      # hook: ConnMan controls wpa_supplicant over D-Bus (-u), and restarting
++      # wpa_supplicant when wlan0 appears drops ConnMan's interface registration
++      # and blocks boot-time auto-connect on late-loading drivers (e.g. Hoki).
++      services.udev.packages =
++        lib.optionals isLegacy [ pkgs.asteroid.udev-droid-system ]
++        ++ [
++          (pkgs.writeTextDir "lib/udev/rules.d/99-zz-connman-no-wpa-restart.rules" ''
++            ACTION=="add|remove", SUBSYSTEM=="net", ENV{DEVTYPE}=="wlan", RUN="${pkgs.coreutils}/bin/true"
++          '')
++        ];
 +
 +      # Upstream meta-hoki IMAGE_INSTALL: swclock-offset.
 +      # hoki's RTC is not writable; the offset between RTC and system clock is
