@@ -475,9 +475,9 @@ index 00000000..ad47f319
 +          Type = "notify";
 +          # Give SLPI / sensors.ssc a moment after android-init starts.
 +          ExecStartPre = "${pkgs.coreutils}/bin/sleep 2";
-+          ExecStart = "${pkgs.asteroid.sensorfw}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=${
-+            if debugBuild then "debug" else "warning"
-+          } --no-magnetometer-bg-calibration";
++          # Keep sensorfwd at warning even on debug builds; --log-level=debug
++          # logs two lines per accelerometer sample (~50-100 lines/s).
++          ExecStart = "${pkgs.asteroid.sensorfw}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=warning --no-magnetometer-bg-calibration";
 +          ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
 +          Restart = "always";
 +          RestartSec = 2;
@@ -805,7 +805,7 @@ index 00000000..ad47f319
 +            # diagnostics below would never reach launcher.log without enabling that
 +            # category explicitly. `qt.qml.*` only covers its subcategories.
 +            # Silence verbose scene graph render loop frame chatter to prevent log explosion.
-+            QT_LOGGING_RULES = "*=false;default.warning=true;default.debug=true;qml.debug=true;qml.info=true;qml.warning=true;qml.critical=true;qt.qml.*=true;qt.qpa.*=true;qt.waylandcompositor.*=true;qt.core.plugin.*=true";
++            QT_LOGGING_RULES = "*=false;default.warning=true;default.debug=true;qml.debug=true;qml.info=true;qml.warning=true;qml.critical=true;qt.qml.*=true;qt.qml.overloadresolution=false;qt.qml.gc.*=false;qt.qml.binding.*=false;qt.qml.diskcache.*=false;qt.qpa.*=true;qt.waylandcompositor.*=true;qt.core.plugin.*=true";
 +            QT_DEBUG_PLUGINS = "1";
 +            # Log every QML import attempt (module, version, and the directory each
 +            # candidate was looked up in) plus the scene graph the renderer picked.
@@ -875,8 +875,8 @@ index 00000000..ad47f319
 +        // lib.optionalAttrs debugBuild {
 +          # Debug builds: the stage-2 journal is volatile and a hard reset loses
 +          # it, so keep the launcher's Qt/EGL output in the user's home.
-+          StandardOutput = "append:/home/ceres/launcher.log";
-+          StandardError = "append:/home/ceres/launcher.log";
++          StandardOutput = "truncate:/home/ceres/launcher.log";
++          StandardError = "inherit";
 +        };
 +      };
 +

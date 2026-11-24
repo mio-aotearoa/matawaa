@@ -27,15 +27,15 @@ index d6963f1e..54507e20 100644
    # Upstream asteroid-launcher_git.bb installs a seeded notification database
    # into the ceres user's privileged data directory.
    # https://github.com/AsteroidOS/meta-asteroid/tree/master/recipes-asteroid/asteroid-launcher/asteroid-launcher/Notifications
-@@ -520,7 +528,7 @@ in
-           Type = "notify";
-           # Give SLPI / sensors.ssc a moment after android-init starts.
+@@ -524,7 +532,7 @@ in
            ExecStartPre = "${pkgs.coreutils}/bin/sleep 2";
--          ExecStart = "${pkgs.asteroid.sensorfw}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=${
-+          ExecStart = "${sensorfwPackage}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=${
-             if debugBuild then "debug" else "warning"
-           } --no-magnetometer-bg-calibration";
+           # Keep sensorfwd at warning even on debug builds; --log-level=debug
+           # logs two lines per accelerometer sample (~50-100 lines/s).
+-          ExecStart = "${pkgs.asteroid.sensorfw}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=warning --no-magnetometer-bg-calibration";
++          ExecStart = "${sensorfwPackage}/sbin/sensorfwd -c=/etc/sensorfw/primaryuse.conf --systemd --log-level=warning --no-magnetometer-bg-calibration";
            ExecReload = "${pkgs.coreutils}/bin/kill -HUP $MAINPID";
+           Restart = "always";
+           RestartSec = 2;
 @@ -540,9 +548,8 @@ in
        # Upstream sensorfw installs its configs into /etc/sensorfw and the Qt
        # Sensors type map into /etc/xdg/QtProject.
@@ -86,7 +86,7 @@ index 37cfc405..1f5423e3 100644
    ];
  
    postPatch = ''
-@@ -72,17 +81,20 @@ stdenv.mkDerivation {
+@@ -73,17 +82,20 @@ stdenv.mkDerivation {
      "INCLUDEPATH+=${libhybris}/include"
      "INCLUDEPATH+=${libhybris.androidHeadersInclude}"
      "LIBS+=-L${libhybris}/lib"

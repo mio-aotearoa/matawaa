@@ -3047,7 +3047,7 @@ new file mode 100644
 index 00000000..37cfc405
 --- /dev/null
 +++ b/overlay/asteroidos/sensorfw/default.nix
-@@ -0,0 +1,96 @@
+@@ -0,0 +1,101 @@
 +# Nemomobile SensorFW sensor daemon and Qt client API
 +# Upstream repository: https://github.com/sailfishos/sensorfw
 +# Packaging reference in AsteroidOS: https://github.com/AsteroidOS/meta-asteroid/tree/master/recipes-nemomobile/sensorfw
@@ -3118,6 +3118,7 @@ index 00000000..37cfc405
 +  '';
 +
 +  qmakeFlags = [
++    "QT6_INSTALL_LIBDIR=${placeholder "out"}/lib"
 +    "CONFIG+=hybris"
 +    "INCLUDEPATH+=${libhybris}/include"
 +    "INCLUDEPATH+=${libhybris.androidHeadersInclude}"
@@ -3136,6 +3137,10 @@ index 00000000..37cfc405
 +  '';
 +
 +  installFlags = [ "INSTALL_ROOT=$(out)" ];
++
++  postInstall = ''
++    install -Dm644 config/sensord-hybris.conf "$out/etc/sensorfw/primaryuse.conf"
++  '';
 +
 +  meta = with lib; {
 +    description = "Nemomobile sensor daemon and Qt sensor client API";

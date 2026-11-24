@@ -17,7 +17,7 @@ diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid
 index 61225458..6defac30 100644
 --- a/examples/asteroid/asteroid-desktop.nix
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -708,6 +708,20 @@ in
+@@ -708,6 +708,32 @@ in
          LD_LIBRARY_PATH = "${pkgs.libhybris}/lib:${pkgs.asteroid.libconnman-qt}/lib";
        };
  
@@ -29,6 +29,18 @@ index 61225458..6defac30 100644
 +        after = [ "dbus.socket" ];
 +        unitConfig.ConditionUser = "!root";
 +        serviceConfig = {
++          # Wait for system sensorfwd to register on D-Bus so Qt Sensors binds
++          # to SensorManager at startup instead of caching a missing manager.
++          ExecStartPre = "${pkgs.writeShellScript "sensorlogd-wait-sensorfwd" ''
++            i=0
++            while [ "$i" -lt 60 ]; do
++              if ${pkgs.systemd}/bin/busctl --system call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus NameHasOwner s com.nokia.SensorService 2>/dev/null | ${pkgs.gnugrep}/bin/grep -q true; then
++                exit 0
++              fi
++              ${pkgs.coreutils}/bin/sleep 0.5
++              i=$((i + 1))
++            done
++          ''}";
 +          ExecStart = "${pkgs.asteroid.community-apps.sensorlogd}/bin/sensorlogd";
 +          Restart = "on-failure";
 +          RestartSec = 5;

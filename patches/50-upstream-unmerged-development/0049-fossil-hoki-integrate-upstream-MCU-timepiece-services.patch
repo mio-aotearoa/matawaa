@@ -54,7 +54,7 @@ new file mode 100644
 index 00000000..a247ed16
 --- /dev/null
 +++ b/devices/fossil-hoki/timepiece.nix
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,99 @@
 +# Upstream Hoki timepiece mode hands the panel to the BG MCU and powers Linux
 +# off. It is an explicit action, never an idle/suspend hook.
 +# https://github.com/MagneFire/asteroid-coprocessor/pull/3
@@ -129,7 +129,19 @@ index 00000000..a247ed16
 +        ConditionUser = "!root";
 +        StartLimitIntervalSec = 0;
 +      };
-+      systemd.user.timers.asteroid-seconddisplay-sync-time.wantedBy = [ "timers.target" ];
++      systemd.user.timers.asteroid-seconddisplay-sync-time = {
++        wantedBy = [ "timers.target" ];
++        timerConfig = {
++          # Suspend/resume discontinuities re-arm OnClockChange=true on every
++          # ambient wake (~870x overnight); sync at boot, on timezone change,
++          # and hourly instead.
++          Unit = "asteroid-seconddisplay-sync-time.service";
++          OnClockChange = false;
++          OnTimezoneChange = true;
++          OnBootSec = "30s";
++          OnCalendar = "hourly";
++        };
++      };
 +
 +      # The desktop session is started through linger and may not count as active.
 +      security.polkit.extraConfig = ''
