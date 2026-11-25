@@ -1,12 +1,37 @@
-"""Shared patch-folder discovery for the apply and rebuild commands."""
+"""Shared patch-series helpers for the apply and rebuild commands."""
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 
 CATEGORY_PREFIX = re.compile(r"^\d{2}-")
+DEFAULT_COMMITTER_NAME = "Matawaa Patch Applier"
+DEFAULT_COMMITTER_EMAIL = "matawaa@localhost"
+
+
+def git_committer_args(repo: Path) -> list[str]:
+    """Return fallback git -c identity flags when no committer identity is configured."""
+    args: list[str] = []
+    for env_var, config_key, default_value in (
+        ("GIT_COMMITTER_NAME", "user.name", DEFAULT_COMMITTER_NAME),
+        ("GIT_COMMITTER_EMAIL", "user.email", DEFAULT_COMMITTER_EMAIL),
+    ):
+        if os.environ.get(env_var, "").strip():
+            continue
+        result = subprocess.run(
+            ["git", "config", "--get", config_key],
+            cwd=repo,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            args.extend(["-c", f"{config_key}={default_value}"])
+    return args
 
 
 def discover_categories(patches: Path) -> list[str]:

@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
-from patch_series import discover_categories, patches_in_order
+from patch_series import discover_categories, git_committer_args, patches_in_order
 
 UPSTREAM_URL = "https://github.com/NixOS/mobile-nixos.git"
 BRANCH_NAME = "matawaa-work"
@@ -98,12 +98,13 @@ def main() -> int:
     git(["checkout", "-B", branch_name, upstream_commit], cwd=work)
 
     info(f"Applying categorized patch series from {patches}...")
+    committer_args = git_committer_args(work)
     patch_count = 0
     for category, patch in ordered_patches:
         relative_name = f"{category}/{patch.name}"
         info(f"Applying {relative_name}...")
         result = git(
-            ["-C", str(work), "am", "--3way", "--ignore-whitespace", str(patch)],
+            ["-C", str(work), *committer_args, "am", "--3way", "--ignore-whitespace", str(patch)],
             cwd=root,
             check=False,
         )

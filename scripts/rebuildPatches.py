@@ -15,7 +15,7 @@ from typing import NoReturn
 
 sys.dont_write_bytecode = True
 
-from patch_series import discover_categories, patches_in_order
+from patch_series import discover_categories, git_committer_args, patches_in_order
 
 
 PATCH_RE = re.compile(r"^(?P<number>\d{4,})-(?P<subject>.+)\.patch$")
@@ -53,9 +53,10 @@ def patch_baseline_tree(
             detail = exc.stderr.strip() if exc.stderr else str(exc)
             fail(f"Could not prepare a disposable upstream worktree: {detail}")
 
+        committer_args = git_committer_args(replay)
         for category, patch in ordered_patches:
             result = subprocess.run(
-                ["git", "am", "--3way", "--ignore-whitespace", str(patch)],
+                ["git", *committer_args, "am", "--3way", "--ignore-whitespace", str(patch)],
                 cwd=replay,
                 text=True,
                 stdout=subprocess.PIPE,
