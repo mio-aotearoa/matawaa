@@ -12,9 +12,9 @@ diff --git a/examples/asteroid/asteroid-desktop.nix b/examples/asteroid/asteroid
 index d6963f1e..54507e20 100644
 --- a/examples/asteroid/asteroid-desktop.nix
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -38,6 +38,14 @@ let
-     else
-       pkgs.asteroid.mce;
+@@ -40,6 +40,14 @@ let
+       '';
+   });
  
 +  # Upstream meta-hoki uses sensorfw-hybris-binder-plugins (libgbinder over
 +  # Android 9 Treble ISensors@1.0 HIDL) rather than HAL1 hw_get_module().
@@ -86,7 +86,7 @@ index 37cfc405..1f5423e3 100644
    ];
  
    postPatch = ''
-@@ -73,17 +82,20 @@ stdenv.mkDerivation {
+@@ -76,17 +85,20 @@ stdenv.mkDerivation {
      "INCLUDEPATH+=${libhybris}/include"
      "INCLUDEPATH+=${libhybris.androidHeadersInclude}"
      "LIBS+=-L${libhybris}/lib"

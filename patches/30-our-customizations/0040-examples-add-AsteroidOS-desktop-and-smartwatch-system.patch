@@ -17,7 +17,7 @@ new file mode 100644
 index 00000000..ad47f319
 --- /dev/null
 +++ b/examples/asteroid/asteroid-desktop.nix
-@@ -0,0 +1,1008 @@
+@@ -0,0 +1,1010 @@
 +{
 +  config,
 +  lib,
@@ -38,23 +38,25 @@ index 00000000..ad47f319
 +
 +  isLegacy = config.mobile.hardware.watch.kernel != "modern";
 +
-+  # Keep MCE proximity input uncovered on Hoki (no proximity sensor) and
++  # Disable tilt-to-wake by default (triggers too easily on wrist motion;
++  # users can still enable it in Settings -> Display -> Tilt-to-wake).
++  # On Hoki, also keep proximity uncovered (no proximity sensor) and
 +  # disable autosuspend while on charger so Wi-Fi/SSH stay reliable docked.
-+  mcePackage =
-+    if config.mobile.device.name == "fossil-hoki" then
-+      pkgs.asteroid.mce.overrideAttrs (old: {
-+        # Synthetic proximity samples can report CLOSED and block waking the
-+        # screen. Hoki has no proximity sensor; keep its MCE input uncovered.
-+        # Autosuspend policy 3 = SUSPEND_POLICY_DISABLE_ON_CHARGER.
-+        postInstall = (old.postInstall or "") + ''
-+          printf '%s\n' '/system/osso/dsm/proximity/ps_enabled=false' \
-+            > "$out/etc/mce/90-hoki-proximity.conf"
-+          printf '%s\n' '/system/osso/dsm/display/autosuspend_policy=3' \
-+            > "$out/etc/mce/90-hoki-power.conf"
-+        '';
-+      })
-+    else
-+      pkgs.asteroid.mce;
++  mcePackage = pkgs.asteroid.mce.overrideAttrs (old: {
++    # Autosuspend policy 3 = SUSPEND_POLICY_DISABLE_ON_CHARGER.
++    postInstall =
++      (old.postInstall or "")
++      + ''
++        printf '%s\n' '/system/osso/dsm/display/wrist_sensor_enabled=false' \
++          > "$out/etc/mce/80-asteroid-tilt-to-wake.conf"
++      ''
++      + lib.optionalString (config.mobile.device.name == "fossil-hoki") ''
++        printf '%s\n' '/system/osso/dsm/proximity/ps_enabled=false' \
++          > "$out/etc/mce/90-hoki-proximity.conf"
++        printf '%s\n' '/system/osso/dsm/display/autosuspend_policy=3' \
++          > "$out/etc/mce/90-hoki-power.conf"
++      '';
++  });
 +
 +  # Upstream asteroid-launcher_git.bb installs a seeded notification database
 +  # into the ceres user's privileged data directory.
@@ -805,7 +807,7 @@ index 00000000..ad47f319
 +            # diagnostics below would never reach launcher.log without enabling that
 +            # category explicitly. `qt.qml.*` only covers its subcategories.
 +            # Silence verbose scene graph render loop frame chatter to prevent log explosion.
-+            QT_LOGGING_RULES = "*=false;default.warning=true;default.debug=true;qml.debug=true;qml.info=true;qml.warning=true;qml.critical=true;qt.qml.*=true;qt.qml.overloadresolution=false;qt.qml.gc.*=false;qt.qml.binding.*=false;qt.qml.diskcache.*=false;qt.qpa.*=true;qt.waylandcompositor.*=true;qt.core.plugin.*=true";
++            QT_LOGGING_RULES = "*=false;default.warning=true;default.debug=true;qml.debug=true;qml.info=true;qml.warning=true;qml.critical=true;qt.qml.*=true;qt.qml.overloadresolution=false;qt.qml.gc.*=false;qt.qml.binding.*=false;qt.qml.diskcache.*=false;qt.qml.v4.*=false;qt.qpa.*=true;qt.waylandcompositor.*=true;qt.core.plugin.*=true";
 +            QT_DEBUG_PLUGINS = "1";
 +            # Log every QML import attempt (module, version, and the directory each
 +            # candidate was looked up in) plus the scene graph the renderer picked.

@@ -333,7 +333,7 @@ index 00000000..ab150a05
 ++                        iconName: "ios-trash-circle"
 ++                        width: Dims.w(20)
 ++                        height: width
-++                        onClicked: forgetRemorse.start()
+++                        onClicked: if (!forgetRemorse.visible) forgetRemorse.start()
 ++                    }
 ++                }
 ++            }
@@ -345,7 +345,7 @@ index 00000000..ab150a05
 ++                //% "Tap to cancel"
 ++                cancelText: qsTrId("id-tap-to-cancel")
 ++                onTriggered: {
-++                    if (!confirmPage.active)
+++                    if (!confirmPage.active || layerStack.currentLayer !== confirmPage)
 ++                        return
 ++                    if (confirmPage.networkService)
 ++                        confirmPage.networkService.remove()
@@ -375,7 +375,7 @@ new file mode 100644
 index 00000000..f7a7d93a
 --- /dev/null
 +++ b/overlay/asteroidos/asteroid-launcher/power-wifi-policy.patch
-@@ -0,0 +1,721 @@
+@@ -0,0 +1,746 @@
 +diff --git a/lipstick/src/components/launcheritem.cpp b/lipstick/src/components/launcheritem.cpp
 +index 3f8446f..85b44c6 100644
 +--- a/lipstick/src/components/launcheritem.cpp
@@ -492,11 +492,12 @@ index 00000000..f7a7d93a
 + 
 + add_executable(asteroid-launcher ${SRC} ${HEADERS} resources-qml.qrc)
 + 
-+@@ -86,6 +89,7 @@ target_link_libraries(
++@@ -86,6 +89,8 @@ target_link_libraries(
 + 		lipstick
 + 		Timed::Timed
 + 		PkgConfig::mlite6
 ++		PkgConfig::mce-qt6
+++		PkgConfig::keepalive
 + )
 + 
 + install(
@@ -543,7 +544,7 @@ index 00000000..f7a7d93a
 +index 0000000..77e9f33
 +--- /dev/null
 ++++ b/src/wifipowermanager.cpp
-+@@ -0,0 +1,257 @@
++@@ -0,0 +1,266 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -562,12 +563,14 @@ index 00000000..f7a7d93a
 ++#include <QProcess>
 ++#include <QSettings>
 ++#include <QStandardPaths>
+++#include <keepalive/backgroundactivity.h>
 ++#include <qmcechargerstate.h>
 ++
 ++namespace {
 ++constexpr auto kConnmanService = "net.connman";
 ++constexpr auto kConnmanWifiPath = "/net/connman/technology/wifi";
 ++constexpr auto kConnmanTechIface = "net.connman.Technology";
+++constexpr int kIdleActivitySlackSec = 15;
 ++} // namespace
 ++
 ++WifiPowerManager::WifiPowerManager(QObject *parent)
@@ -575,12 +578,12 @@ index 00000000..f7a7d93a
 ++    , m_enabledConf(new MGConfItem(QStringLiteral("/desktop/asteroid/power/wifi-power-save-enabled"), this))
 ++    , m_timeoutConf(new MGConfItem(QStringLiteral("/desktop/asteroid/power/wifi-idle-timeout-sec"), this))
 ++    , m_chargerState(new QMceChargerState(this))
+++    , m_idleActivity(new BackgroundActivity(this))
 ++{
-++    m_idleTimer.setSingleShot(true);
 ++    m_launchGraceTimer.setSingleShot(true);
 ++    m_launchGraceTimer.setInterval(15000);
 ++
-++    connect(&m_idleTimer, &QTimer::timeout, this, &WifiPowerManager::onIdleTimeout);
+++    connect(m_idleActivity, &BackgroundActivity::running, this, &WifiPowerManager::onIdleTimeout);
 ++    connect(&m_launchGraceTimer, &QTimer::timeout, this, &WifiPowerManager::onLaunchGraceTimeout);
 ++    connect(m_enabledConf, &MGConfItem::valueChanged, this, &WifiPowerManager::onSettingsChanged);
 ++    connect(m_timeoutConf, &MGConfItem::valueChanged, this, &WifiPowerManager::onSettingsChanged);
@@ -612,12 +615,17 @@ index 00000000..f7a7d93a
 ++void WifiPowerManager::onSettingsChanged()
 ++{
 ++    const bool enabled = m_enabledConf->value(true).toBool();
+++    const int prevTimeoutSec = m_policy.idleTimeoutSec();
 ++    const int timeoutSec = m_timeoutConf->value(300).toInt();
 ++    m_policy.setIdleTimeoutSec(timeoutSec);
-++    if (m_idleTimer.isActive()) {
-++        m_idleTimer.setInterval(m_policy.idleTimeoutSec() * 1000);
+++    const WifiPolicyDecision decision = m_policy.onPolicyEnabledChanged(enabled);
+++    applyDecision(decision);
+++    if (!decision.startIdleTimer
+++        && m_policy.isIdleTimerRunning()
+++        && m_policy.idleTimeoutSec() != prevTimeoutSec) {
+++        const int secs = m_policy.idleTimeoutSec();
+++        m_idleActivity->wait(secs, secs + kIdleActivitySlackSec);
 ++    }
-++    applyDecision(m_policy.onPolicyEnabledChanged(enabled));
 ++}
 ++
 ++void WifiPowerManager::onChargerChanged()
@@ -641,14 +649,15 @@ index 00000000..f7a7d93a
 ++    if (path.path() != QLatin1String(kConnmanWifiPath)) return;
 ++    const bool powered = properties.value(QStringLiteral("Powered"), false).toBool();
 ++    qInfo() << "WifiPowerManager: Wi-Fi technology added Powered=" << powered;
-++    applyDecision(m_policy.onWifiPoweredChanged(powered));
-++    if (m_chargerState->valid()) {
+++    applyDecision(m_policy.onWifiTechnologyAdded(powered));
+++    if (m_chargerState->valid() && m_chargerState->charging() != m_policy.isCharging()) {
 ++        applyDecision(m_policy.onChargingChanged(m_chargerState->charging()));
 ++    }
 ++}
 ++
 ++void WifiPowerManager::onIdleTimeout()
 ++{
+++    m_idleActivity->stop();
 ++    qInfo() << "WifiPowerManager: idle timer expired";
 ++    applyDecision(m_policy.onIdleTimerExpired());
 ++}
@@ -700,10 +709,11 @@ index 00000000..f7a7d93a
 ++void WifiPowerManager::applyDecision(const WifiPolicyDecision &decision)
 ++{
 ++    if (decision.stopIdleTimer) {
-++        m_idleTimer.stop();
+++        m_idleActivity->stop();
 ++    }
 ++    if (decision.startIdleTimer) {
-++        m_idleTimer.start(m_policy.idleTimeoutSec() * 1000);
+++        const int secs = m_policy.idleTimeoutSec();
+++        m_idleActivity->wait(secs, secs + kIdleActivitySlackSec);
 ++    }
 ++    if (decision.wifiAction == WifiPolicyDecision::WifiAction::EnableWifi) {
 ++        setWifiPowered(true);
@@ -806,7 +816,7 @@ index 00000000..f7a7d93a
 +index 0000000..75a9799
 +--- /dev/null
 ++++ b/src/wifipowermanager.h
-+@@ -0,0 +1,53 @@
++@@ -0,0 +1,54 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -823,6 +833,7 @@ index 00000000..f7a7d93a
 ++
 ++#include "wifipowerpolicy.h"
 ++
+++class BackgroundActivity;
 ++class MGConfItem;
 ++class QMceChargerState;
 ++
@@ -854,7 +865,7 @@ index 00000000..f7a7d93a
 ++    MGConfItem *m_enabledConf = nullptr;
 ++    MGConfItem *m_timeoutConf = nullptr;
 ++    QMceChargerState *m_chargerState = nullptr;
-++    QTimer m_idleTimer;
+++    BackgroundActivity *m_idleActivity = nullptr;
 ++    QTimer m_launchGraceTimer;
 ++    bool m_foregroundNeedsWifi = false;
 ++    bool m_launchGraceActive = false;
@@ -865,7 +876,7 @@ index 00000000..f7a7d93a
 +index 0000000..e9a5aad
 +--- /dev/null
 ++++ b/src/wifipowerpolicy.h
-+@@ -0,0 +1,122 @@
++@@ -0,0 +1,136 @@
 ++// SPDX-License-Identifier: GPL-3.0-or-later
 ++/*
 ++ * Copyright (C) 2026 AsteroidOS / Matawaa
@@ -948,6 +959,13 @@ index 00000000..f7a7d93a
 ++        return d;
 ++    }
 ++
+++    WifiPolicyDecision onWifiTechnologyAdded(bool powered)
+++    {
+++        m_wifiPowered = powered;
+++        if (!m_policyEnabled) return {};
+++        return evaluateState();
+++    }
+++
 ++    WifiPolicyDecision onIdleTimerExpired()
 ++    {
 ++        WifiPolicyDecision d;
@@ -974,7 +992,14 @@ index 00000000..f7a7d93a
 ++            return d;
 ++        }
 ++        // On battery and no Wi-Fi-needing app is active.
-++        if (m_wifiPowered && !m_idleTimerRunning) {
+++        if (!m_wifiPowered) {
+++            if (m_idleTimerRunning) {
+++                m_idleTimerRunning = false;
+++                d.stopIdleTimer = true;
+++            }
+++            return d;
+++        }
+++        if (!m_idleTimerRunning) {
 ++            m_idleTimerRunning = true;
 ++            d.startIdleTimer = true;
 ++        }

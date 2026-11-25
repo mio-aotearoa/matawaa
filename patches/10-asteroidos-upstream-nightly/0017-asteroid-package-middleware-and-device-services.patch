@@ -3047,7 +3047,7 @@ new file mode 100644
 index 00000000..37cfc405
 --- /dev/null
 +++ b/overlay/asteroidos/sensorfw/default.nix
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,104 @@
 +# Nemomobile SensorFW sensor daemon and Qt client API
 +# Upstream repository: https://github.com/sailfishos/sensorfw
 +# Packaging reference in AsteroidOS: https://github.com/AsteroidOS/meta-asteroid/tree/master/recipes-nemomobile/sensorfw
@@ -3107,6 +3107,9 @@ index 00000000..37cfc405
 +    sed -i 's/sensord-qt5/sensord-qt6/g' sensorfw.pro
 +    sed -i '/^[[:space:]]*tests[[:space:]]*\\$/d' sensorfw.pro
 +    sed -i 's:-L/usr/lib ::' core/hybris.pro
++    substituteInPlace core/sockethandler.cpp \
++      --replace-fail 'SIGNAL(error(QLocalSocket::LocalSocketError))' \
++                     'SIGNAL(errorOccurred(QLocalSocket::LocalSocketError))'
 +    find . \( -name '*.pro' -o -name '*.pri' \) -exec sed -i \
 +      -e 's|$$\[QT_INSTALL_LIBS\]|/lib|g' \
 +      -e 's|$$\[QT_INSTALL_DATA\]||g' \

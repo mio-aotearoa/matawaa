@@ -62,7 +62,36 @@ int main()
     assert(d.stopIdleTimer);
     assert(!p.isIdleTimerRunning());
 
-    // 8. Disabling policy stops timer and stops managing Wi-Fi
+    // 8. Late Wi-Fi technology probe (e.g. Hoki wlan0) while charging enables Wi-Fi
+    {
+        WifiPowerPolicy late;
+        auto ld = late.onChargingChanged(true);
+        assert(ld.wifiAction == WifiPolicyDecision::WifiAction::EnableWifi);
+        // Technology arrives later with Powered=false -> must re-emit EnableWifi
+        ld = late.onWifiTechnologyAdded(false);
+        assert(ld.wifiAction == WifiPolicyDecision::WifiAction::EnableWifi);
+        assert(!ld.startIdleTimer);
+    }
+
+    // 9. Late Wi-Fi technology probe on battery: enables if app needs Wi-Fi, else starts idle timer
+    {
+        WifiPowerPolicy lateApp;
+        lateApp.onWifiAppActiveChanged(true);
+        auto ld = lateApp.onWifiTechnologyAdded(false);
+        assert(ld.wifiAction == WifiPolicyDecision::WifiAction::EnableWifi);
+        assert(!ld.startIdleTimer);
+
+        WifiPowerPolicy lateIdle;
+        ld = lateIdle.onWifiTechnologyAdded(true);
+        assert(ld.wifiAction == WifiPolicyDecision::WifiAction::None);
+        assert(ld.startIdleTimer);
+        assert(lateIdle.isIdleTimerRunning());
+        ld = lateIdle.onWifiTechnologyAdded(false);
+        assert(ld.stopIdleTimer);
+        assert(!lateIdle.isIdleTimerRunning());
+    }
+
+    // 10. Disabling policy stops timer and stops managing Wi-Fi
     p.onWifiPoweredChanged(true);
     assert(p.isIdleTimerRunning());
     d = p.onPolicyEnabledChanged(false);
@@ -70,6 +99,8 @@ int main()
     d = p.onIdleTimerExpired();
     assert(d.wifiAction == WifiPolicyDecision::WifiAction::None);
     d = p.onChargingChanged(true);
+    assert(d.wifiAction == WifiPolicyDecision::WifiAction::None);
+    d = p.onWifiTechnologyAdded(false);
     assert(d.wifiAction == WifiPolicyDecision::WifiAction::None);
 
     std::cout << "PASS: WifiPowerPolicy state machine transitions\n";
