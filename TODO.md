@@ -5,7 +5,7 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 ## 0. Packaging and Runtime Follow-ups
 
 * **Fscrypt home-directory provisioning:** `modules/fscrypt.nix` exposes `user` and `policy`, but does not provision an encrypted home. Design and validate login, recovery, existing-data migration, and filesystem handling before enabling it on a device.
-* **SensorFW upstream qmake build:** The pinned source provides qmake projects, but the current Nix cross setup fails their `qtConfig()` checks. Keep the working local CMake build until a cross-compilation setup can build the upstream project and its plugins correctly.
+* **SensorFW upstream qmake build (fixed 2026-11-25):** Upstream qmake build is active in `0017` + `0064` (`enableBinder = true` on Hoki) with `QT6_INSTALL_LIBDIR=${placeholder "out"}/lib`, installed `primaryuse.conf`, and Qt 6 `QLocalSocket::errorOccurred` fix. Verified live on Fossil Hoki.
 * **Cross-built QML module discovery:** Check the remaining target-tool discovery warnings against the installed QML modules on Fossil Hoki. Confirm actual imports on device before treating a warning as a missing module.
 * **`deployWatch.py` stale `work/mobile-nixos` trap (fixed 2026-11-24):** `scripts/deployWatch.py` previously preferred `work/mobile-nixos/examples/asteroid` whenever that directory existed on disk, silently deploying stale worktree commits instead of flake `HEAD`. Now builds from the flake by default and requires explicit `--use-worktree` to build `work/mobile-nixos`.
 
@@ -86,11 +86,11 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 * **Hardware:** PixArt PAH8131/8137 PPG on Qualcomm SSC/SLPI; LifeQ algorithms in `sensors.ssc.so` expose `android.sensor.heart_rate`, `android.sensor.lifeq_lel_spo2`, `android.sensor.lifeq_lel_sleep_wake` (also `com.google.wear.sensor.ppg`).
 * **Upstream AsteroidOS status:** HR = good on [hoki](https://asteroidos.org/watches/hoki/); SpO2 = bad. Community stack: meta-asteroid hybrishrmadaptor → SensorFW → `QHrmSensor` → `asteroid-hrm` / `asteroid-health` / `asteroid-sensorlogd`.
 * **Matawaa status:** HR path packaged (`sensorfwd`, hybrishrm, hrm/health/sensorlogd apps). SpO2/sleep have **no** SensorFW/Qt types yet; BLE app-bridge only stubs `org.asteroidos.spo2`.
-* **Bring-up in tree:** sensorfwd after android-init (folded into `0031` / `0040`), SensorFW `lib*-qt6.so` Loader suffix (folded into `0017`); probe script + docs. Fixed `0022` apps/default.nix hunk count (was truncating camera `postPatch` and breaking flake eval). `deployWatch.py` embeds SSH port in `nix copy` URI.
+* **Bring-up in tree:** sensorfwd after android-init (folded into `0031` / `0040`), libgbinder HIDL backend for Hoki (`0064`), `primaryuse.conf` + `QT6_INSTALL_LIBDIR` + Qt 6 `QLocalSocket::errorOccurred` (`0017`), `asteroid-sensorlogd` D-Bus wait for `com.nokia.SensorService` (`0055`), probe script + docs. Verified live on Hoki (2026-11-25): `accelerometersensor`, `hrmsensor`, `stepcountersensor`, and `pressuresensor` load cleanly, and `sensorlogd` records barometer/step logs on cold boot.
 * **Community SpO2 WIP:** [python-ssc](https://github.com/1337Misom/python-ssc) reads Gen 6 SpO2 via SSC/QMI (not HAL); `fsl_sleep` still unimplemented there.
 * **Remaining Verification & Resolution Steps:**
-  * Deploy rebuilt image (`deployWatch.py --action switch --no-reboot`) then `./scripts/probeHealthSensors.sh`.
-  * Confirm plugins load (`lib*-qt6.so`); on-wrist `asteroid-hrm` BPM; `test_sensors` for SpO2/sleep type IDs.
+  * Deploy rebuilt image (`./scripts/deployWatch.py --target <ip>` — defaults to `--action boot --reboot`; avoid `--action switch` on Hoki) then run `./scripts/probeHealthSensors.sh`.
+  * Validate overnight on-wrist `sleepMonitor` capture and on-wrist `asteroid-hrm` BPM; run `test_sensors` for SpO2/sleep type IDs.
   * Add hybrisspo2 / hybrissleep SensorFW+Qt adaptors once IDs known; optional python-ssc demo package for SpO2.
   * Expect proprietary LifeQ limits without Wellness glue; sleep needs more SSC RE.
 
@@ -137,11 +137,11 @@ This document catalogs and tracks remaining hardware, runtime, packaging, and ar
 
 ---
 
-### 1.9 Fossil Hoki `asteroid-seconddisplay-sync-time.service` Hits `start-limit-hit`
-* **Observed on:** Fossil Gen 6 (`fossil-hoki`), 2026-11-24
-* **Symptom:** User journal repeatedly logs `asteroid-seconddisplay-sync-time.service: Start request repeated too quickly` / `Failed with result 'start-limit-hit'` across suspend/resume cycles.
-* **Fix in tree (2026-11-24):** Set `StartLimitIntervalSec = 0` on `systemd.user.services.asteroid-seconddisplay-sync-time` in `0049` so clock-change wake bursts across suspend/resume do not trip systemd's start rate limit.
-* **Verified on Hoki (2026-11-24):** `systemctl --user show asteroid-seconddisplay-sync-time.service` reports `StartLimitIntervalUSec=0` and `Result=success`. Continue monitoring across on-battery suspend/resume cycles.
+### 1.9 Fossil Hoki `asteroid-seconddisplay-sync-time.service` Wakeups & `start-limit-hit`
+* **Observed on:** Fossil Gen 6 (`fossil-hoki`), 2026-11-24 / 2026-11-25
+* **Symptom:** User journal repeatedly logged `start-limit-hit`, and overnight logs showed `OnClockChange=true` firing `asteroid-seconddisplay-sync-time.service` on every suspend/resume cycle (~873× overnight).
+* **Fix in tree (2026-11-25):** Kept `StartLimitIntervalSec = 0` on `asteroid-seconddisplay-sync-time.service` and overrode `asteroid-seconddisplay-sync-time.timer` in `0049` with `OnClockChange = false`, `OnTimezoneChange = true`, `OnBootSec = "30s"`, and `OnCalendar = "hourly"`.
+* **Verified on Hoki (2026-11-25):** Timer drop-in override applies cleanly (`OnClockChange=false`, hourly schedule) on cold boot.
 
 ---
 

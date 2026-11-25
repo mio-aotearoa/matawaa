@@ -324,14 +324,14 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Deploy full AsteroidOS UI desktop to watch (staged for next boot)
+  # Deploy full AsteroidOS UI desktop to watch (stages boot profile and reboots)
   ./scripts/deployWatch.py
 
-  # Deploy to Fossil Gen 6 and reboot immediately
-  ./scripts/deployWatch.py --reboot
-
-  # Deploy over Wi-Fi
+  # Deploy over Wi-Fi (defaults to --action boot --reboot)
   ./scripts/deployWatch.py --device fossil-hoki --target 192.168.1.150
+
+  # Stage for next boot without rebooting immediately
+  ./scripts/deployWatch.py --no-reboot
 
   # Test configuration without setting default boot profile
   ./scripts/deployWatch.py --action test

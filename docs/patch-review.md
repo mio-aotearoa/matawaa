@@ -13,8 +13,7 @@
 ## Build
 
 ```sh
-nix-build work/mobile-nixos/examples/asteroid --argstr device fossil-hoki \
-  -A config.system.build.toplevel --no-out-link
+nix build .#nixosConfigurations.fossil-hoki.config.system.build.toplevel --no-link --print-out-paths
 ```
 
 ## Health Implementation

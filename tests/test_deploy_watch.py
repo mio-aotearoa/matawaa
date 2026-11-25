@@ -82,5 +82,33 @@ class DeployCopyTests(unittest.TestCase):
             self.assertEqual(command[-1], "sudo -- sh -c 'first && second'")
 
 
+class DeployMainDefaultsTests(unittest.TestCase):
+    def run_main(self, argv):
+        with (
+            patch("sys.argv", ["deployWatch.py", *argv]),
+            patch.object(deploy_watch, "get_repo_root", return_value=Path("/repo")),
+            patch.object(deploy_watch, "deploy_copy") as copy,
+        ):
+            deploy_watch.main()
+            return copy.call_args.kwargs
+
+    def test_defaults_to_boot_and_reboot_without_worktree(self):
+        kwargs = self.run_main(["--target", "192.168.8.183"])
+        self.assertEqual(kwargs["action"], "boot")
+        self.assertTrue(kwargs["reboot"])
+        self.assertFalse(kwargs["use_worktree"])
+
+    def test_no_reboot_disables_automatic_reboot(self):
+        kwargs = self.run_main(["--no-reboot"])
+        self.assertEqual(kwargs["action"], "boot")
+        self.assertFalse(kwargs["reboot"])
+
+    def test_non_boot_actions_force_reboot_false(self):
+        for action in ("switch", "test", "dry-activate"):
+            kwargs = self.run_main(["--action", action, "--reboot"])
+            self.assertEqual(kwargs["action"], action)
+            self.assertFalse(kwargs["reboot"])
+
+
 if __name__ == "__main__":
     unittest.main()
