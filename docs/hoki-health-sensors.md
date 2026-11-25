@@ -25,7 +25,7 @@ Observed vendor HAL types: `android.sensor.heart_rate` (21), `android.sensor.lif
 | Accelerometer / Barometer / Steps | Verified live on Hoki via SensorFW HIDL binder backend (`primaryuse.conf` + `QT6_INSTALL_LIBDIR` + `sensorlogd` D-Bus wait) |
 | Heart rate | Packaged via SensorFW hybris binder adaptor (HAL type 21); PPG acquisition starts on Hoki, on-wrist BPM verification pending |
 | SpO2 | No SensorFW/Qt adaptor for private HAL type `lifeq_lel_spo2`; reference: [1337Misom/python-ssc](https://github.com/1337Misom/python-ssc) |
-| Sleep | Watch-side van Hees (2015/2018) sleep/wake implemented and synced to Gadgetbridge; `accelerometersensor` now loads cleanly on Hoki, overnight on-wrist validation pending |
+| Sleep | Watch-side van Hees (2013/2015/2018) sleep/wake + charger non-wear fusion implemented and synced cleanly to Gadgetbridge (minute-aligned, `DATA_GET` on connect); Phase 2 `sensorfw` HAL `batch()` FIFO latency (`maxReportLatencyNs`) planned to allow AP suspend during overnight capture |
 
 ## Probe Commands
 

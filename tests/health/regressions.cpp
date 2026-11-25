@@ -94,65 +94,91 @@ int main(int argc, char **argv)
     settings.sync();
     CHECK(legacy == loader.getSleepSummary(day).toMap());
 
-    // Awake observations at the edges are outside the estimated sleep times.
+    // Awake observations at the edges are outside the estimated sleep times,
+    // and duplicate per-minute timestamps are deduplicated (no double-counting).
     {
         QFile file(fileNameForDate(day, "sleepMonitor"));
         CHECK(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
         QTextStream out(&file);
         out << dayBaseSec << ":0\n" << dayBaseSec + 60 << ":1\n"
+            << dayBaseSec + 60 << ":1\n"
             << dayBaseSec + 120 << ":1\n" << dayBaseSec + 180 << ":0\n";
     }
     const auto observed = loader.getSleepSummary(day).toMap();
     CHECK(observed["onsetSec"].toLongLong() == dayBaseSec + 60);
     CHECK(observed["wakeSec"].toLongLong() == dayBaseSec + 180);
+    CHECK(observed["sleepMinutes"].toInt() == 2);
+    CHECK(observed["awakeMinutes"].toInt() == 2);
 
     // 3. van Hees (2015, 2018) / GGIR SleepDetector:
     //    Synthetic 8-hour recording: 1h active -> 3h still sleep -> 10m awake arousal -> 3h still sleep -> 50m active
     {
-        SleepDetector det;
-        const qint64 t0 = dayBaseSec;
-        // Scale invariance test: multiply acceleration by 9.80665 (m/s^2) vs 1.0 (g)
-        for (int ep = 0; ep < 8 * 720; ++ep) {
-            const qint64 sec = t0 + ep * 5;
-            double angleDeg = 10.0;
-            if (ep < 720 || ep >= 720 + 6 * 720 + 120) {
-                // Active waking movement: oscillating wrist elevation +/- 35 deg
-                angleDeg = 35.0 * std::sin(ep * 0.7);
-            } else if (ep >= 720 + 3 * 720 && ep < 720 + 3 * 720 + 120) {
-                // 10-minute mid-sleep arousal (shorter than 60-min HDCZA gap merge -> stays inside SPT as WASO)
-                angleDeg = 30.0 * std::sin(ep * 0.9);
-            } else {
-                // Quiet worn sleep: < 5 deg range over 5 min, with realistic subtle wrist micro-motion
-                // (> 50 mg range / > 13 mg SD over 60 min on >= 2 axes so van Hees 2013 distinguishes from table non-wear)
-                angleDeg = 12.0 + 1.6 * std::sin(ep * 0.015);
+        // 3a. Verify angle_z & sleep detection are invariant across m/s^2 and g unit scales.
+        for (double scale : {9.80665, 1.0}) {
+            SleepDetector det;
+            const qint64 t0 = dayBaseSec;
+            for (int ep = 0; ep < 8 * 720; ++ep) {
+                const qint64 sec = t0 + ep * 5;
+                double angleDeg = 10.0;
+                if (ep < 720 || ep >= 720 + 6 * 720 + 120) {
+                    // Active waking movement: oscillating wrist elevation +/- 35 deg
+                    angleDeg = 35.0 * std::sin(ep * 0.7);
+                } else if (ep >= 720 + 3 * 720 && ep < 720 + 3 * 720 + 120) {
+                    // 10-minute mid-sleep arousal (shorter than 60-min HDCZA gap merge -> stays inside SPT as WASO)
+                    angleDeg = 30.0 * std::sin(ep * 0.9);
+                } else {
+                    // Quiet worn sleep: < 5 deg range over 5 min, with realistic subtle wrist micro-motion
+                    // (> 50 mg range AND > 13 mg SD over 60 min on >= 2 axes so van Hees 2013 distinguishes from non-wear)
+                    angleDeg = 12.0 + 1.8 * std::sin(ep * 0.015);
+                }
+                const double rad = angleDeg * M_PI / 180.0;
+                const double yMicro = 0.03 * std::sin(ep * 0.23);
+                CHECK(det.addSample(sec, scale * std::cos(rad), scale * yMicro, scale * std::sin(rad)));
             }
-            const double rad = angleDeg * M_PI / 180.0;
-            const double scale = (ep % 2 == 0) ? 9.80665 : 1.0;
-            const double yMicro = 0.03 * std::sin(ep * 0.23);
-            CHECK(det.addSample(sec, scale * std::cos(rad), scale * yMicro, scale * std::sin(rad)));
+            if (scale > 5.0) {
+                // Invalid, zero-vector, and reversed samples are rejected
+                CHECK(!det.addSample(t0 + 8 * 3600, std::numeric_limits<double>::quiet_NaN(), 0.0, 9.8));
+                CHECK(!det.addSample(t0 + 8 * 3600, 0.0, 0.0, 0.0));
+                CHECK(!det.addSample(t0, 1.0, 0.0, 0.0));
+                CHECK(det.invalidSampleCount() == 3);
+
+                // Non-mutating analyze() snapshot must not duplicate/mutate epochs when called mid-bucket
+                const qint64 epochsBeforeAnalyze = det.epochCount();
+                const SleepAnalysisResult snapRes = det.analyze();
+                CHECK(det.epochCount() == epochsBeforeAnalyze);
+                CHECK(snapRes.valid);
+            }
+
+            det.flushCurrentEpoch();
+
+            const SleepAnalysisResult res = det.analyze();
+            CHECK(res.valid);
+            CHECK(res.nonWearMinutes == 0);
+            CHECK(res.hdczaThreshold >= SleepDetector::kHdczaMinThreshold);
+            CHECK(res.hdczaThreshold <= SleepDetector::kHdczaMaxThreshold);
+            // Expected ~360 min sleep (two 3h blocks) and ~10 min awake inside SPT
+            CHECK(res.sleepMinutes >= 340 && res.sleepMinutes <= 370);
+            CHECK(res.awakeMinutes >= 5 && res.awakeMinutes <= 20);
+
+            if (scale > 5.0) {
+                // Write validated 2-field log and verify SleepDataLoader reads it cleanly
+                QFile file(fileNameForDate(day, "sleepMonitor"));
+                CHECK(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+                QTextStream out(&file);
+                for (const auto &m : res.minutes) {
+                    out << m.timestampSec << ":" << m.state << "\n";
+                }
+                file.close();
+
+                auto summary = loader.getSleepSummary(day).toMap();
+                CHECK(summary["hasData"].toBool());
+                CHECK(summary["sleepMinutes"].toInt() == res.sleepMinutes);
+                CHECK(summary["awakeMinutes"].toInt() == res.awakeMinutes);
+                CHECK(summary["legacyRecordCount"].toInt() == 0);
+            }
         }
-        // Invalid, zero-vector, and reversed samples are rejected
-        CHECK(!det.addSample(t0 + 8 * 3600, std::numeric_limits<double>::quiet_NaN(), 0.0, 9.8));
-        CHECK(!det.addSample(t0 + 8 * 3600, 0.0, 0.0, 0.0));
-        CHECK(!det.addSample(t0, 1.0, 0.0, 0.0));
-        CHECK(det.invalidSampleCount() == 3);
 
-        // Non-mutating analyze() snapshot must not duplicate/mutate epochs when called mid-bucket
-        const qint64 epochsBeforeAnalyze = det.epochCount();
-        const SleepAnalysisResult snapRes = det.analyze();
-        CHECK(det.epochCount() == epochsBeforeAnalyze);
-        CHECK(snapRes.valid);
-
-        det.flushCurrentEpoch();
-
-        const SleepAnalysisResult res = det.analyze();
-        CHECK(res.valid);
-        CHECK(res.nonWearMinutes == 0);
-        CHECK(res.hdczaThreshold >= SleepDetector::kHdczaMinThreshold);
-        CHECK(res.hdczaThreshold <= SleepDetector::kHdczaMaxThreshold);
-        // Expected ~360 min sleep (two 3h blocks) and ~10 min awake inside SPT
-        CHECK(res.sleepMinutes >= 340 && res.sleepMinutes <= 370);
-        CHECK(res.awakeMinutes >= 5 && res.awakeMinutes <= 20);
+        const qint64 t0 = dayBaseSec;
 
         SleepDetector sparseNonWear;
         for (int block = 0; block < 4; ++block) {
@@ -213,20 +239,38 @@ int main(int argc, char **argv)
             CHECK(nwRes.nonWearMinutes >= 420);
         }
 
-        // Write validated 2-field log and verify SleepDataLoader reads it cleanly
-        QFile file(fileNameForDate(day, "sleepMonitor"));
-        CHECK(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        QTextStream out(&file);
-        for (const auto &m : res.minutes) {
-            out << m.timestampSec << ":" << m.state << "\n";
+        // 3c. van Hees (2013) OR criterion: a single nightstand vibration bump pushing range > 50 mg
+        //     must still classify as non-wear because SD across the hour remains < 13 mg on >= 2 axes.
+        {
+            SleepDetector bumpedNw;
+            bumpedNw.setUnits(SleepDetector::AccelUnits::Gravity);
+            for (int ep = 0; ep < 4 * 720; ++ep) {
+                const qint64 sec = t0 + ep * 5;
+                const double bump = (ep % 720 == 360) ? 0.08 : 0.0;
+                CHECK(bumpedNw.addSample(sec, 0.01 + bump, -0.01 - bump, 1.0 + bump));
+            }
+            const SleepAnalysisResult bumpRes = bumpedNw.analyze();
+            CHECK(!bumpRes.valid);
+            CHECK(bumpRes.sleepMinutes == 0);
+            CHECK(bumpRes.nonWearMinutes >= 230);
         }
-        file.close();
 
-        auto summary = loader.getSleepSummary(day).toMap();
-        CHECK(summary["hasData"].toBool());
-        CHECK(summary["sleepMinutes"].toInt() == res.sleepMinutes);
-        CHECK(summary["awakeMinutes"].toInt() == res.awakeMinutes);
-        CHECK(summary["legacyRecordCount"].toInt() == 0);
+        // 3d. Charger-state non-wear fusion (Bangle.js sleeplog / Syed 2020): epochs on charger are non-wear
+        //     even if moving slightly or shorter than a 60-minute accelerometer non-wear window.
+        {
+            SleepDetector chargerDet;
+            chargerDet.setUnits(SleepDetector::AccelUnits::MetersPerSecSq);
+            for (int ep = 0; ep < 2 * 720; ++ep) {
+                const qint64 sec = t0 + ep * 5;
+                const double angleDeg = 12.0 + 1.8 * std::sin(ep * 0.015);
+                const double rad = angleDeg * M_PI / 180.0;
+                CHECK(chargerDet.addSample(sec, 9.80665 * std::cos(rad), 0.3 * std::sin(ep * 0.23), 9.80665 * std::sin(rad), true));
+            }
+            const SleepAnalysisResult chRes = chargerDet.analyze();
+            CHECK(!chRes.valid);
+            CHECK(chRes.sleepMinutes == 0);
+            CHECK(chRes.nonWearMinutes >= 115);
+        }
     }
 
     // 4. PeriodDataLoader: bloodyhealth/drip port (cycle-length.spec.js & get-predicted-menses.spec.js)
@@ -267,6 +311,15 @@ int main(int argc, char **argv)
         period.logPeriodStart(today.addDays(-124).toString(Qt::ISODate));
         CHECK(period.validCycleLengthCount() == 4);
         CHECK(period.hasPrediction());
+        CHECK(period.predictedVariationDays() == 2);
+
+        // Excluding the atypical 35-day cycle restores tight 28/28/29 statistics without deleting history
+        period.toggleExcludeCycle(4); // index 4 = start at today - 124 (the 35-day cycle)
+        CHECK(period.cycleCount() == 5);
+        CHECK(period.validCycleLengthCount() == 3);
+        CHECK(period.predictedVariationDays() == 1);
+        period.toggleExcludeCycle(4); // restore
+        CHECK(period.validCycleLengthCount() == 4);
         CHECK(period.predictedVariationDays() == 2);
 
         // Cycle > 99 days excluded per drip maxCycleLength = 99
