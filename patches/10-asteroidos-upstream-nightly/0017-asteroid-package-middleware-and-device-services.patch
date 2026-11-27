@@ -311,7 +311,7 @@ index 00000000..e38bf0b5
 +  };
 +})
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 9e9579c1..f8f9edc4 100644
+index ccbb901b..d49789cd 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -2,8 +2,17 @@
@@ -331,7 +331,7 @@ index 9e9579c1..f8f9edc4 100644
 +  # (udev rules, unit files, patches) instead of vendoring them.
    metaAsteroidSrc = pkgs.fetchgit {
      url = "https://github.com/AsteroidOS/meta-asteroid";
-     rev = "20a8d379f67038208a32b8b59a3093fac8410c73";
+     rev = "aa42e158032bf4abbc0d0f898c5c3595a84538ef";
 @@ -12,4 +21,113 @@ rec {
    meta-asteroid-src = metaAsteroidSrc;
  

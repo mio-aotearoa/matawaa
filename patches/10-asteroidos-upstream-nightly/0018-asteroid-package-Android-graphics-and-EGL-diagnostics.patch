@@ -21,7 +21,7 @@ Subject: [PATCH] asteroid: package Android graphics and EGL diagnostics
  create mode 100644 overlay/oans/default.nix
 
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index f8f9edc4..2f2e41b5 100644
+index d49789cd..1570fee2 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -40,6 +40,16 @@ rec {

@@ -457,7 +457,7 @@ index 00000000..c8fc8896
 +-    }
 + }
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index 2f2e41b5..ccfbcca3 100644
+index 1570fee2..06ae7b87 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -50,8 +50,26 @@ rec {
