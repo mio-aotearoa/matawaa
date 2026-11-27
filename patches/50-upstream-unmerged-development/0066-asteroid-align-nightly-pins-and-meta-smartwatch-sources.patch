@@ -1,0 +1,431 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Mio <mio-aotearoa@mio19.uk>
+Date: Fri, 27 Nov 2026 15:39:51 +1100
+Subject: [PATCH 1/1] asteroid: align nightly pins and meta-smartwatch sources
+
+Bump overlay packages to the current AsteroidOS nightly recipe revisions, align meta-smartwatch fetches with its nightly tip, and drop the health Polish translation hunk removed upstream.
+---
+ devices/fossil-hoki/android-init.nix          |  8 +++----
+ devices/fossil-hoki/audio-modules.nix         |  4 ++--
+ devices/fossil-hoki/default.nix               | 10 ++++----
+ devices/fossil-hoki/kernel/default.nix        |  8 +++----
+ devices/google-aurora/kernel/default.nix      |  6 ++---
+ devices/oppo-beluga/android-init.nix          | 10 ++++----
+ devices/oppo-beluga/kernel/default.nix        |  4 ++--
+ overlay/asteroidos/apps/default.nix           | 24 +++++++++----------
+ .../asteroidos/asteroid-launcher/default.nix  |  4 ++--
+ overlay/asteroidos/community-apps/default.nix | 12 +++++-----
+ .../community-apps/health-sleep-monitor.patch | 23 ------------------
+ overlay/asteroidos/default.nix                | 18 ++++++++++----
+ overlay/msm-fb-refresher/default.nix          |  4 ++--
+ 13 files changed, 61 insertions(+), 74 deletions(-)
+
+diff --git a/devices/fossil-hoki/android-init.nix b/devices/fossil-hoki/android-init.nix
+index cad48507..1c66c5d6 100644
+--- a/devices/fossil-hoki/android-init.nix
++++ b/devices/fossil-hoki/android-init.nix
+@@ -11,24 +11,24 @@ let
+   # subsystem setup and the Fossil extras. It must not import the stock
+   # hw/init.rc: the stock /system/bin/init already reads it.
+   initRc = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/8c1dbee6c37cdd4ad97d083a59085abf7032ad42/meta-hoki/recipes-android/android-init/android-init/init.rc";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-android/android-init/android-init/init.rc";
+     hash = "sha256-TBa60Z7PdgTjZYECheZYEA/6D/OZwpVx3bU70XwWJHU=";
+   };
+ 
+   platPropertyContexts = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/8c1dbee6c37cdd4ad97d083a59085abf7032ad42/meta-hoki/recipes-android/android-init/android-init/plat_property_contexts";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-android/android-init/android-init/plat_property_contexts";
+     hash = "sha256-Je6T4SOA1vfc8bJOLBRwaBqIW4BCO+akXS7L+P1QYuo=";
+   };
+ 
+   nonplatPropertyContexts = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/8c1dbee6c37cdd4ad97d083a59085abf7032ad42/meta-hoki/recipes-android/android-init/android-init/nonplat_property_contexts";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-android/android-init/android-init/nonplat_property_contexts";
+     hash = "sha256-PkLCQb9VlnKQXqMofCNFB6p2SXxwd06+E8yFAWMLWXY=";
+   };
+ 
+   # ld.config.28.txt from AsteroidOS:
+   # Allows Android binaries to load libraries from /usr/libexec/hal-droid/system/lib
+   ldConfig = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/085844a91fd23691f55d8ac08bc3e4c0a8429936/meta-beluga/recipes-core/initrdscripts/initramfs-scripts-android/ld.config.28.txt";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-beluga/recipes-core/initrdscripts/initramfs-scripts-android/ld.config.28.txt";
+     hash = "sha256-7QCh5Q/9QxMEhlcA52ykhPVRsNQZbyPqY7YmBCGGYZE=";
+   };
+ 
+diff --git a/devices/fossil-hoki/audio-modules.nix b/devices/fossil-hoki/audio-modules.nix
+index 4bcf1878..1b6ae55b 100644
+--- a/devices/fossil-hoki/audio-modules.nix
++++ b/devices/fossil-hoki/audio-modules.nix
+@@ -9,7 +9,7 @@ let
+   kernel = config.mobile.boot.stage-1.kernel.package;
+ 
+   # Upstream AsteroidOS recipe:
+-  # https://github.com/AsteroidOS/meta-smartwatch/blob/88b4ac9/meta-hoki/recipes-kernel/modules/linux-audio-modules-hoki_p.bb
++  # https://github.com/AsteroidOS/meta-smartwatch/blob/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-kernel/modules/linux-audio-modules-hoki_p.bb
+   audioSrc = pkgs.fetchFromGitHub {
+     owner = "fossil-engineering";
+     repo = "kernel-msm-fossil-extra-cw-audiokernel";
+@@ -20,7 +20,7 @@ let
+   upstreamPatch =
+     name: hash:
+     pkgs.fetchurl {
+-      url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/88b4ac9/meta-hoki/recipes-kernel/modules/linux-audio-modules-hoki/${name}";
++      url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-kernel/modules/linux-audio-modules-hoki/${name}";
+       inherit hash;
+     };
+ 
+diff --git a/devices/fossil-hoki/default.nix b/devices/fossil-hoki/default.nix
+index a470e332..94b57349 100644
+--- a/devices/fossil-hoki/default.nix
++++ b/devices/fossil-hoki/default.nix
+@@ -24,9 +24,9 @@ let
+   '';
+ 
+   # Non-graphic feedback (haptics) DRV260X configuration for tactile feedback
+-  # Upstream reference: https://github.com/AsteroidOS/meta-smartwatch/blob/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-nemomobile/ngfd/ngfd_git.bbappend
++  # Upstream reference: https://github.com/AsteroidOS/meta-smartwatch/blob/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-nemomobile/ngfd/ngfd_git.bbappend
+   hokiNgfdIni = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-nemomobile/ngfd/ngfd/51-ffmemless.ini";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-nemomobile/ngfd/ngfd/51-ffmemless.ini";
+     sha256 = "19bzmmhhn526wyqcg163x1hc8czrmxli22m68s07srr4zza9dman";
+   };
+ 
+@@ -588,7 +588,7 @@ in
+   };
+ 
+   # Non-graphic feedback (haptics) DRV260X configuration for tactile feedback
+-  # Upstream reference: https://github.com/AsteroidOS/meta-smartwatch/blob/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-nemomobile/ngfd/ngfd/51-ffmemless.ini
++  # Upstream reference: https://github.com/AsteroidOS/meta-smartwatch/blob/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-nemomobile/ngfd/ngfd/51-ffmemless.ini
+   environment.etc."ngf/51-ffmemless.ini".source = hokiNgfdIni;
+   environment.etc."ngfd/plugins.d/51-ffmemless.ini".source = hokiNgfdIni;
+ 
+@@ -604,9 +604,9 @@ in
+   };
+ 
+   # Near Field Communication (NFC) controller configuration
+-  # Upstream reference: https://github.com/AsteroidOS/meta-smartwatch/blob/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-nemomobile/libnci/libncicore/libncicore.conf
++  # Upstream reference: https://github.com/AsteroidOS/meta-smartwatch/blob/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-nemomobile/libnci/libncicore/libncicore.conf
+   environment.etc."libncicore.conf".source = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-nemomobile/libnci/libncicore/libncicore.conf";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-nemomobile/libnci/libncicore/libncicore.conf";
+     sha256 = "12zg3n0jysy7lczqwh0kl5ccg1ljgidkqazj6i8v2j9k0nckkx29";
+   };
+ 
+diff --git a/devices/fossil-hoki/kernel/default.nix b/devices/fossil-hoki/kernel/default.nix
+index 4905e0ee..85499276 100644
+--- a/devices/fossil-hoki/kernel/default.nix
++++ b/devices/fossil-hoki/kernel/default.nix
+@@ -35,8 +35,8 @@
+ # cross compiler from nixos-24.05 (the last channel still shipping 8.5.0).
+ #
+ # Patches 0001-0006 are fetched verbatim from AsteroidOS meta-smartwatch at
+-# rev 873c865ca06593d239f911b76b09228ddd70eccc:
+-# https://github.com/AsteroidOS/meta-smartwatch/tree/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-kernel/linux/files
++# rev 9a509e7bed838e34982057cfb6a79b8e3cb58390:
++# https://github.com/AsteroidOS/meta-smartwatch/tree/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-kernel/linux/files
+ # Patch 0007 fixes unconditional pm_qos_remove_request crash in pcm_native.c:
+ # https://github.com/AsteroidOS/meta-smartwatch/pull/344
+ # 90_dtbs-install is ours: this tree has no ARM dtbs_install target.
+@@ -76,7 +76,7 @@ let
+   # Upstream AsteroidOS defconfig for Fossil Gen 6 (hoki):
+   # https://github.com/AsteroidOS/meta-smartwatch/blob/master/meta-hoki/recipes-kernel/linux/linux-hoki/defconfig
+   upstreamDefconfig = fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-kernel/linux/linux-hoki/defconfig";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-kernel/linux/linux-hoki/defconfig";
+     sha256 = "0fk14m3h7qdbyjlidifddrsp76j0wgq5wsg86vzisv65s8ha84as";
+   };
+ 
+@@ -85,7 +85,7 @@ let
+   upstreamPatch =
+     name: sha256:
+     fetchurl {
+-      url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/873c865ca06593d239f911b76b09228ddd70eccc/meta-hoki/recipes-kernel/linux/files/${name}";
++      url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-hoki/recipes-kernel/linux/files/${name}";
+       inherit sha256;
+     };
+ 
+diff --git a/devices/google-aurora/kernel/default.nix b/devices/google-aurora/kernel/default.nix
+index 50b08bfb..4a752977 100644
+--- a/devices/google-aurora/kernel/default.nix
++++ b/devices/google-aurora/kernel/default.nix
+@@ -18,10 +18,10 @@ let
+   };
+ 
+   # Upstream AsteroidOS kernel configuration fragment:
+-  # https://github.com/AsteroidOS/meta-smartwatch/blob/873c865ca06593d239f911b76b09228ddd70eccc/meta-aurora/recipes-kernel/linux/linux-aurora/sw5100.fragment
++  # https://github.com/AsteroidOS/meta-smartwatch/blob/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-aurora/recipes-kernel/linux/linux-aurora/sw5100.fragment
+   sw5100Fragment = fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/873c865ca06593d239f911b76b09228ddd70eccc/meta-aurora/recipes-kernel/linux/linux-aurora/sw5100.fragment";
+-    sha256 = "1p36ngv64dc1q1qjswmzxb9yzj3bx75rv2zg1gk1jfla0hp5cslm";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-aurora/recipes-kernel/linux/linux-aurora/sw5100.fragment";
++    sha256 = "sha256-cE9JRoxl+9gfLlwLmOx38VE/Y92/+CrJGz7woejKLL4=";
+   };
+ 
+   # Generate defconfig matching AsteroidOS linux-aurora_5.15.144.bb:
+diff --git a/devices/oppo-beluga/android-init.nix b/devices/oppo-beluga/android-init.nix
+index 3b4e1b57..8de7eb97 100644
+--- a/devices/oppo-beluga/android-init.nix
++++ b/devices/oppo-beluga/android-init.nix
+@@ -10,24 +10,24 @@ let
+   # meta-beluga init.rc: the OPPO-specific subsystem setup, HAL services and
+   # vibrator/SDCard bits. It runs Android 9, matching the stock system/vendor.
+   initRc = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/085844a91fd23691f55d8ac08bc3e4c0a8429936/meta-beluga/recipes-android/android-init/android-init/init.rc";
+-    hash = "sha256-X8j87Fk+Tbon53xQMgbP17EG4iGlTporkPvb6u1ROls=";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-beluga/recipes-android/android-init/android-init/init.rc";
++    hash = "sha256-ARs92MqfqN/5vNA9qEomSqGLBM+w6f4cPwqCvnutzig=";
+   };
+ 
+   platPropertyContexts = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/085844a91fd23691f55d8ac08bc3e4c0a8429936/meta-beluga/recipes-android/android-init/android-init/plat_property_contexts";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-beluga/recipes-android/android-init/android-init/plat_property_contexts";
+     hash = "sha256-Je6T4SOA1vfc8bJOLBRwaBqIW4BCO+akXS7L+P1QYuo=";
+   };
+ 
+   nonplatPropertyContexts = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/085844a91fd23691f55d8ac08bc3e4c0a8429936/meta-beluga/recipes-android/android-init/android-init/nonplat_property_contexts";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-beluga/recipes-android/android-init/android-init/nonplat_property_contexts";
+     hash = "sha256-PkLCQb9VlnKQXqMofCNFB6p2SXxwd06+E8yFAWMLWXY=";
+   };
+ 
+   # ld.config.28.txt from AsteroidOS meta-beluga:
+   # Allows Android binaries to load libraries from /usr/libexec/hal-droid/system/lib
+   ldConfig = pkgs.fetchurl {
+-    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/085844a91fd23691f55d8ac08bc3e4c0a8429936/meta-beluga/recipes-core/initrdscripts/initramfs-scripts-android/ld.config.28.txt";
++    url = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-beluga/recipes-core/initrdscripts/initramfs-scripts-android/ld.config.28.txt";
+     hash = "sha256-7QCh5Q/9QxMEhlcA52ykhPVRsNQZbyPqY7YmBCGGYZE=";
+   };
+ 
+diff --git a/devices/oppo-beluga/kernel/default.nix b/devices/oppo-beluga/kernel/default.nix
+index a483ef2c..ffb95352 100644
+--- a/devices/oppo-beluga/kernel/default.nix
++++ b/devices/oppo-beluga/kernel/default.nix
+@@ -15,7 +15,7 @@
+ 
+ # OPPO Watch (beluga) uses the 4.9 msm8909w vendor kernel from AsteroidOS
+ # meta-smartwatch. The recipe inherits kernel-gcc8; gcc >= 13 does not boot.
+-# Source: https://github.com/AsteroidOS/meta-smartwatch/tree/085844a91fd23691f55d8ac08bc3e4c0a8429936/meta-beluga/recipes-kernel/linux
++# Source: https://github.com/AsteroidOS/meta-smartwatch/tree/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-beluga/recipes-kernel/linux
+ let
+   # Same pinned GCC 8 cross compiler used by the hoki vendor kernel.
+   pkgsGcc8 = import (builtins.fetchGit {
+@@ -36,7 +36,7 @@ let
+     stdenv = stdenvGcc8;
+   };
+ 
+-  asteroidos = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/085844a91fd23691f55d8ac08bc3e4c0a8429936/meta-beluga/recipes-kernel/linux";
++  asteroidos = "https://raw.githubusercontent.com/AsteroidOS/meta-smartwatch/9a509e7bed838e34982057cfb6a79b8e3cb58390/meta-beluga/recipes-kernel/linux";
+ 
+   upstreamDefconfig = fetchurl {
+     url = "${asteroidos}/linux-beluga/defconfig";
+diff --git a/overlay/asteroidos/apps/default.nix b/overlay/asteroidos/apps/default.nix
+index a46750a5..e3907220 100644
+--- a/overlay/asteroidos/apps/default.nix
++++ b/overlay/asteroidos/apps/default.nix
+@@ -44,8 +44,8 @@
+       ./settings-bluetooth-labels.patch
+       ./settings-power-wifi-policy.patch
+     ];
+-    rev = "d8a50606b5686a98a00a33a9534d9c1f887b1f5a";
+-    hash = "sha256-CGFck8uSLps2Io5+wlUvHVqohRX5/vdGI1D7nGn65WU=";
++    rev = "04c6841b45bdd0778a60f89c2932e925cf31265b";
++    hash = "sha256-uRfXsA+AiLir0w1BNwJbBk/JD2v1J7sMg6RVYw7Jm1s=";
+     postPatch = ''
+       # Restore engineering English for the connect-failure StatusPage.
+       substituteInPlace src/qml/WiFiConnectionDialog.qml \
+@@ -103,8 +103,8 @@
+   weather = mkAsteroidApp {
+     name = "weather";
+     desc = "Weather forecast application synchronized via Bluetooth";
+-    rev = "f42f0706de13205d1f9486414158474ad426f18c";
+-    hash = "sha256-rv5bKIx4d/ef72Rt954iv1rhdccSkJo0zB8mCM/2yJE=";
++    rev = "814fa9996acb53062b6878661dae8280528aaf25";
++    hash = "sha256-th8udVAI2bXNLDfwdnVs4vQ68VIlfAzCwGUlUNd0V4Q=";
+   };
+ 
+   # Media playback controller with standalone YouTube Music streaming over Wi-Fi
+@@ -125,15 +125,15 @@
+   compass = mkAsteroidApp {
+     name = "compass";
+     desc = "Sensor-driven compass application for smartwatches";
+-    rev = "58d4114c1709e5c3d7edd876a05930d326b353a0";
+-    hash = "sha256-FgV/klLSB0mjcn24sVmLxE7oDnnjrzFjtr9+8n6e4Kg=";
++    rev = "b42ba9117c2f281fcbbb14e11f07e36f558e727f";
++    hash = "sha256-RpZ5CqmXAYujI8cBih9lWQK7+KIBvKqVuEbfvLAPWZQ=";
+   };
+ 
+   flashlight = mkAsteroidApp {
+     name = "flashlight";
+     desc = "Full-screen high-brightness torch utility";
+-    rev = "74a3638f4f4572dcee9270e32892a61ed196bc7a";
+-    hash = "sha256-Nj1vd/dxJ7EyeCHOUhGNgHhssuNkuZkuTnG38Yvsiw4=";
++    rev = "dd9dc0b09bf2a15ab91cff5d2d2865a2f8a324d2";
++    hash = "sha256-uU0XeoOLDmUW7doFN8iWLd+jmusmjqGj+OZ6UeVb0SA=";
+   };
+ 
+   calendar = mkAsteroidApp {
+@@ -146,15 +146,15 @@
+   diamonds = mkAsteroidApp {
+     name = "diamonds";
+     desc = "2048-like puzzle game designed for smartwatches";
+-    rev = "fc80087960e8db2b0a8513b8830bdb32ec2a3872";
+-    hash = "sha256-n60yuvUvzNxX4+ttnnMTiEs+bqed174ABd6RR9yccmM=";
++    rev = "4e47a6c89b7158f4a0b1c8664aea21d182a08d00";
++    hash = "sha256-MOgAfnna8M/nc6TbchRVk4zbcBiqdWHefwIQAHk3eGc=";
+   };
+ 
+   hrm = mkAsteroidApp {
+     name = "hrm";
+     desc = "Heart rate monitor application using optical sensors";
+-    rev = "0b96ceba07237f2a8a738b58fb80dff2265cf2c4";
+-    hash = "sha256-BE1erS2uATjHxmaafOdAUN3+Gtg2A3LNvI09nGH5GVo=";
++    rev = "994abab76ca5591140de9452a079e123af5fa03f";
++    hash = "sha256-hCequOMLfXXK6AMb7udQZZDDnFAkJGGaL2tP/Bn5bMc=";
+   };
+ 
+   camera = mkAsteroidApp {
+diff --git a/overlay/asteroidos/asteroid-launcher/default.nix b/overlay/asteroidos/asteroid-launcher/default.nix
+index cf844991..e5f7fc00 100644
+--- a/overlay/asteroidos/asteroid-launcher/default.nix
++++ b/overlay/asteroidos/asteroid-launcher/default.nix
+@@ -33,8 +33,8 @@ stdenv.mkDerivation {
+   src = fetchFromGitHub {
+     owner = "AsteroidOS";
+     repo = "asteroid-launcher";
+-    rev = "1a7a6e95d33f2d64867cbf59b81469207334814d";
+-    hash = "sha256-mp2xTtUINue4kFv2JWlAx/4KYLbQKvuBZPDn2os0MFI=";
++    rev = "30c4f3b0661464d485159ffe2757a7604ce1b488";
++    hash = "sha256-lgHA5ZMa3B5eL7wbDjTEr4pj2ocUfwJOST6uLsgFOhc=";
+   };
+ 
+   strictDeps = true;
+diff --git a/overlay/asteroidos/community-apps/default.nix b/overlay/asteroidos/community-apps/default.nix
+index e9e8ee98..4c9b3dd5 100644
+--- a/overlay/asteroidos/community-apps/default.nix
++++ b/overlay/asteroidos/community-apps/default.nix
+@@ -93,8 +93,8 @@ rec {
+   health = mkAsteroidApp {
+     name = "health";
+     desc = "Step counter, heart rate monitor, and wellness tracker for AsteroidOS";
+-    rev = "c85390fb9dd643f9b58e73bf698833ed7727b89f";
+-    hash = "sha256-eI7d2+Mu+ayh2TQvO7Gzl6lIw8yLAm7h8EZtTRLwaM4=";
++    rev = "3e78747b68d3867608a3d8e2c24463839039d235";
++    hash = "sha256-Su5tQgYiAyUwPx//ixUSvYhfr31ANWd2eK+me2RVAzk=";
+     patches = [
+       ./health-sleep-monitor.patch
+     ];
+@@ -167,8 +167,8 @@ rec {
+     owner = "moWerk";
+     repo = "asteroid-beatfork";
+     desc = "Metronome and chromatic tuning fork app for smartwatches";
+-    rev = "45ce35fb1b7c2f542d47c4c61455fbd8745805c5";
+-    hash = "sha256-e1Nbx75P8djGfTPDWY2R9ATwBN56eHi2JTd97HtW0SE=";
++    rev = "e3fbc5dd6da40868e0f338c9a0d3f6e877afca25";
++    hash = "sha256-oh42F7U5lxtj+IWIg4c8o91sAKJL6vl1AbHGjh0ulug=";
+     patches = [
+       ./beatfork-tack-improvements.patch
+     ];
+@@ -393,8 +393,8 @@ rec {
+     name = "touchdown";
+     owner = "moWerk";
+     desc = "Lunar lander retro thruster landing game for smartwatches";
+-    rev = "660a26f3bd06846766c0114357c06fa195081c6c";
+-    hash = "sha256-Y24nA9Iqh+iUl/WGY+ltcWvfUwLoPPrMWe4fx0Uwh8A=";
++    rev = "52fcb8ee61edd890089d517cf2f580c992c12a52";
++    hash = "sha256-l9WczouaGoTCmEY/BYZl0lKlvoxMgZVVk8JwLplOMkw=";
+     extraBuildInputs = [
+       qt6.qtsensors
+     ];
+diff --git a/overlay/asteroidos/community-apps/health-sleep-monitor.patch b/overlay/asteroidos/community-apps/health-sleep-monitor.patch
+index 94e4c23b..430d3ab3 100644
+--- a/overlay/asteroidos/community-apps/health-sleep-monitor.patch
++++ b/overlay/asteroidos/community-apps/health-sleep-monitor.patch
+@@ -64,29 +64,6 @@ index e8a8c94..d121d3c 100644
+ +<message id="id-cycle-prediction-progress"><source>%1/3 cycles for prediction</source><translation>%1/3 cycles for prediction</translation></message>
+  </context>
+  </TS>
+-diff --git a/i18n/asteroid-health.pl.ts b/i18n/asteroid-health.pl.ts
+-index 19c70d3..e07fcca 100644
+---- a/i18n/asteroid-health.pl.ts
+-+++ b/i18n/asteroid-health.pl.ts
+-@@ -97,5 +97,17 @@
+-         <source>Add record</source>
+-         <translation>Dodaj wagę</translation>
+-     </message>
+-+<message id="id-sleep-recordings"><source>Sleep recordings</source><translation>Sleep recordings</translation></message>
+-+<message id="id-motion-recording"><source>Recording motion</source><translation>Recording motion</translation></message>
+-+<message id="id-no-motion-recordings"><source>No motion recordings</source><translation>No motion recordings</translation></message>
+-+<message id="id-recorded-minutes"><source>%1 minutes of motion recorded</source><translation>%1 minutes of motion recorded</translation></message>
+-+<message id="id-motion-recording-explanation"><source>Motion estimates sleep within the recording window. Sleep may begin earlier or end later. Recording uses more battery.</source><translation>Motion estimates sleep within the recording window. Sleep may begin earlier or end later. Recording uses more battery.</translation></message>
+-+<message id="id-motion-gaps"><source>Interrupted motion data; analysis may be unavailable.</source><translation>Interrupted motion data; analysis may be unavailable.</translation></message>
+-+<message id="id-period-save-error"><source>Could not save period history</source><translation>Could not save period history</translation></message>
+-+<message id="id-motion-recording-error"><source>Motion recording failed. Check the sensor and free storage.</source><translation>Motion recording failed. Check the sensor and free storage.</translation></message>
+-+<message id="id-motion-waiting"><source>Waiting for motion data</source><translation>Waiting for motion data</translation></message>
+-+<message id="id-period-today"><source>Today</source><translation>Today</translation></message>
+-+<message id="id-cycle-long-warning"><source>Long cycle (&gt;45d) logged; check for missed entry</source><translation>Long cycle (&gt;45d) logged; check for missed entry</translation></message>
+-+<message id="id-cycle-prediction-progress"><source>%1/3 cycles for prediction</source><translation>%1/3 cycles for prediction</translation></message>
+- </context>
+- </TS>
+-\ No newline at end of file
+ diff --git a/i18n/asteroid-health.ru.ts b/i18n/asteroid-health.ru.ts
+ index 5321dba..9660674 100644
+ --- a/i18n/asteroid-health.ru.ts
+diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
+index ecf26ad0..3fb4b8f4 100644
+--- a/overlay/asteroidos/default.nix
++++ b/overlay/asteroidos/default.nix
+@@ -16,8 +16,8 @@ rec {
+   # (udev rules, unit files, patches) instead of vendoring them.
+   metaAsteroidSrc = pkgs.fetchgit {
+     url = "https://github.com/AsteroidOS/meta-asteroid";
+-    rev = "aa42e158032bf4abbc0d0f898c5c3595a84538ef";
+-    hash = "sha256-Dinl7UFk39T/NMd8qeqEA/aeQRuNSzuTMW39AWX3oMw=";
++    rev = "99bfd19711c39d7043ed74193106b0b75205bac0";
++    hash = "sha256-bFn2YgPLjSH5pnQrf1Da6u4Yy4UNLd7umP8WaT7nglY=";
+   };
+   meta-asteroid-src = metaAsteroidSrc;
+ 
+@@ -198,7 +198,12 @@ rec {
+       inherit mkAsteroidApp mce-dev ngf-qt6;
+     })
+     // {
+-      inherit browser vela telegram kiwix;
++      inherit
++        browser
++        vela
++        telegram
++        kiwix
++        ;
+     };
+ 
+   assets = (callPackage ./assets { inherit metaAsteroidSrc; }) // {
+@@ -208,7 +213,12 @@ rec {
+   virtualkeyboard = callPackage ./virtualkeyboard { inherit noUsrShareHook; };
+ 
+   community-apps = callPackage ./community-apps {
+-    inherit mkAsteroidApp mlite noUsrShareHook keepalive;
++    inherit
++      mkAsteroidApp
++      mlite
++      noUsrShareHook
++      keepalive
++      ;
+     inherit (pkgs) espeak-classic;
+   };
+ 
+diff --git a/overlay/msm-fb-refresher/default.nix b/overlay/msm-fb-refresher/default.nix
+index 37ce451f..d7959274 100644
+--- a/overlay/msm-fb-refresher/default.nix
++++ b/overlay/msm-fb-refresher/default.nix
+@@ -11,8 +11,8 @@ stdenv.mkDerivation rec {
+   src = fetchFromGitHub {
+     owner = "AsteroidOS";
+     repo = "msm-fb-refresher";
+-    rev = "8a8378ab0108357908d51ecd5d92d22c7d549018";
+-    sha256 = "1p5sj0xa1j74lr9hyz4a5klyk86g9n3w0avz2x2jz927hdrhxmkr";
++    rev = "b89cca860f9c37e71b3fbd5ae53c4e8d521e1de8";
++    sha256 = "sha256-7IqaUQvw3Ae48Qm/Z9ZirsAA/KHmXYU/mWIplZanHGE=";
+   };
+ 
+   buildPhase = ''
