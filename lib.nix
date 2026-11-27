@@ -4,11 +4,10 @@ rec {
       dir = ./patches;
       entries = builtins.readDir dir;
       categories = builtins.sort (a: b: a < b) (
-        builtins.filter
-          (name: entries.${name} == "directory")
-          (builtins.attrNames entries)
+        builtins.filter (name: entries.${name} == "directory") (builtins.attrNames entries)
       );
-      categoryPatches = category:
+      categoryPatches =
+        category:
         let
           categoryDir = dir + "/${category}";
           entries = builtins.readDir categoryDir;

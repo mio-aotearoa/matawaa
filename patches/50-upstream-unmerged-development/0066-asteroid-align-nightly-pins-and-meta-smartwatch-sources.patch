@@ -16,9 +16,9 @@ Bump overlay packages to the current AsteroidOS nightly recipe revisions, align 
  .../asteroidos/asteroid-launcher/default.nix  |  4 ++--
  overlay/asteroidos/community-apps/default.nix | 12 +++++-----
  .../community-apps/health-sleep-monitor.patch | 23 ------------------
- overlay/asteroidos/default.nix                | 18 ++++++++++----
+ overlay/asteroidos/default.nix                |  4 ++--
  overlay/msm-fb-refresher/default.nix          |  4 ++--
- 13 files changed, 61 insertions(+), 74 deletions(-)
+ 13 files changed, 49 insertions(+), 72 deletions(-)
 
 diff --git a/devices/fossil-hoki/android-init.nix b/devices/fossil-hoki/android-init.nix
 index cad48507..1c66c5d6 100644
@@ -372,7 +372,7 @@ index 94e4c23b..430d3ab3 100644
  index 5321dba..9660674 100644
  --- a/i18n/asteroid-health.ru.ts
 diff --git a/overlay/asteroidos/default.nix b/overlay/asteroidos/default.nix
-index ecf26ad0..3fb4b8f4 100644
+index ecf26ad0..53883454 100644
 --- a/overlay/asteroidos/default.nix
 +++ b/overlay/asteroidos/default.nix
 @@ -16,8 +16,8 @@ rec {
@@ -385,34 +385,6 @@ index ecf26ad0..3fb4b8f4 100644
 +    hash = "sha256-bFn2YgPLjSH5pnQrf1Da6u4Yy4UNLd7umP8WaT7nglY=";
    };
    meta-asteroid-src = metaAsteroidSrc;
- 
-@@ -198,7 +198,12 @@ rec {
-       inherit mkAsteroidApp mce-dev ngf-qt6;
-     })
-     // {
--      inherit browser vela telegram kiwix;
-+      inherit
-+        browser
-+        vela
-+        telegram
-+        kiwix
-+        ;
-     };
- 
-   assets = (callPackage ./assets { inherit metaAsteroidSrc; }) // {
-@@ -208,7 +213,12 @@ rec {
-   virtualkeyboard = callPackage ./virtualkeyboard { inherit noUsrShareHook; };
- 
-   community-apps = callPackage ./community-apps {
--    inherit mkAsteroidApp mlite noUsrShareHook keepalive;
-+    inherit
-+      mkAsteroidApp
-+      mlite
-+      noUsrShareHook
-+      keepalive
-+      ;
-     inherit (pkgs) espeak-classic;
-   };
  
 diff --git a/overlay/msm-fb-refresher/default.nix b/overlay/msm-fb-refresher/default.nix
 index 37ce451f..d7959274 100644
